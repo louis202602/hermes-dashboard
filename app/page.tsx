@@ -1,302 +1,78 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+
+const navigation = [
+  ["⌂", "Tableau de bord"],
+  ["✦", "Hermès IA"],
+  ["◎", "Prospects"],
+  ["▱", "Projets"],
+  ["✓", "Tâches"],
+  ["▥", "Rapports"],
+];
 
 const kpis = [
-  { label: "Projets en cours", value: "12", trend: "+2 ce mois", tone: "blue" },
-  { label: "CA prévisionnel", value: "128 k€", trend: "+18% ce mois", tone: "green" },
-  { label: "Devis en attente", value: "5", trend: "-1 ce mois", tone: "orange" },
-  { label: "Taux conversion", value: "23%", trend: "+4% ce mois", tone: "purple" },
+  ["Chiffre d’affaires", "184 240 €", "+12,8 %", "text-cyan-300"],
+  ["Prospects actifs", "48", "+8 cette semaine", "text-emerald-300"],
+  ["Devis en attente", "12", "4 à relancer", "text-amber-300"],
+  ["Tâches prioritaires", "07", "Aujourd’hui", "text-rose-300"],
 ];
 
 const tasks = [
-  ["Relancer Société Martin", "Devis 48 kWc · Envoyé il y a 3 jours", "09:30", "green"],
-  ["Valider étude – Projet Fermelec", "Puissance : 49 kWc", "10:15", "orange"],
-  ["Appeler prospect Marseille 13011", "Intérêt pour 36 kWc", "11:00", "blue"],
-  ["Vérifier commande matériel", "Livraison prévue demain", "14:00", "purple"],
-];
-
-const conversations = [
-  ["Workflow – Génération automatisée", "Hermès · Aujourd’hui 14:32"],
-  ["Optimisation des coûts API", "Hermès · Aujourd’hui 11:08"],
-  ["Architecture Dashboard", "Hermès · Hier 16:45"],
-  ["Agent 57 – Configuration", "Hermès · Hier 10:22"],
+  ["Relancer le devis Villa Serena", "Aujourd’hui · 10:30", "Haute"],
+  ["Préparer la visite technique Martin", "Aujourd’hui · 14:00", "Moyenne"],
+  ["Envoyer le rapport de production", "Demain · 09:00", "Normale"],
 ];
 
 const projects = [
-  ["Fermelec Marseille", "49 kWc", "Étude", "75%"],
-  ["Société Martin", "48 kWc", "Devis", "40%"],
-  ["Irisolaris Industrie", "410 kWc", "Signé", "100%"],
-  ["Jean Dépôt", "67 kWc", "Devis", "20%"],
-  ["Toiture Paluds", "135 kWc", "Étude", "60%"],
+  ["Résidence Les Oliviers", "Installation photovoltaïque", "78 %", "bg-cyan-400"],
+  ["Atelier du Prado", "Étude autoconsommation", "42 %", "bg-amber-300"],
+  ["Maison Calanques", "Suivi de chantier", "91 %", "bg-emerald-300"],
 ];
 
 export default function Home() {
-  const [dark, setDark] = useState(true);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("hermes-theme");
-    if (saved) setDark(saved === "dark");
-  }, []);
-
-  function toggleTheme() {
-    const next = !dark;
-    setDark(next);
-    localStorage.setItem("hermes-theme", next ? "dark" : "light");
-  }
+  const [isDark, setIsDark] = useState(true);
+  const [activePage, setActivePage] = useState("Tableau de bord");
+  const [command, setCommand] = useState("");
+  const dark = isDark;
+  const panel = dark ? "border-white/10 bg-white/[0.045]" : "border-slate-200 bg-white/80";
+  const muted = dark ? "text-slate-400" : "text-slate-500";
+  const subtle = dark ? "text-slate-500" : "text-slate-400";
 
   return (
-    <main className={dark ? "dashboard dark" : "dashboard light"}>
-      <div className="space-bg" />
-
-      <aside className="sidebar glass">
-        <div className="brand">
-          <div className="sun-logo">☀</div>
-          <div>
-            <strong>HELIOSOLAR</strong>
-            <span>OS</span>
+    <main className={dark ? "min-h-screen bg-[#071321] text-slate-100" : "min-h-screen bg-[#f3f7fb] text-[#16253b]"}>
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_65%_18%,rgba(33,112,174,0.16),transparent_30%),radial-gradient(circle_at_25%_85%,rgba(22,157,157,0.08),transparent_25%)]" />
+      <div className="relative mx-auto flex min-h-screen max-w-[1600px] flex-col lg:flex-row">
+        <aside className={dark ? "flex w-full shrink-0 flex-col border-b border-white/10 bg-[#091827]/85 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r" : "flex w-full shrink-0 flex-col border-b border-slate-200 bg-white/85 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r"}>
+          <div className="flex items-center justify-between px-6 py-6 lg:block lg:px-7 lg:py-8">
+            <div><p className="text-[11px] font-bold tracking-[0.3em] text-cyan-400">HERMÈS OS</p><p className={`mt-2 text-xs ${muted}`}>HelioSolar Intelligence</p></div>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-400/10 text-lg text-cyan-300 lg:mt-7">Σ</div>
           </div>
-        </div>
-
-        <nav>
-          {["⌂ Accueil", "▣ Projets", "⌘ Workflows", "▤ Documents", "◎ Intelligence", "⚙ Agents", "⚙ Paramètres"].map(
-            (item, index) => (
-              <button key={item} className={index === 0 ? "nav-active" : ""}>
-                {item}
-              </button>
-            )
-          )}
-        </nav>
-
-        <div className="sidebar-bottom">
-          <div className="mini-card">
-            <div className="mini-orb">Σ</div>
-            <div>
-              <strong>Hermès</strong>
-              <span>Directeur IA</span>
-              <small>● En ligne</small>
-            </div>
+          <nav className="flex gap-1 overflow-x-auto px-4 pb-4 lg:block lg:space-y-1 lg:px-3">
+            {navigation.map(([icon, label]) => <button key={label} onClick={() => setActivePage(label)} className={`flex min-w-max items-center gap-3 rounded-xl px-4 py-3 text-sm transition lg:w-full ${activePage === label ? "bg-cyan-400/10 font-medium text-cyan-300" : `${muted} hover:bg-white/5 hover:text-cyan-200`}`}><span className="w-5 text-center text-base">{icon}</span>{label}</button>)}
+          </nav>
+          <div className={`mt-auto hidden border-t p-5 lg:block ${dark ? "border-white/10" : "border-slate-200"}`}>
+            <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-300 font-semibold text-[#082039]">LP</div><div><p className="text-sm font-medium">Louis Preira</p><p className={`text-xs ${subtle}`}>Administrateur</p></div><span className="ml-auto h-2 w-2 rounded-full bg-emerald-400" /></div>
+            <div className={`mt-5 flex items-center gap-2 text-xs ${muted}`}><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />Système en ligne</div>
           </div>
-
-          <div className="profile">
-            <div className="avatar">LP</div>
-            <div>
-              <strong>Louis Preira</strong>
-              <span>Directeur</span>
-            </div>
-            <b>⌄</b>
+        </aside>
+        <section className="min-w-0 flex-1 px-5 py-6 sm:px-8 lg:px-10 lg:py-9">
+          <header className="mb-7 flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+            <div><p className={`mb-2 text-xs uppercase tracking-[0.2em] ${subtle}`}>Mercredi 22 juillet 2026</p><h1 className="text-3xl font-medium tracking-[-0.04em] sm:text-4xl">Bonjour Louis</h1><p className={`mt-3 text-sm ${muted}`}>Voici ce qui mérite votre attention aujourd’hui.</p></div>
+            <div className="flex flex-wrap items-center gap-2"><div className={`flex h-10 items-center gap-3 rounded-xl border px-3 text-sm ${panel}`}><span className="text-lg">☀</span><span className={muted}>Marseille</span><span>29 °C</span></div><button aria-label="Afficher les notifications" className={`relative h-10 w-10 rounded-xl border text-lg ${panel} ${muted}`}>♧<span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-cyan-400" /></button><button aria-label={dark ? "Activer le mode clair" : "Activer le mode sombre"} onClick={() => setIsDark(!dark)} className={`h-10 w-10 rounded-xl border text-lg ${panel} ${dark ? "text-amber-300" : "text-slate-500"}`}>{dark ? "☼" : "☾"}</button></div>
+          </header>
+          <label className={`mb-6 flex h-11 max-w-xl items-center gap-3 rounded-xl border px-4 text-sm ${panel} ${muted}`}><span>⌕</span><input aria-label="Rechercher" type="search" placeholder="Rechercher dans Hermès..." className="w-full bg-transparent outline-none placeholder:text-inherit" /><span className="hidden rounded border border-current/20 px-1.5 py-0.5 text-[10px] sm:block">⌘ K</span></label>
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(300px,0.85fr)]">
+            <section className={`relative min-h-[450px] overflow-hidden rounded-2xl border p-7 sm:p-10 ${panel}`}><div className="absolute -right-24 -top-28 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" /><div className="relative flex h-full flex-col items-center justify-center text-center"><div className="relative flex h-36 w-36 items-center justify-center rounded-full border border-cyan-300/40 bg-cyan-300/10 shadow-[0_0_70px_rgba(34,211,238,0.16)]"><div className="flex h-24 w-24 items-center justify-center rounded-full bg-cyan-300 text-4xl font-semibold text-[#082039]">Σ</div><span className="absolute inset-[-18px] rounded-full border border-cyan-300/15" /></div><p className="mt-8 text-[11px] font-bold uppercase tracking-[0.3em] text-cyan-400">Hermès IA</p><h2 className="mt-3 text-2xl font-medium tracking-[-0.035em] sm:text-3xl">Comment puis-je vous aider aujourd’hui ?</h2><p className={`mt-3 max-w-md text-sm ${muted}`}>Analysez votre activité, préparez une action ou demandez une synthèse à votre intelligence opérationnelle.</p><div className={`mt-7 flex w-full max-w-lg items-center gap-3 rounded-xl border px-4 py-3 ${dark ? "border-white/10 bg-black/15" : "border-slate-200 bg-white"}`}><input value={command} onChange={(event) => setCommand(event.target.value)} placeholder="Écrivez une commande à Hermès..." className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500" aria-label="Commande Hermès" /><button aria-label="Envoyer la commande" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-300 text-[#082039]">↑</button></div><div className="mt-4 flex flex-wrap justify-center gap-2">{["Nouveau prospect", "Créer un devis", "Analyser une facture", "Voir les tâches"].map((action) => <button key={action} onClick={() => setCommand(action)} className={`rounded-lg border px-3 py-2 text-xs ${dark ? "border-white/10 text-slate-300 hover:border-cyan-300/50" : "border-slate-200 text-slate-600 hover:border-cyan-400"}`}>{action}</button>)}</div></div></section>
+            <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-2">{kpis.map(([label, value, detail, color]) => <div key={label} className={`rounded-2xl border p-5 ${panel}`}><div className={`mb-5 h-2 w-2 rounded-full ${color.replace("text-", "bg-")}`} /><p className={`text-xs ${muted}`}>{label}</p><p className="mt-2 text-2xl font-medium tracking-[-0.04em]">{value}</p><p className={`mt-2 text-xs ${color}`}>{detail}</p></div>)}</section>
           </div>
-
-          <button className="logout">⇥ Déconnexion</button>
-        </div>
-      </aside>
-
-      <section className="content">
-        <header className="topbar">
-          <div>
-            <h1>Bonjour <span>Louis</span></h1>
-            <p>Hermès est prêt à vous assister.</p>
-            <small>Que souhaitez-vous accomplir aujourd’hui ?</small>
-          </div>
-
-          <div className="weather glass">
-            <span>☀</span>
-            <b>16°C</b>
-            <small>Marseille, France</small>
-            <i />
-            <small>Mercredi 4 juin 2026<br /><b>09:42</b></small>
-          </div>
-
-          <div className="top-actions">
-            <button onClick={toggleTheme} className="theme-toggle" aria-label="Changer de thème">
-              {dark ? "☀" : "🌙"}
-            </button>
-            <button>♧</button>
-            <button>☆</button>
-            <button>?</button>
-          </div>
-        </header>
-
-        <div className="main-grid">
-          <section className="hero">
-            <div className="planet" />
-            <div className="sunset" />
-
-            <div className="confidence glass">
-              <span>Hermès</span>
-              <small>Niveau de confiance</small>
-              <strong>99,8%</strong>
-              <div className="sparkline">⌁⌁╱⌁╱╱</div>
-              <em>↗ +1,2% depuis hier</em>
-            </div>
-
-            <div className="hermes-orb">
-              <div className="orbit orbit-one" />
-              <div className="orbit orbit-two" />
-              <div className="orb-core">Σ</div>
-              <div className="beam" />
-            </div>
-
-            <div className="system glass">
-              <span>État du système</span>
-              <div className="shield">♢</div>
-              <strong>Optimal</strong>
-              <small>Tous les systèmes<br />sont opérationnels</small>
-              <em>● 24 agents actifs</em>
-            </div>
-
-            <div className="command glass">
-              <span>⌕</span>
-              <input placeholder="Que souhaitez-vous accomplir aujourd’hui ?" />
-              <button>➤</button>
-            </div>
-
-            <div className="shortcuts">
-              {[
-                ["▧", "Créer un workflow n8n", "Agent 57"],
-                ["▤", "Analyser un projet", "Bureau d’études"],
-                ["◎", "Optimiser mes coûts", "Intelligence"],
-                ["◇", "Générer un devis", "Hermès"],
-                ["⌘", "Autre demande", "Hermès"],
-              ].map(([icon, title, meta]) => (
-                <button className="shortcut glass" key={title}>
-                  <span>{icon}</span>
-                  <b>→</b>
-                  <strong>{title}</strong>
-                  <small>{meta}</small>
-                </button>
-              ))}
-            </div>
-
-            <div className="tagline">☀ <b>L’énergie solaire.</b> L’intelligence artificielle. Un avenir durable.</div>
-          </section>
-
-          <aside className="right-column">
-            <div className="panel glass">
-              <div className="panel-title">
-                <strong>⌁ Indicateurs clés</strong>
-                <a>Voir tout</a>
-              </div>
-              <div className="kpi-grid">
-                {kpis.map((kpi) => (
-                  <div className={`kpi ${kpi.tone}`} key={kpi.label}>
-                    <small>{kpi.label}</small>
-                    <strong>{kpi.value}</strong>
-                    <div className="mini-chart">╱╲╱╱╲╱</div>
-                    <em>{kpi.trend}</em>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="panel glass">
-              <div className="panel-title">
-                <strong>☑ Tâches prioritaires</strong>
-                <a>Voir tout</a>
-              </div>
-              <div className="list">
-                {tasks.map(([title, subtitle, time, tone]) => (
-                  <div className="list-row" key={title}>
-                    <span className={`list-icon ${tone}`}>▣</span>
-                    <div>
-                      <strong>{title}</strong>
-                      <small>{subtitle}</small>
-                    </div>
-                    <time>{time}</time>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="panel glass">
-              <div className="panel-title">
-                <strong>▣ Conversations récentes</strong>
-                <a>Voir tout</a>
-              </div>
-              <div className="list">
-                {conversations.map(([title, subtitle]) => (
-                  <div className="list-row conversation" key={title}>
-                    <span className="list-icon blue">◎</span>
-                    <div>
-                      <strong>{title}</strong>
-                      <small>{subtitle}</small>
-                    </div>
-                    <b>›</b>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </aside>
-        </div>
-
-        <section className="bottom-grid">
-          <div className="panel glass">
-            <div className="panel-title">
-              <strong>▣ Projets récents</strong>
-              <button>＋ Nouveau projet</button>
-            </div>
-            <div className="project-table">
-              {projects.map(([name, power, status, progress]) => (
-                <div className="project-row" key={name}>
-                  <span>▧</span>
-                  <strong>{name}</strong>
-                  <small>{power}</small>
-                  <em>{status}</em>
-                  <div className="progress"><i style={{ width: progress }} /></div>
-                  <small>{progress}</small>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="panel glass workflow">
-            <div className="panel-title">
-              <strong>← Workflow en cours</strong>
-              <a>Voir détails</a>
-            </div>
-            <small>Génération automatisée</small>
-            <div className="workflow-line">
-              <div>◉<span>Déclencheur<br />Webhook</span></div>
-              <b>···</b>
-              <div>⌘<span>Analyse<br />OpenAI</span></div>
-              <b>···</b>
-              <div>▤<span>Données<br />Notion</span></div>
-              <b>···</b>
-              <div>✉<span>Envoi<br />Gmail</span></div>
-            </div>
-            <div className="workflow-stats">
-              <span><small>Statut</small><b>● Actif</b></span>
-              <span><small>Dernière exécution</small><b>Aujourd’hui 14:32</b></span>
-              <span><small>Exécutions</small><b>128</b></span>
-              <span><small>Taux de succès</small><b>98,4%</b></span>
-            </div>
-          </div>
-
-          <div className="panel glass system-view">
-            <div className="panel-title">
-              <strong>⌁ Vue système</strong>
-              <a>Voir détails</a>
-            </div>
-            <div className="system-body">
-              <div className="ring"><span>24%</span><small>Moyenne</small></div>
-              <div className="meters">
-                {[
-                  ["CPU", "24%"],
-                  ["Mémoire", "48%"],
-                  ["Agents actifs", "24 / 58"],
-                  ["Stockage", "62%"],
-                ].map(([label, value], index) => (
-                  <div key={label}>
-                    <span>{label}</span>
-                    <i><b style={{ width: `${24 + index * 13}%` }} /></i>
-                    <small>{value}</small>
-                  </div>
-                ))}
-              </div>
-            </div>
+          <div className="mt-5 grid gap-5 lg:grid-cols-[1.1fr_1fr_0.9fr]">
+            <section className={`rounded-2xl border p-5 ${panel}`}><div className="mb-4 flex items-center justify-between"><h3 className="font-medium">Tâches prioritaires</h3><button className="text-xs text-cyan-300">Voir tout</button></div><div className="space-y-4">{tasks.map(([title, time, priority]) => <div key={title} className="flex gap-3"><span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-rose-300" /><div className="min-w-0"><p className="truncate text-sm">{title}</p><p className={`mt-1 text-xs ${subtle}`}>{time}<span className="mx-1">·</span>{priority}</p></div></div>)}</div></section>
+            <section className={`rounded-2xl border p-5 ${panel}`}><div className="mb-4 flex items-center justify-between"><h3 className="font-medium">Projets récents</h3><button className="text-xs text-cyan-300">Voir tout</button></div><div className="space-y-4">{projects.map(([name, type, progress, color]) => <div key={name}><div className="flex justify-between gap-3 text-sm"><span className="truncate">{name}</span><span className={`text-xs ${muted}`}>{progress}</span></div><p className={`mt-1 text-xs ${subtle}`}>{type}</p><div className={`mt-3 h-1 rounded-full ${dark ? "bg-white/10" : "bg-slate-200"}`}><div className={`h-1 rounded-full ${color}`} style={{ width: progress }} /></div></div>)}</div></section>
+            <section className={`rounded-2xl border p-5 ${panel}`}><h3 className="font-medium">Suggestions d’Hermès</h3><div className={`mt-4 space-y-3 text-sm ${muted}`}><p className="border-l-2 border-cyan-300 pl-3">4 prospects sont prêts pour une relance.</p><p className="border-l-2 border-amber-300 pl-3">Le devis Martin attend votre validation.</p><p className="border-l-2 border-emerald-300 pl-3">Votre rapport mensuel est disponible.</p></div></section>
           </div>
         </section>
-      </section>
+      </div>
     </main>
   );
 }
