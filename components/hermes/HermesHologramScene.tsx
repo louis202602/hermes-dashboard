@@ -3,6 +3,13 @@
 import { Canvas, useFrame } from "@react-three/fiber";
 import { useRef } from "react";
 import * as THREE from "three";
+import type { HermesState, ResolvedQuality } from "./hermes-hologram.types";
+
+type SceneProps = {
+  state: HermesState;
+  quality: ResolvedQuality;
+  reducedMotion: boolean;
+};
 
 function HermesCore() {
   const group = useRef<THREE.Group>(null);
@@ -71,7 +78,7 @@ function HermesCore() {
   );
 }
 
-export default function HermesHologramScene() {
+export default function HermesHologramScene({ state: _state, quality: _quality, reducedMotion: _reducedMotion }: SceneProps) {
   return (
     <Canvas
       camera={{ position: [0, 0, 5.5], fov: 45 }}
