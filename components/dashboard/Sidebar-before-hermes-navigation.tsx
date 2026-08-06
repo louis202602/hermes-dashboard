@@ -41,12 +41,7 @@ const secondaryNavigation = [
   { label: "Paramètres", icon: Settings },
 ];
 
-type SidebarProps = {
-  activeSection: string;
-  onNavigate: (section: string) => void;
-};
-
-export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
+export default function Sidebar() {
   return (
     <aside className="dashboard-sidebar">
       <div className="sidebar-brand">
@@ -71,8 +66,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
               <button
                 type="button"
                 key={item.label}
-                onClick={() => onNavigate(item.label)}
-              className={`sidebar-link ${activeSection === item.label ? "is-active" : ""}`}
+                className={`sidebar-link ${item.active ? "is-active" : ""}`}
               >
                 <span className="sidebar-link-content">
                   <Icon size={18} strokeWidth={1.8} />

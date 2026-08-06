@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Header from "@/components/dashboard/Header";
 import HermesPanel from "@/components/dashboard/HermesPanel";
-import AgentsPanel from "@/components/agents/AgentsPanel";
 import KpiGrid from "@/components/dashboard/KpiGrid";
 import ProjectsTable from "@/components/dashboard/ProjectsTable";
 import QuickActions from "@/components/dashboard/QuickActions";
@@ -14,7 +13,6 @@ import TasksPanel from "@/components/dashboard/TasksPanel";
 
 export default function HomePage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState("Accueil");
 
   return (
     <main className="dashboard-shell">
@@ -23,7 +21,7 @@ export default function HomePage() {
           mobileMenuOpen ? "is-open" : ""
         }`}
       >
-        <Sidebar activeSection={activeSection} onNavigate={setActiveSection} />
+        <Sidebar />
       </div>
 
       {mobileMenuOpen ? (
@@ -39,14 +37,6 @@ export default function HomePage() {
         <Header onMenuClick={() => setMobileMenuOpen((value) => !value)} />
 
         <div className="dashboard-content">
-          {activeSection === "Hermès" ? (
-            <div className="hermes-view">
-              <HermesPanel />
-            </div>
-          ) : activeSection === "Agents IA" ? (
-            <AgentsPanel />
-          ) : (
-            <>
           <section className="dashboard-intro">
             <div>
               <span className="panel-eyebrow">HELIOSOLAR OS</span>
@@ -81,8 +71,6 @@ export default function HomePage() {
           <ProjectsTable />
 
           <SystemStatus />
-            </>
-          )}
         </div>
       </div>
     </main>
