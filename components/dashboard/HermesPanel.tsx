@@ -5,7 +5,10 @@ import { ArrowUp, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { pollAgentActionResultAction } from "@/app/actions/agent-actions";
-import { submitHermesMessageAction } from "@/app/actions/hermes-orchestration";
+import {
+  applyHermesResolutionAction,
+  submitHermesMessageAction,
+} from "@/app/actions/hermes-orchestration";
 import { TERMINAL_RESULT_STATUSES } from "@/types/agent-actions";
 
 type HoloState =
@@ -45,6 +48,7 @@ type Turn = {
 const STATE_LABEL: Record<string, string> = {
   IDLE: "Au repos",
   SUBMITTING: "Envoi…",
+  RESOLVING: "Compréhension…",
   ANSWER_ONLY: "Réponse",
   NEEDS_CLARIFICATION: "À préciser",
   QUEUED: "En file",
@@ -70,6 +74,7 @@ function holoFor(state: string): HoloState {
       return "idle";
     case "SUBMITTING":
       return "listening";
+    case "RESOLVING":
     case "QUEUED":
     case "RUNNING":
       return "thinking";
@@ -136,6 +141,9 @@ export default function HermesPanel() {
   const [activeAction, setActiveAction] = useState<
     { requestId: string; turnId: string } | null
   >(null);
+  const [activeResolve, setActiveResolve] = useState<
+    { resolveRequestId: string; conversationId: string; turnId: string } | null
+  >(null);
   const threadRef = useRef<HTMLDivElement>(null);
 
   // Poll the gateway for an in-flight ACTION and reflect its lifecycle on the
@@ -165,6 +173,62 @@ export default function HermesPanel() {
     return () => clearInterval(timer);
   }, [activeAction]);
 
+  // Poll a semantic-resolution request (read-only) until terminal, then apply
+  // it ONCE. Apply re-validates the model proposal server-side and (if valid)
+  // executes via the gateway. State is only set after awaits.
+  useEffect(() => {
+    if (!activeResolve) return;
+    const { resolveRequestId, conversationId, turnId } = activeResolve;
+    let attempts = 0;
+    const max = 40; // ~60s
+    let applied = false;
+    const timer = setInterval(async () => {
+      attempts += 1;
+      const r = await pollAgentActionResultAction(resolveRequestId);
+      if (TERMINAL_RESULT_STATUSES.has(r.status)) {
+        if (applied) return;
+        applied = true;
+        clearInterval(timer);
+        const res = await applyHermesResolutionAction(
+          conversationId,
+          resolveRequestId,
+          null,
+        );
+        setTurns((prev) =>
+          prev.map((t) =>
+            t.id === turnId
+              ? {
+                  ...t,
+                  text: res.reply,
+                  outcome: res.outcome,
+                  actionKey: res.actionKey,
+                  requestId: res.requestId,
+                  confidence: res.confidence,
+                  lifecycle:
+                    res.outcome === "ACTION" ? res.status ?? "QUEUED" : undefined,
+                }
+              : t,
+          ),
+        );
+        setActiveResolve(null);
+        if (res.outcome === "ACTION" && res.requestId) {
+          setActiveAction({ requestId: res.requestId, turnId });
+        }
+      } else if (attempts >= max) {
+        clearInterval(timer);
+        setTurns((prev) =>
+          prev.map((t) =>
+            t.id === turnId
+              ? { ...t, text: "Délai d’analyse dépassé. Réessayez.", outcome: "ERROR" }
+              : t,
+          ),
+        );
+        setActiveResolve(null);
+      }
+    }, 1500);
+    return () => clearInterval(timer);
+  }, [activeResolve]);
+
   // Keep the newest turn in view after the list changes.
   useEffect(() => {
     const el = threadRef.current;
@@ -187,6 +251,7 @@ export default function HermesPanel() {
 
     if (res.conversationId) setConversationId(res.conversationId);
 
+    const resolving = res.outcome === "RESOLVING";
     const assistantTurn: Turn = {
       id: res.assistantMessageId ?? `${rid}-a`,
       role: "assistant",
@@ -195,12 +260,18 @@ export default function HermesPanel() {
       actionKey: res.actionKey,
       requestId: res.requestId,
       confidence: res.confidence,
-      lifecycle: res.outcome === "ACTION" ? res.status ?? "QUEUED" : undefined,
+      lifecycle: res.outcome === "ACTION" ? res.status ?? "QUEUED" : resolving ? "RESOLVING" : undefined,
     };
     setTurns((prev) => [...prev, assistantTurn]);
 
     if (res.outcome === "ACTION" && res.requestId) {
       setActiveAction({ requestId: res.requestId, turnId: assistantTurn.id });
+    } else if (resolving && res.resolveRequestId && res.conversationId) {
+      setActiveResolve({
+        resolveRequestId: res.resolveRequestId,
+        conversationId: res.conversationId,
+        turnId: assistantTurn.id,
+      });
     }
   }
 
@@ -216,6 +287,7 @@ export default function HermesPanel() {
   const label = STATE_LABEL[state] ?? state;
   const inFlight =
     sending ||
+    !!activeResolve ||
     (!!activeAction &&
       (lastAssistant?.lifecycle === "QUEUED" ||
         lastAssistant?.lifecycle === "RUNNING"));

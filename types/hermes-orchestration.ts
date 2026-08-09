@@ -13,6 +13,7 @@ export type OrchestrationOutcome =
   | "ANSWER_ONLY" // informational reply grounded in the capability registry
   | "ACTION" // a real allowlisted action was enqueued via the gateway
   | "NEEDS_CLARIFICATION" // ambiguous / unknown / missing info — no execution
+  | "RESOLVING" // handed to the semantic model resolver (async, proposal only)
   | "ERROR"; // fail-closed (auth, tenant, validation, gateway refusal)
 
 export type OrchestrationResult = {
@@ -26,6 +27,11 @@ export type OrchestrationResult = {
   actionKey?: string | null;
   /** Present when outcome === "ACTION": poll the gateway result with this id. */
   requestId?: string | null;
+  /**
+   * Present when outcome === "RESOLVING": poll this semantic-resolution request
+   * (read-only) until terminal, then call `applyHermesResolution`.
+   */
+  resolveRequestId?: string | null;
   correlationId?: string | null;
   confidence?: string | null;
   /** Missing required slots when NEEDS_CLARIFICATION on a matched capability. */
