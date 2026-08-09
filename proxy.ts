@@ -5,15 +5,16 @@ import {
   NONCE_HEADER,
   buildContentSecurityPolicy,
 } from "@/lib/security/headers";
+import { refreshSupabaseSession } from "@/lib/supabase/session";
 
 /**
- * Next.js 16 Proxy (the renamed `middleware` convention). Its ONLY responsibility
- * in Phase 1 is security: it generates a per-request nonce and sets a strict
- * Content-Security-Policy. It performs NO authentication or route protection —
- * there is no auth yet, so adding gating here would be artificial. Route
- * protection is deferred to Phase 2 (see `types/routing.ts`).
+ * Next.js 16 Proxy (the renamed `middleware` convention). Responsibilities:
+ *  1. Security: generate a per-request nonce and set a strict CSP.
+ *  2. Auth: refresh the Supabase session cookies so Server Components see a
+ *     current session. It does NOT gate routes — page-level server checks are
+ *     the enforcement boundary (the frontend is never a security boundary).
  */
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const isDev = process.env.NODE_ENV === "development";
   const csp = buildContentSecurityPolicy(nonce, isDev);
@@ -26,6 +27,9 @@ export function proxy(request: NextRequest) {
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", csp);
+
+  // Refresh auth cookies onto this same response (which also carries the CSP).
+  await refreshSupabaseSession(request, response);
 
   return response;
 }

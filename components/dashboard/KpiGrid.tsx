@@ -1,43 +1,59 @@
-"use client";
+import { Bot, Boxes, GitBranch, Workflow } from "lucide-react";
 
-import {
-  ArrowUpRight,
-  Bot,
-  Euro,
-  Sun,
-  Workflow,
-} from "lucide-react";
+import ProvenanceBadge from "@/components/common/ProvenanceBadge";
+import type { PublicKpis, ServiceResult } from "@/types/hermes";
 
-const cards = [
-  {
-    title: "Production solaire",
-    value: "2,48 MW",
-    change: "+18%",
-    icon: Sun,
-  },
-  {
-    title: "Agents IA actifs",
-    value: "57",
-    change: "+4",
-    icon: Bot,
-  },
-  {
-    title: "Workflows n8n",
-    value: "112",
-    change: "+12",
-    icon: Workflow,
-  },
-  {
-    title: "CA prévisionnel",
-    value: "1,26 M€",
-    change: "+24%",
-    icon: Euro,
-  },
-];
+type KpiGridProps = {
+  kpis: ServiceResult<PublicKpis>;
+};
 
-export default function KpiGrid() {
+const numberFormat = new Intl.NumberFormat("fr-FR");
+
+export default function KpiGrid({ kpis }: KpiGridProps) {
+  if (!kpis.ok) {
+    return (
+      <section className="kpi-grid">
+        <article className="kpi-card kpi-card-unavailable">
+          <span className="kpi-title">Indicateurs plateforme</span>
+          <strong className="kpi-value">Indisponible</strong>
+          <span className="kpi-subtle">
+            Les indicateurs ne peuvent pas être chargés pour le moment.
+          </span>
+        </article>
+      </section>
+    );
+  }
+
+  const k = kpis.data;
+
+  const cards = [
+    {
+      title: "Agents IA actifs",
+      value: numberFormat.format(k.agentsIaActive),
+      icon: Bot,
+    },
+    {
+      title: "Modules SW actifs",
+      value: numberFormat.format(k.modulesSwActive),
+      icon: Workflow,
+    },
+    {
+      title: "Sous-workflows actifs",
+      value: numberFormat.format(k.subworkflowsActive),
+      icon: GitBranch,
+    },
+    {
+      title: "Composants actifs",
+      value: `${numberFormat.format(k.componentsActiveTotal)} / ${numberFormat.format(
+        k.componentsRegisteredTotal,
+      )}`,
+      icon: Boxes,
+      hint: `${k.activeRate}% actifs`,
+    },
+  ];
+
   return (
-    <section className="kpi-grid">
+    <section className="kpi-grid" aria-label="Indicateurs plateforme (données réelles)">
       {cards.map((card) => {
         const Icon = card.icon;
 
@@ -47,20 +63,12 @@ export default function KpiGrid() {
               <div className="kpi-icon">
                 <Icon size={22} strokeWidth={1.8} />
               </div>
-
-              <div className="kpi-change">
-                <ArrowUpRight size={15} />
-                {card.change}
-              </div>
+              <ProvenanceBadge provenance="REAL" />
             </div>
 
-            <span className="kpi-title">
-              {card.title}
-            </span>
-
-            <strong className="kpi-value">
-              {card.value}
-            </strong>
+            <span className="kpi-title">{card.title}</span>
+            <strong className="kpi-value">{card.value}</strong>
+            {card.hint ? <span className="kpi-subtle">{card.hint}</span> : null}
           </article>
         );
       })}

@@ -2,21 +2,32 @@
 
 import {
   Bell,
-  ChevronDown,
   Command,
+  LogOut,
   Menu,
   Moon,
   Search,
   Sun,
 } from "lucide-react";
+
+import { signOutAction } from "@/app/login/actions";
 import { useTheme } from "@/hooks/useTheme";
 
 type HeaderProps = {
   onMenuClick?: () => void;
+  userEmail?: string;
 };
 
-export default function Header({ onMenuClick }: HeaderProps) {
+function initialsFromEmail(email: string): string {
+  const local = email.split("@")[0] ?? "";
+  const parts = local.split(/[.\-_]/).filter(Boolean);
+  const letters = (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "");
+  return (letters || local.slice(0, 2) || "?").toUpperCase();
+}
+
+export default function Header({ onMenuClick, userEmail }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
+  const email = userEmail ?? "";
 
   return (
     <header className="dashboard-header">
@@ -82,16 +93,27 @@ export default function Header({ onMenuClick }: HeaderProps) {
           <span className="header-notification-dot" />
         </button>
 
-        <button type="button" className="header-profile">
-          <div className="header-profile-avatar">LP</div>
-
-          <div className="header-profile-copy">
-            <strong>Louis Preira</strong>
-            <span>Fondateur HelioSolar</span>
+        <div className="header-profile">
+          <div className="header-profile-avatar">
+            {email ? initialsFromEmail(email) : "?"}
           </div>
 
-          <ChevronDown size={15} strokeWidth={1.8} />
-        </button>
+          <div className="header-profile-copy">
+            <strong>{email || "Utilisateur"}</strong>
+            <span>Session Hermès OS</span>
+          </div>
+
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              className="header-icon-button"
+              aria-label="Se déconnecter"
+              title="Se déconnecter"
+            >
+              <LogOut size={18} strokeWidth={1.8} />
+            </button>
+          </form>
+        </div>
       </div>
     </header>
   );
