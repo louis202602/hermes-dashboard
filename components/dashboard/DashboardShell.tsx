@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import AgentActionPanel from "@/components/dashboard/AgentActionPanel";
+import ApprovalsPanel from "@/components/dashboard/ApprovalsPanel";
 import Header from "@/components/dashboard/Header";
 import HermesPanel from "@/components/dashboard/HermesPanel";
 import KpiGrid from "@/components/dashboard/KpiGrid";
@@ -80,6 +81,8 @@ export default function DashboardShell({
           <ProjectsTable projects={projects} />
 
           <AgentActionPanel />
+
+          <ApprovalsPanel />
 
           <div className="dashboard-primary-grid dashboard-mock-region">
             <HermesPanel />

@@ -70,3 +70,32 @@ export const TERMINAL_RESULT_STATUSES: ReadonlySet<string> = new Set([
   "NO_TENANT",
   "RPC_ERROR",
 ]);
+
+/** A pending human-approval item (from `list_pending_agent_approvals`). */
+export type PendingApproval = {
+  requestId: string;
+  actionKey: string;
+  summary: string;
+  initiatedBy: string | null;
+  createdAt: string | null;
+  policyReason: string | null;
+  status: string;
+  expiresAt: string | null;
+  payloadSafe: Record<string, unknown> | null;
+};
+
+export type ListApprovalsOutcome = {
+  ok: boolean;
+  status: string;
+  tenantId?: string;
+  approvals: PendingApproval[];
+  error?: AgentActionError | null;
+};
+
+export type DecisionOutcome = {
+  ok: boolean;
+  status: string; // APPROVED | REJECTED | UNAUTHORIZED | NOT_FOUND | ALREADY_DECIDED | EXPIRED | VALIDATION_FAILED | ...
+  currentStatus?: string | null;
+  newStatus?: string | null;
+  error?: AgentActionError | null;
+};

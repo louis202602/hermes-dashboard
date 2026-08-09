@@ -1,10 +1,17 @@
 "use server";
 
 import {
+  approveAgentAction,
   getAgentActionResult,
+  listPendingApprovals,
+  rejectAgentAction,
   requestBtpQualification,
 } from "@/services/hermes/agentActions";
-import type { ResultOutcome } from "@/types/agent-actions";
+import type {
+  DecisionOutcome,
+  ListApprovalsOutcome,
+  ResultOutcome,
+} from "@/types/agent-actions";
 
 export type SubmitState = {
   phase: "idle" | "queued" | "error";
@@ -78,4 +85,33 @@ export async function pollAgentActionResultAction(
     return { ok: false, status: "NOT_FOUND", requestId };
   }
   return getAgentActionResult(requestId);
+}
+
+/** Server Action: list pending approvals for the caller's tenant. */
+export async function listPendingApprovalsAction(): Promise<ListApprovalsOutcome> {
+  return listPendingApprovals();
+}
+
+/** Server Action: approve a pending action (backend enforces tenant.admin). */
+export async function approveAgentActionAction(
+  requestId: string,
+): Promise<DecisionOutcome> {
+  if (!requestId) return { ok: false, status: "NOT_FOUND" };
+  return approveAgentAction(requestId);
+}
+
+/** Server Action: reject a pending action with a reason. */
+export async function rejectAgentActionAction(
+  requestId: string,
+  reason: string,
+): Promise<DecisionOutcome> {
+  if (!requestId) return { ok: false, status: "NOT_FOUND" };
+  if (!reason || reason.trim().length === 0) {
+    return {
+      ok: false,
+      status: "VALIDATION_FAILED",
+      error: { code: "REASON_REQUIRED", message: "Un motif de refus est requis." },
+    };
+  }
+  return rejectAgentAction(requestId, reason.trim());
 }
