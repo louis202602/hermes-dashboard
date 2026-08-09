@@ -9,33 +9,43 @@ import {
   Search,
   Sun,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 type HeaderProps = {
   onMenuClick?: () => void;
 };
 
+type Theme = "dark" | "light";
+
+const THEME_STORAGE_KEY = "hermes-theme";
+const THEME_CHANGE_EVENT = "hermes-theme-change";
+
+function subscribe(callback: () => void) {
+  window.addEventListener(THEME_CHANGE_EVENT, callback);
+  return () => window.removeEventListener(THEME_CHANGE_EVENT, callback);
+}
+
+function getThemeSnapshot(): Theme {
+  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
+}
+
+function getServerThemeSnapshot(): Theme {
+  return "dark";
+}
+
 export default function Header({ onMenuClick }: HeaderProps) {
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-
-  useEffect(() => {
-    const storedTheme = localStorage.getItem("hermes-theme");
-
-    if (storedTheme === "light" || storedTheme === "dark") {
-      setTheme(storedTheme);
-      document.documentElement.dataset.theme = storedTheme;
-      return;
-    }
-
-    document.documentElement.dataset.theme = "dark";
-  }, []);
+  const theme = useSyncExternalStore(
+    subscribe,
+    getThemeSnapshot,
+    getServerThemeSnapshot,
+  );
 
   function toggleTheme() {
-    const nextTheme = theme === "dark" ? "light" : "dark";
+    const nextTheme: Theme = theme === "dark" ? "light" : "dark";
 
-    setTheme(nextTheme);
-    localStorage.setItem("hermes-theme", nextTheme);
     document.documentElement.dataset.theme = nextTheme;
+    localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+    window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
   }
 
   return (
