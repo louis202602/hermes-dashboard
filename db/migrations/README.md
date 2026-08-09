@@ -38,3 +38,31 @@ Turns the "Demandez à Hermès…" zone into a real conversational entry.
   `NEEDS_CLARIFICATION`, `ERROR` (plus `PENDING_APPROVAL` surfaced by polling
   the gateway result). Unknown / ambiguous / unauthorized / cross-tenant all
   fail closed with **no execution**.
+
+## Semantic Intelligence (2026-08-09)
+
+Adds a **semantic model path** behind the deterministic fast path, so free
+formulations that don't match a keyword still resolve. The model runs inside
+n8n (`n8n/hermes-semantic-resolver.workflow.js`) and is reached through the
+**same async gateway** — Next never calls a model or n8n, and no LLM key exists
+in the app.
+
+| File | Applied migration | Purpose |
+|------|-------------------|---------|
+| `20260809_hermes_semantic_1_capability_and_scoped_claim.sql` | `hermes_semantic_resolve_capability_and_scoped_claim` | `hermes.intent.resolve` capability + action-scoped `claim_agent_action(text,int)` |
+| `20260809_hermes_semantic_2_orchestrator_and_apply.sql` | `hermes_semantic_orchestrator_and_apply` | orchestrator semantic fallback (`RESOLVING`) with multi-turn context + `apply_hermes_resolution()` |
+| `20260809_hermes_semantic_9_rollback.sql` | — | Reversible teardown |
+
+Pipeline: message → validation/auth/tenant → **fast path** (deterministic, high
+confidence, no LLM) → else **semantic path**: enqueue `hermes.intent.resolve`
+(gateway) → `RESOLVING`; the resolver consumer proposes; `apply_hermes_resolution`
+**re-validates the proposal against the registry** and executes via the gateway
+→ SW15 → agent → result.
+
+Fail-closed guarantees (proven E2E): the model is never the authority; an
+unknown / non-allowlisted `action_key`, confidence below `0.60`, missing
+required params, malformed model output, resolver timeout/failure, cross-tenant
+access, or a prompt-injection all result in **no execution** (`NEEDS_CLARIFICATION`
+/ `ANSWER_ONLY` / fail-closed `ERROR`). A stable `request_id` keeps the whole
+chain idempotent. Model routing uses the cheap tier (`gpt-5.4-nano`); telemetry
+(provider/model) is carried on the proposal and stored on the assistant message.

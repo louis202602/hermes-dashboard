@@ -47,26 +47,73 @@ export async function orchestrateHermesMessage(
 
     const d = (data ?? {}) as Record<string, unknown>;
     logEvent("info", "hermes.orchestrated", { outcome: d.outcome, status: d.status });
-    return {
-      ok: Boolean(d.ok),
-      outcome: (d.outcome as string) ?? "ERROR",
-      conversationId: (d.conversation_id as string) ?? null,
-      userMessageId: (d.user_message_id as string) ?? null,
-      assistantMessageId: (d.assistant_message_id as string) ?? null,
-      reply: (d.reply as string) ?? "",
-      actionKey: (d.action_key as string) ?? null,
-      requestId: (d.request_id as string) ?? null,
-      correlationId: (d.correlation_id as string) ?? null,
-      confidence: (d.confidence as string) ?? null,
-      missing: asStringArray(d.missing),
-      candidates: asStringArray(d.candidates),
-      status: (d.status as string) ?? (d.outcome as string) ?? "ERROR",
-      error: asError(d.error),
-    };
+    return mapOrchestration(d);
   } catch (err) {
     logEvent("error", "hermes.orchestrate_exception", {
       message: (err as Error).message,
     });
+    return {
+      ok: false,
+      outcome: "ERROR",
+      reply: "Le service est indisponible. Réessayez plus tard.",
+      status: "RPC_ERROR",
+      error: { code: "EXCEPTION", message: "Le service est indisponible." },
+    };
+  }
+}
+
+function mapOrchestration(d: Record<string, unknown>): OrchestrationResult {
+  return {
+    ok: Boolean(d.ok),
+    outcome: (d.outcome as string) ?? "ERROR",
+    conversationId: (d.conversation_id as string) ?? null,
+    userMessageId: (d.user_message_id as string) ?? null,
+    assistantMessageId: (d.assistant_message_id as string) ?? null,
+    reply: (d.reply as string) ?? "",
+    actionKey: (d.action_key as string) ?? null,
+    requestId: (d.request_id as string) ?? null,
+    resolveRequestId: (d.resolve_request_id as string) ?? null,
+    correlationId: (d.correlation_id as string) ?? null,
+    confidence: (d.confidence as string) ?? null,
+    missing: asStringArray(d.missing),
+    candidates: asStringArray(d.candidates),
+    status: (d.status as string) ?? (d.outcome as string) ?? "ERROR",
+    error: asError(d.error),
+  };
+}
+
+/**
+ * Apply a completed semantic resolution: the backend RE-VALIDATES the model's
+ * proposal against the registry and executes via the gateway (or fails closed).
+ * Runs as the authenticated user, so permissions / tenant / SW15 all apply.
+ */
+export async function applyHermesResolution(
+  conversationId: string,
+  resolveRequestId: string,
+  requestId: string | null,
+): Promise<OrchestrationResult> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase.rpc("apply_hermes_resolution", {
+      p_conversation_id: conversationId,
+      p_resolve_request_id: resolveRequestId,
+      p_request_id: requestId,
+    });
+    if (error) {
+      logEvent("error", "hermes.apply_rpc_error", { code: error.code });
+      return {
+        ok: false,
+        outcome: "ERROR",
+        reply: "Le service est indisponible. Réessayez plus tard.",
+        status: "RPC_ERROR",
+        error: { code: error.code, message: "Le service est indisponible." },
+      };
+    }
+    const d = (data ?? {}) as Record<string, unknown>;
+    logEvent("info", "hermes.applied", { outcome: d.outcome, status: d.status });
+    return mapOrchestration(d);
+  } catch (err) {
+    logEvent("error", "hermes.apply_exception", { message: (err as Error).message });
     return {
       ok: false,
       outcome: "ERROR",

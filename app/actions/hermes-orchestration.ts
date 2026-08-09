@@ -1,6 +1,9 @@
 "use server";
 
-import { orchestrateHermesMessage } from "@/services/hermes/orchestration";
+import {
+  applyHermesResolution,
+  orchestrateHermesMessage,
+} from "@/services/hermes/orchestration";
 import type { OrchestrationResult } from "@/types/hermes-orchestration";
 
 /**
@@ -25,4 +28,26 @@ export async function submitHermesMessageAction(
     };
   }
   return orchestrateHermesMessage(text, conversationId ?? null, requestId ?? null);
+}
+
+/**
+ * Server Action: apply a completed semantic resolution. The client calls this
+ * once the resolve request reaches a terminal state. Re-validation and
+ * execution happen server-side; the model is never the authority.
+ */
+export async function applyHermesResolutionAction(
+  conversationId: string,
+  resolveRequestId: string,
+  requestId: string | null,
+): Promise<OrchestrationResult> {
+  if (!conversationId || !resolveRequestId) {
+    return {
+      ok: false,
+      outcome: "ERROR",
+      reply: "Résolution invalide.",
+      status: "VALIDATION_FAILED",
+      error: { code: "INVALID_ARGS", message: "Arguments requis." },
+    };
+  }
+  return applyHermesResolution(conversationId, resolveRequestId, requestId ?? null);
 }
