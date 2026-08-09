@@ -118,3 +118,42 @@ réel"). Fixed `diag.echo` by wiring it to a new safe consumer
 Consultation is deterministic, tenant/user-scoped, `ANSWER_ONLY`, **no
 execution**, and never swallows executable phrasings (`qualif*` excluded).
 Cross-tenant and prompt-injection attempts return only the caller's own data.
+
+## Capability Expansion — second lot (2026-08-09)
+
+Adds one **WRITE** capability wired to a real agent, two read-only
+consultations, and a routing hardening fix — all through the unchanged gateway
+and informational layer.
+
+| File | Applied migration | Purpose |
+|------|-------------------|---------|
+| `20260809_hermes_business_lot2_1_planning_and_reads.sql` | `hermes_business_lot2_planning_and_reads` | registers `btp.planning.phase.add` (WRITE, `is_sensitive=true`, runner = **GW Consumer — BTP Planning** `2MMvwJ8zb3jBftDi`); adds read-only **planning** and **devis** consultation to `_hermes_informational` |
+| `20260809_hermes_business_lot2_2_fix_consultation_guards.sql` | `hermes_business_lot2_fix_consultation_guards` | consultation blocks now require a read verb and exclude write phrasings (`qualif`/`planifie`), so a chantier named e.g. "Planning Target" no longer hijacks a write |
+| `20260809_hermes_business_lot2_3_fix_qualif_keyword_collision.sql` | `hermes_business_lot2_fix_qualif_keyword_collision` | drops the generic `chantier` noun from qualification keywords (the verb `qualifie*` triggers it); `_nl_extract_slot` now strips a leading business noun so `qualifie le chantier X` still extracts `X` |
+| `20260809_hermes_business_lot2_9_rollback.sql` | — | Reversible teardown |
+
+**New capabilities (second lot):**
+- **`btp.planning.phase.add`** (P0, WRITE, sensitive): adds a planning phase to
+  an existing chantier by delegating to the **real Agent BTP-Planning**
+  (`Dih5iny9QD3iQ9qQ`) — reusing that agent's validation/idempotence rather than
+  duplicating planning logic. Two required params (`chantier_name` +
+  `phase_name`); `nl_keywords` is intentionally empty so the deterministic
+  single-slot path never matches it and every phrasing routes through the
+  semantic resolver (which fills both params). Flows through the standard
+  gateway → SW15 policy gate → consumer → `complete_agent_action`; **no direct
+  mutation from HermesPanel**. Fail-closed on a missing chantier (`NO_CHANTIER`)
+  or an agent error (`AGENT_ERROR`).
+- **Consultation — planning** (read-only): counts and lists the caller's recent
+  planning phases (tenant-scoped), `ANSWER_ONLY`.
+- **Consultation — devis** (read-only): counts and lists the caller's recent
+  devis (tenant-scoped), `ANSWER_ONLY`.
+
+**Security invariants (proven E2E, real effects — no mock as final proof):** the
+WRITE only executes through the gateway; `SW15` `REQUIRE_APPROVAL` →
+`PENDING_APPROVAL` → admin approve → resume → success and reject → `REJECTED` →
+no effect both proven; an unauthenticated caller, a member without
+`tenant.member`, a cross-tenant chantier, an invented `action_key`, an "ignore
+SW15" prompt injection, and malformed params all fail closed with no execution;
+a stable `request_id` keeps double-submit idempotent. Each consumer claims **only
+its own `action_key`** (`claim_agent_action(p_action_key, p_lease)`), so no
+consumer can steal another's queued request.

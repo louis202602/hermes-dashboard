@@ -56,7 +56,13 @@ const parser = outputParser({
   version: 1.3,
   config: {
     name: 'Proposal Parser',
-    parameters: { schemaType: 'fromJson', jsonSchemaExample: '{ "outcome": "ACTION", "action_key": "btp.qualification.create", "confidence": 0.92, "parameters": { "chantier_name": "Dupont" }, "reason": "short justification" }' },
+    // Manual schema with an OPEN `parameters` object (additionalProperties:true)
+    // so the model can fill ALL of a capability's required_payload_keys — a
+    // narrow schema previously dropped multi-param keys (e.g. phase_name).
+    parameters: {
+      schemaType: 'manual',
+      inputSchema: '{"type":"object","properties":{"outcome":{"type":"string"},"action_key":{"type":["string","null"]},"confidence":{"type":"number"},"parameters":{"type":"object","additionalProperties":true},"reason":{"type":"string"}},"required":["outcome","action_key","confidence","parameters","reason"]}',
+    },
   },
 });
 
@@ -70,7 +76,7 @@ const agent = node({
       promptType: 'define',
       text: expr("{{ $('Claim Resolve').item.json.claim.payload.message }}"),
       hasOutputParser: true,
-      options: { systemMessage: expr("{{ \"Tu es le routeur d'intention d'Hermes (assistant BTP). Mappe le message utilisateur vers EXACTEMENT une capacite autorisee de la liste, sinon action_key=null. Tu ne fais que PROPOSER, tu n'executes rien et tu ne decides ni permissions ni tenant. Regles: (1) action_key EXACTEMENT depuis la liste sinon null; (2) intention correspond + parametres requis presents -> outcome=ACTION; (3) parametre requis manquant -> outcome=NEEDS_CLARIFICATION; (4) simple question/aide -> outcome=ANSWER_ONLY; (5) doute ou aucune capacite -> outcome=NEEDS_CLARIFICATION action_key=null; (6) n'invente jamais d'action_key; (7) confidence 0..1; extrais parameters depuis le message et le contexte. Capacites autorisees (JSON): \" + JSON.stringify($('Claim Resolve').item.json.claim.payload.capabilities) + \" . Contexte recent de la conversation (JSON): \" + JSON.stringify($('Claim Resolve').item.json.claim.payload.context) }}") },
+      options: { systemMessage: expr("{{ \"Tu es le routeur d'intention d'Hermes (assistant BTP). Mappe le message utilisateur vers EXACTEMENT une capacite autorisee de la liste, sinon action_key=null. Tu ne fais que PROPOSER, tu n'executes rien et tu ne decides ni permissions ni tenant. Regles: (1) action_key EXACTEMENT depuis la liste sinon null; (2) intention correspond + parametres requis presents -> outcome=ACTION; (3) parametre requis manquant -> outcome=NEEDS_CLARIFICATION; (4) simple question/aide -> outcome=ANSWER_ONLY; (5) doute ou aucune capacite -> outcome=NEEDS_CLARIFICATION action_key=null; (6) n'invente jamais d'action_key; (7) confidence 0..1; (8) dans parameters, renseigne TOUS les required_payload_keys de la capacite choisie en extrayant leurs valeurs du message ET du contexte. Capacites autorisees (JSON): \" + JSON.stringify($('Claim Resolve').item.json.claim.payload.capabilities) + \" . Contexte recent de la conversation (JSON): \" + JSON.stringify($('Claim Resolve').item.json.claim.payload.context) }}") },
     },
     subnodes: { model, outputParser: parser },
   },
