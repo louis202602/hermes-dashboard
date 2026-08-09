@@ -1118,6 +1118,28 @@ html[data-theme="light"] .hermes-core-label {
   line-height: 1.5;
 }
 
+.hermes-retry-button {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 3px 10px;
+  color: var(--text);
+  background: var(--surface-soft);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.hermes-retry-button:hover {
+  background: var(--surface-hover);
+}
+
+.hermes-retry-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .dashboard-card {
   padding: 19px;
 }
