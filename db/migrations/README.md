@@ -66,3 +66,26 @@ access, or a prompt-injection all result in **no execution** (`NEEDS_CLARIFICATI
 / `ANSWER_ONLY` / fail-closed `ERROR`). A stable `request_id` keeps the whole
 chain idempotent. Model routing uses the cheap tier (`gpt-5.4-nano`); telemetry
 (provider/model) is carried on the proposal and stored on the assistant message.
+
+## Conversational Control Plane (2026-08-09)
+
+Adds a deterministic, read-only **informational layer** so Hermès can answer
+control-plane questions without executing anything, all derived from REAL data
+and scoped to the caller's tenant/user:
+
+| File | Applied migration | Purpose |
+|------|-------------------|---------|
+| `20260809_hermes_control_plane_1_informational.sql` | `hermes_conversational_informational_layer` | `_hermes_informational()` — capability discovery (permission-aware), pending approvals, last-action status |
+| `20260809_hermes_control_plane_2_orchestrator_informational.sql` | `hermes_orchestrator_informational_and_permission_help` | wires the informational branch into the orchestrator (before capability matching); replaces the old non-permission-aware help |
+| `20260809_hermes_control_plane_9_rollback.sql` | — | Reversible teardown |
+
+The informational branch runs first (after persisting the user message) and
+returns `ANSWER_ONLY` when it matches; otherwise the message flows to the
+unchanged fast/semantic paths. Capability discovery only lists actions the caller
+is **actually permitted** to run (`agent_action_catalog` ⋈ `user_tenant_permissions`).
+Pending approvals reuse the tenant-scoped `list_pending_agent_approvals()`;
+last-action reads the caller's own most recent request. No parallel gateway; no
+hardcoded lists in React. Tokens/cost per model call are **UNAVAILABLE** from the
+n8n LangChain node and are not fabricated — provider/model/confidence and the
+`conversation_id` / `request_id` / `correlation_id` are the recorded observability
+fields; per-call latency lives in the n8n execution log.

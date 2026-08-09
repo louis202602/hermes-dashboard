@@ -43,6 +43,7 @@ type Turn = {
   confidence?: string | null;
   lifecycle?: string; // live gateway status for ACTION turns
   chantierId?: string | null;
+  userText?: string; // the user message that produced this turn (for retry)
 };
 
 const STATE_LABEL: Record<string, string> = {
@@ -153,7 +154,9 @@ export default function HermesPanel() {
     if (!activeAction) return;
     const { requestId, turnId } = activeAction;
     let attempts = 0;
-    const max = 40; // ~60s
+    // Longer window so a PENDING_APPROVAL action resumes automatically in the
+    // conversation once it is approved in the Approvals panel (~5 min cap).
+    const max = 200;
     const timer = setInterval(async () => {
       attempts += 1;
       const r = await pollAgentActionResultAction(requestId);
@@ -164,9 +167,11 @@ export default function HermesPanel() {
             : t,
         ),
       );
-      if (TERMINAL_RESULT_STATUSES.has(r.status) || attempts >= max) {
-        clearInterval(timer);
-      } else if (r.status === "TIMEOUT") {
+      if (
+        TERMINAL_RESULT_STATUSES.has(r.status) ||
+        r.status === "TIMEOUT" ||
+        attempts >= max
+      ) {
         clearInterval(timer);
       }
     }, 1500);
@@ -239,11 +244,16 @@ export default function HermesPanel() {
     event.preventDefault();
     const text = input.trim();
     if (text.length === 0 || sending) return;
+    setInput("");
+    await send(text);
+  }
+
+  async function send(text: string) {
+    if (text.length === 0 || sending) return;
 
     const rid = newRequestId();
     const userTurn: Turn = { id: `${rid}-u`, role: "user", text };
     setTurns((prev) => [...prev, userTurn]);
-    setInput("");
     setSending(true);
 
     const res = await submitHermesMessageAction(text, conversationId, rid);
@@ -260,6 +270,7 @@ export default function HermesPanel() {
       actionKey: res.actionKey,
       requestId: res.requestId,
       confidence: res.confidence,
+      userText: text,
       lifecycle: res.outcome === "ACTION" ? res.status ?? "QUEUED" : resolving ? "RESOLVING" : undefined,
     };
     setTurns((prev) => [...prev, assistantTurn]);
@@ -361,13 +372,25 @@ export default function HermesPanel() {
                       {t.chantierId ? ` · chantier ${t.chantierId}` : ""}
                     </span>
                   ) : null}
-                  {t.role === "assistant" && t.outcome === "PENDING_APPROVAL" ? (
+                  {t.role === "assistant" && t.lifecycle === "PENDING_APPROVAL" ? (
                     <span className="hermes-lifecycle-hint">
-                      Traitez la demande dans « Approbations en attente ».
+                      Approbation humaine requise (SW15) — traitez la demande dans «
+                      Approbations en attente » ci-dessous ; la conversation
+                      reprendra automatiquement après décision.
                     </span>
                   ) : null}
                   {t.role === "assistant" && t.requestId ? (
                     <span className="agent-req">Réf. {t.requestId}</span>
+                  ) : null}
+                  {t.role === "assistant" && t.outcome === "ERROR" && t.userText ? (
+                    <button
+                      type="button"
+                      className="hermes-retry-button"
+                      disabled={inFlight}
+                      onClick={() => send(t.userText as string)}
+                    >
+                      Réessayer
+                    </button>
                   ) : null}
                 </div>
               ))
