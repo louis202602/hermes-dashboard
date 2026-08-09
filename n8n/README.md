@@ -65,3 +65,31 @@ Source for **GW Consumer — BTP Planning** (n8n id `2MMvwJ8zb3jBftDi`).
 - All auth/tenant/permission/idempotency are enforced upstream by
   `request_agent_action`. It claims **only** its own `action_key`, so it cannot
   steal another consumer's queued request.
+
+## `hermes-btp-suivi.workflow.js`
+
+Source for **GW Consumer — BTP Suivi** (n8n id `1xCiexp3oVj0R8Tk`).
+
+- **Trigger:** Manual only. **INACTIVE** — no Schedule Trigger.
+- The **WRITE runner** behind the gateway capability `btp.suivi.progress.report`.
+  Claims queued requests (action-scoped `claim_agent_action('btp.suivi.progress.report', …)`),
+  records + gates the **SW15** policy (proceeds only on `PERMIT`, incl. an
+  admin-approved `PENDING` request), resolves the chantier by name
+  (tenant-scoped), then applies the **real Agent BTP-Suivi canonical idempotent
+  contract** — `INSERT btp_suivi_avancement … ON CONFLICT (tenant_id,
+  chantier_id, date_rapport) DO NOTHING` — and writes the result back with
+  `complete_agent_action`.
+- **Why the write is applied directly** (not by invoking the agent): Agent
+  BTP-Suivi (`O9BLGvhAGjd8oiv3`) uses the legacy `workflowTrigger` node, which is
+  not invokable as an Execute Sub-workflow ("Missing node to start execution").
+  Changing that production agent's trigger would risk its SW4 caller, so the
+  consumer reproduces the agent's exact idempotent contract. **The production
+  agent is left completely untouched** (SW4 `lFopccFfaudvNHZi` remains its sole
+  caller).
+- **Fail-closed:** the chantier lookup is a scalar subquery (always one row, `id`
+  null when absent) → a missing chantier completes `FAILED` with `NO_CHANTIER`;
+  a write error routes to `WRITE_ERROR`. `btp.suivi.progress.report` is
+  `is_sensitive=true`, so nothing runs until SW15 permits.
+- All auth/tenant/permission/idempotency are enforced upstream by
+  `request_agent_action`. It claims **only** its own `action_key`, so it cannot
+  steal another consumer's queued request.
