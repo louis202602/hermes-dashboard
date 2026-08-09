@@ -1,0 +1,78 @@
+import "server-only";
+
+import { logEvent } from "@/lib/observability/log";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { OrchestrationResult } from "@/types/hermes-orchestration";
+
+function asError(value: unknown): { code?: string; message?: string } | null {
+  if (value && typeof value === "object") {
+    const v = value as Record<string, unknown>;
+    return { code: v.code as string, message: v.message as string };
+  }
+  return null;
+}
+
+function asStringArray(value: unknown): string[] | null {
+  return Array.isArray(value) ? value.map((v) => String(v)) : null;
+}
+
+/**
+ * Send one free-text message to the Hermès orchestrator. Intent resolution,
+ * capability selection, policy delegation, persistence and audit all happen
+ * server-side in `hermes_os`. The frontend only renders the canonical outcome.
+ */
+export async function orchestrateHermesMessage(
+  message: string,
+  conversationId: string | null,
+  requestId: string | null,
+): Promise<OrchestrationResult> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase.rpc("orchestrate_hermes_message", {
+      p_message: message,
+      p_conversation_id: conversationId,
+      p_request_id: requestId,
+    });
+
+    if (error) {
+      logEvent("error", "hermes.orchestrate_rpc_error", { code: error.code });
+      return {
+        ok: false,
+        outcome: "ERROR",
+        reply: "Le service est indisponible. Réessayez plus tard.",
+        status: "RPC_ERROR",
+        error: { code: error.code, message: "Le service est indisponible." },
+      };
+    }
+
+    const d = (data ?? {}) as Record<string, unknown>;
+    logEvent("info", "hermes.orchestrated", { outcome: d.outcome, status: d.status });
+    return {
+      ok: Boolean(d.ok),
+      outcome: (d.outcome as string) ?? "ERROR",
+      conversationId: (d.conversation_id as string) ?? null,
+      userMessageId: (d.user_message_id as string) ?? null,
+      assistantMessageId: (d.assistant_message_id as string) ?? null,
+      reply: (d.reply as string) ?? "",
+      actionKey: (d.action_key as string) ?? null,
+      requestId: (d.request_id as string) ?? null,
+      correlationId: (d.correlation_id as string) ?? null,
+      confidence: (d.confidence as string) ?? null,
+      missing: asStringArray(d.missing),
+      candidates: asStringArray(d.candidates),
+      status: (d.status as string) ?? (d.outcome as string) ?? "ERROR",
+      error: asError(d.error),
+    };
+  } catch (err) {
+    logEvent("error", "hermes.orchestrate_exception", {
+      message: (err as Error).message,
+    });
+    return {
+      ok: false,
+      outcome: "ERROR",
+      reply: "Le service est indisponible. Réessayez plus tard.",
+      status: "RPC_ERROR",
+      error: { code: "EXCEPTION", message: "Le service est indisponible." },
+    };
+  }
+}
