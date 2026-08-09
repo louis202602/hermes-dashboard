@@ -2234,3 +2234,38 @@ html[data-theme="light"] .hermes-core-label {
     transform: rotate(360deg);
   }
 }
+
+/* ---- Slice 3: approvals panel ------------------------------------------- */
+
+.approvals-card { display: flex; flex-direction: column; gap: 1rem; }
+
+.approvals-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+
+.approval-item {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 0.75rem; padding: 0.85rem 1rem; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--surface-soft);
+}
+
+.approval-info { display: flex; flex-direction: column; gap: 0.2rem; min-width: 12rem; flex: 1; }
+.approval-meta { font-size: 0.8rem; color: var(--text-secondary); }
+
+.approval-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+.approval-btn {
+  padding: 0.5rem 0.9rem; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--surface-hover);
+  color: var(--text); cursor: pointer; font-size: 0.85rem;
+}
+.approval-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.approval-btn.is-approve { border-color: rgba(66,217,156,0.4); background: rgba(66,217,156,0.12); color: var(--success); }
+.approval-btn.is-reject { border-color: rgba(255,109,122,0.4); background: rgba(255,109,122,0.1); color: var(--danger); }
+
+.approval-reject-box { display: flex; flex-direction: column; gap: 0.5rem; min-width: 16rem; flex: 1; }
+.approval-reject-box input {
+  padding: 0.55rem 0.75rem; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+}
+
+.approval-resumptions { border-top: 1px solid var(--border); padding-top: 0.75rem; font-size: 0.9rem; }
+.approval-resumptions ul { list-style: none; margin: 0.35rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; color: var(--text-secondary); }
