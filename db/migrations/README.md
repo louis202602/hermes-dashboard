@@ -89,3 +89,32 @@ hardcoded lists in React. Tokens/cost per model call are **UNAVAILABLE** from th
 n8n LangChain node and are not fabricated — provider/model/confidence and the
 `conversation_id` / `request_id` / `correlation_id` are the recorded observability
 fields; per-call latency lives in the n8n execution log.
+
+## Capability Expansion — first lot (2026-08-09)
+
+Audited `agent_action_catalog` against the real n8n/Supabase surface, then
+expanded the usable capabilities while keeping every security invariant.
+
+| File | Applied migration | Purpose |
+|------|-------------------|---------|
+| `20260809_hermes_capability_expansion_1_consultation_and_diag.sql` | `hermes_capability_expansion_consultation_and_diag` | links `diag.echo` to its real runner; adds read-only chantiers/projets + platform-KPIs **consultation** to the informational layer |
+| `20260809_hermes_capability_expansion_9_rollback.sql` | — | Reversible teardown |
+
+**Audit result.** Before: 3 catalog entries — `btp.qualification.create` (real
+runner, E2E-proven), `hermes.intent.resolve` (real runner), `diag.echo`
+(registered but `target_workflow_id = NULL` → **no runner** = "action sans agent
+réel"). Fixed `diag.echo` by wiring it to a new safe consumer
+(`n8n/hermes-diag-echo.workflow.js`, INACTIVE) and proving it E2E.
+
+**New capabilities (first lot):**
+- **Consultation — chantiers / projets** (P0, read-only): reuses
+  `get_dashboard_projects` (tenant-scoped, `production` only); summarises count,
+  by-status, estimated value, recent names. Multiple NL formulations
+  (montre / liste / combien / mes projets) converge.
+- **Consultation — platform KPIs** (read-only): reuses `get_dashboard_public_kpis`.
+- **`diag.echo`** (safe executable): fixed with a real runner; proves the
+  executable catalog can grow beyond qualification.
+
+Consultation is deterministic, tenant/user-scoped, `ANSWER_ONLY`, **no
+execution**, and never swallows executable phrasings (`qualif*` excluded).
+Cross-tenant and prompt-injection attempts return only the caller's own data.
