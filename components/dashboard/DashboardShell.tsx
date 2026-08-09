@@ -76,6 +76,8 @@ export default function DashboardShell({
             </div>
           </section>
 
+          <HermesPanel />
+
           <KpiGrid kpis={kpis} />
 
           <ProjectsTable projects={projects} />
@@ -84,8 +86,7 @@ export default function DashboardShell({
 
           <ApprovalsPanel />
 
-          <div className="dashboard-primary-grid dashboard-mock-region">
-            <HermesPanel />
+          <div className="dashboard-mock-region">
             <QuickActions />
           </div>
 

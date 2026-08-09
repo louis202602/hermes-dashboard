@@ -2269,3 +2269,27 @@ html[data-theme="light"] .hermes-core-label {
 
 .approval-resumptions { border-top: 1px solid var(--border); padding-top: 0.75rem; font-size: 0.9rem; }
 .approval-resumptions ul { list-style: none; margin: 0.35rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; color: var(--text-secondary); }
+
+/* ---- Command Center: state-driven Hermès panel -------------------------- */
+
+.hermes-status-badge.is-ok { color: var(--success); }
+.hermes-status-badge.is-bad { color: var(--danger); }
+.hermes-status-badge.is-warn { color: var(--warning); }
+.hermes-status-badge.is-pending { color: var(--text-secondary); }
+.hermes-status-badge.is-ok .status-pulse { background: var(--success); }
+.hermes-status-badge.is-bad .status-pulse { background: var(--danger); }
+.hermes-status-badge.is-warn .status-pulse { background: var(--warning); }
+
+.hermes-insight-icon.is-ok { color: var(--success); }
+.hermes-insight-icon.is-bad { color: var(--danger); }
+.hermes-insight-icon.is-warn { color: var(--warning); }
+
+.hermes-command-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.hermes-send-button:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}

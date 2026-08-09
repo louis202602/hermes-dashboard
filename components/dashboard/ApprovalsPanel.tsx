@@ -80,6 +80,15 @@ export default function ApprovalsPanel() {
     };
   }, []);
 
+  // Keep the list current so approvals created after mount (e.g. from a Command
+  // Center action that hits REQUIRE_APPROVAL) appear without a manual reload.
+  useEffect(() => {
+    const id = setInterval(() => {
+      void refresh();
+    }, 8000);
+    return () => clearInterval(id);
+  }, [refresh]);
+
   const trackResumption = useCallback((requestId: string, summary: string) => {
     setResumptions((prev) => [
       { requestId, summary, status: "QUEUED" },
