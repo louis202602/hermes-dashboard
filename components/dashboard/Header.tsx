@@ -9,44 +9,14 @@ import {
   Search,
   Sun,
 } from "lucide-react";
-import { useSyncExternalStore } from "react";
+import { useTheme } from "@/hooks/useTheme";
 
 type HeaderProps = {
   onMenuClick?: () => void;
 };
 
-type Theme = "dark" | "light";
-
-const THEME_STORAGE_KEY = "hermes-theme";
-const THEME_CHANGE_EVENT = "hermes-theme-change";
-
-function subscribe(callback: () => void) {
-  window.addEventListener(THEME_CHANGE_EVENT, callback);
-  return () => window.removeEventListener(THEME_CHANGE_EVENT, callback);
-}
-
-function getThemeSnapshot(): Theme {
-  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
-}
-
-function getServerThemeSnapshot(): Theme {
-  return "dark";
-}
-
 export default function Header({ onMenuClick }: HeaderProps) {
-  const theme = useSyncExternalStore(
-    subscribe,
-    getThemeSnapshot,
-    getServerThemeSnapshot,
-  );
-
-  function toggleTheme() {
-    const nextTheme: Theme = theme === "dark" ? "light" : "dark";
-
-    document.documentElement.dataset.theme = nextTheme;
-    localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
-    window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
-  }
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <header className="dashboard-header">

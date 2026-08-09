@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
+
+import { NONCE_HEADER } from "@/lib/security/headers";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,15 +22,15 @@ export const metadata: Metadata = {
     "Dashboard Hermès OS de HelioSolar : vue d’ensemble et pilotage en temps réel.",
 };
 
-// Applique le thème enregistré avant le premier paint pour éviter tout flash
-// (FOUC) du mauvais thème. Le défaut est « dark » en l'absence de préférence.
-const themeInitScript = `(function(){try{var t=localStorage.getItem("hermes-theme");document.documentElement.dataset.theme=(t==="light"||t==="dark")?t:"dark";}catch(e){document.documentElement.dataset.theme="dark";}})();`;
-
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Nonce set by `proxy.ts`; used to authorize the inline anti-FOUC script under
+  // the strict, nonce-based CSP (no `'unsafe-inline'` for scripts).
+  const nonce = (await headers()).get(NONCE_HEADER) ?? undefined;
+
   return (
     <html
       lang="fr"
@@ -34,7 +38,10 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script
+          nonce={nonce}
+          dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
+        />
         {children}
       </body>
     </html>
