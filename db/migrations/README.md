@@ -157,3 +157,67 @@ SW15" prompt injection, and malformed params all fail closed with no execution;
 a stable `request_id` keeps double-submit idempotent. Each consumer claims **only
 its own `action_key`** (`claim_agent_action(p_action_key, p_lease)`), so no
 consumer can steal another's queued request.
+
+## Capability Expansion — third lot (2026-08-09)
+
+Audited the real BTP agent / table surface for the `heliosolar` tenant, then
+added one **WRITE** capability wired to a real agent's contract plus three
+read-only consultations — all through the unchanged gateway and informational
+layer.
+
+| File | Applied migration | Purpose |
+|------|-------------------|---------|
+| `20260809_hermes_business_lot3_1_suivi_and_reads.sql` | `hermes_business_lot3_suivi_and_reads` (+ guard refinement) | registers `btp.suivi.progress.report` (WRITE, `is_sensitive=true`, runner = **GW Consumer — BTP Suivi** `1xCiexp3oVj0R8Tk`); adds read-only **reporting/blockers**, **fournisseurs** and **avancement** consultation to `_hermes_informational` |
+| `20260809_hermes_business_lot3_2_canonical_suivi_service.sql` | `hermes_btp_suivi_canonical_service` | **single canonical business service** `hermes_os.record_btp_suivi_progress(...)` — the suivi write + optional incident, called by BOTH Agent BTP-Suivi (SW4) and the gateway consumer |
+| `20260809_hermes_business_lot3_9_rollback.sql` | — | Reversible teardown |
+
+**Audit result (heliosolar).** Real BTP tables carry data:
+`btp_chantiers` (8), `btp_fournisseurs` (2), `btp_incidents_qualite` (1),
+`btp_suivi_avancement` (1); `btp_devis` is empty. Devis **generation** is
+`WRONG_VERTICAL` — the only devis runners are Peinture agents (Métré / Devis
+Flash / Validation Devis), so devis stays READ-only (lot 2). CRM / prospection
+tables belong to `immo` / `peinture`, not applicable to `heliosolar`.
+Communications / relance stay out (no consent/channel infra → SEND unsafe).
+
+**New capabilities (third lot):**
+- **`btp.suivi.progress.report`** (P0, WRITE, sensitive): records a progress
+  report (phase + %) on an existing chantier via the **single canonical service**
+  `hermes_os.record_btp_suivi_progress(...)` (idempotent by
+  `(tenant_id, chantier_id, date_rapport)`, plus an optional quality incident).
+  Two required params (`chantier_name` + `pct`); `nl_keywords` empty → semantic
+  routing. Flows through the standard gateway → SW15 → consumer → canonical
+  service → `complete_agent_action`; **no direct mutation from HermesPanel**.
+  Fail-closed on a missing chantier (`NO_CHANTIER`) or write error
+  (`WRITE_ERROR`). The gateway consumer calls it with `incident=null`
+  (progress-only subset).
+
+**Architectural convergence (PR #12 review).** The suivi write previously existed
+as two inline copies — one in Agent BTP-Suivi (called by SW4), one in the gateway
+consumer. Both were converged onto the one `hermes_os.record_btp_suivi_progress`
+function, so there is **no divergent second business engine**. Agent BTP-Suivi's
+inline `INSERT` nodes were replaced by a single call to the function; its trigger,
+tenant validation, reject path and return contract are unchanged and its
+`callerPolicy` stays SW4-only, so **SW4 behaviour is preserved** (verified E2E:
+same suivi write + same incident-on-new-row side-effect, idempotent, no
+duplicates). See `n8n/hermes-btp-suivi-agent.workflow.js`.
+- **Consultation — reporting / point d'activité** (read-only): summarises real
+  chantiers-by-status + fournisseurs + open incidents (blockers) + last
+  avancement, `ANSWER_ONLY`. Covers "fais-moi le point", "résume mes chantiers",
+  "qu'est-ce qui bloque", "tâches prioritaires".
+- **Consultation — fournisseurs** (read-only): lists real suppliers, `ANSWER_ONLY`.
+- **Consultation — avancement** (read-only): lists real progress reports,
+  `ANSWER_ONLY`.
+
+**Security invariants (proven E2E, real effects — no mock as final proof):** the
+WRITE only executes through the gateway; SW15 `REQUIRE_APPROVAL` →
+`PENDING_APPROVAL` → admin approve → resume → success (real `btp_suivi_avancement`
+row) and reject → `REJECTED` → no effect both proven; unauthenticated
+(`UNAUTHENTICATED`), member-without-permission (`NO_TENANT`), unknown action
+(`UNKNOWN_ACTION`), missing param (`MISSING_PAYLOAD_KEY`), cross-tenant chantier
+(tenant-scoped resolve → `NO_CHANTIER`), and double-submit (idempotent, one row)
+all fail closed. The semantic model routes free phrasings to
+`btp.suivi.progress.report` with both params (confidence 0.9). Each consumer
+claims **only its own `action_key`** — proven that the diag and planning
+consumers cannot claim a queued suivi request. The read branches require a read
+verb and exclude write phrasings (write verbs / any percentage), so they never
+swallow the WRITE.
