@@ -9,8 +9,8 @@ import {
 } from "@/services/hermes/dashboard";
 import {
   getAvailableCapabilities,
+  getObservabilitySnapshot,
   getOperationalPriorities,
-  getPlatformHealth,
 } from "@/services/hermes/panels";
 
 export default async function HomePage() {
@@ -25,14 +25,14 @@ export default async function HomePage() {
   }
 
   // Real backend reads. Tenant authorization is enforced inside the RPCs.
-  const [kpis, projects, conversations, capabilities, priorities, health] =
+  const [kpis, projects, conversations, capabilities, priorities, observability] =
     await Promise.all([
       getPublicKpis(),
       getDashboardProjects(),
       getRecentConversations(),
       getAvailableCapabilities(),
       getOperationalPriorities(),
-      getPlatformHealth(),
+      getObservabilitySnapshot(),
     ]);
 
   return (
@@ -43,7 +43,7 @@ export default async function HomePage() {
       conversations={conversations}
       capabilities={capabilities}
       priorities={priorities}
-      health={health}
+      observability={observability}
     />
   );
 }

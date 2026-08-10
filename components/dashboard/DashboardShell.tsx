@@ -16,8 +16,8 @@ import TasksPanel from "@/components/dashboard/TasksPanel";
 import type {
   AvailableCapabilities,
   DashboardProjects,
+  ObservabilitySnapshot,
   OperationalPriorities,
-  PlatformHealth,
   PublicKpis,
   RecentConversations as RecentConversationsData,
   ServiceResult,
@@ -30,7 +30,7 @@ type DashboardShellProps = {
   conversations: ServiceResult<RecentConversationsData>;
   capabilities: ServiceResult<AvailableCapabilities>;
   priorities: ServiceResult<OperationalPriorities>;
-  health: ServiceResult<PlatformHealth>;
+  observability: ServiceResult<ObservabilitySnapshot>;
 };
 
 export default function DashboardShell({
@@ -40,7 +40,7 @@ export default function DashboardShell({
   conversations,
   capabilities,
   priorities,
-  health,
+  observability,
 }: DashboardShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -107,7 +107,7 @@ export default function DashboardShell({
 
           <QuickActions capabilities={capabilities} />
 
-          <SystemStatus health={health} />
+          <SystemStatus observability={observability} />
         </div>
       </div>
     </main>

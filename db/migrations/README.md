@@ -281,3 +281,44 @@ for all three; heliosolar member → 4 permitted capabilities, real priorities
 (1 open incident, 5 chantiers to qualify), real platform health (95 registered /
 64 active). `lint` / `typecheck` / `build` green. The `dashboard-mock-region`
 "Démonstration" flags are removed — no panel remains mock.
+
+## Observability — mission-critical (2026-08-10)
+
+Turns SystemStatus into a real supervision layer. No fictional metric — every
+value is REAL, DERIVED, or explicitly UNAVAILABLE.
+
+| File | Applied migration | Purpose |
+|------|-------------------|---------|
+| `20260810_hermes_observability_snapshot_1.sql` | `hermes_observability_snapshot` | `get_observability_snapshot(p_limit)` — platform aggregates + execution telemetry + tenant gateway activity + incidents |
+| `20260810_hermes_observability_snapshot_9_rollback.sql` | — | Reversible teardown |
+
+**Audit (sources).** `execution_logs` (VERIFIED_EXISTING — real `latency_ms`,
+`degraded`, statuses), `component_registry` (VERIFIED_EXISTING — active/registered),
+`btp_incidents_qualite` (VERIFIED_EXISTING — tenant incidents), `agent_action_requests`
+(VERIFIED_EXISTING — gateway activity/errors), SW22 recovery tables
+(VERIFIED_EXISTING). Heartbeats: **MISSING**. Infra SLA / latency-SLA / uptime:
+**MISSING** (not instrumented).
+
+**Model.**
+- **Platform (REAL, non-identifying):** components registered / active,
+  executions total / degraded / with-latency, **median** latency (robust — the
+  raw mean is skewed by multi-hour outliers so it is deliberately not shown),
+  last execution, status distribution.
+- **Executions (REAL platform telemetry):** recent rows with domain / status /
+  latency / degraded / finished — **no** tenant / user / payload / cost exposed.
+- **Gateway (REAL, tenant-scoped):** the caller's recent gateway requests with
+  action, status, policy decision and error **code** (no free-text payloads).
+- **Incidents (REAL, tenant-scoped):** `btp_incidents_qualite` open / resolved.
+- **Heartbeat / SLA / uptime → UNAVAILABLE** ("Non mesuré") — never fabricated;
+  the old `99,99 %` / `24 ms` / `99,8/100` stay gone.
+
+`SECURITY DEFINER`, `search_path` locked, granted to `authenticated` only,
+fail-closed (unauthenticated → `UNAUTHENTICATED`; platform aggregates are
+non-identifying; gateway/incidents are the caller's tenant only).
+
+**Failure tests (SQL impersonation):** unauthenticated → `UNAUTHENTICATED`;
+heliosolar member → platform facts + 1 open incident + real executions (incl.
+`degraded` / `blocked`) + empty gateway; **cross-tenant** → a member on another
+tenant sees only its own incident, never heliosolar's, while platform aggregates
+remain non-identifying; source-unavailable → the service returns `UNAVAILABLE`
+and the panel degrades gracefully. Fixtures cleaned; baseline restored.
