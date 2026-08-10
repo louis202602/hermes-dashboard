@@ -322,3 +322,47 @@ heliosolar member → platform facts + 1 open incident + real executions (incl.
 tenant sees only its own incident, never heliosolar's, while platform aggregates
 remain non-identifying; source-unavailable → the service returns `UNAVAILABLE`
 and the panel degrades gracefully. Fixtures cleaned; baseline restored.
+
+## Cost governance — tenant budgets, quotas & consumption (read model)
+
+`20260810_hermes_cost_governance_snapshot_1.sql` adds a **read-only** canonical
+snapshot over the **existing** SW23/SW9 cost engine — it does **not** create a
+second engine. The write side already exists and is untouched:
+`sw23_route_and_reserve`, `sw23_reserve_budget` / `sw23_commit_budget` /
+`sw23_release_budget`, `sw9_quota_check_and_increment`.
+
+**`public.get_cost_governance_snapshot(p_limit)`** — SECURITY DEFINER,
+`search_path` locked, granted to `authenticated` only, fail-closed
+(unauthenticated → `UNAUTHENTICATED`; tenant resolved via
+`resolve_active_tenant`, caller's tenant only). Plus a pure immutable helper
+`public.sw_cost_limit_state(exposure, budget, alert_pct, hard_stop)`.
+
+**Provenance (never fabricated):**
+
+| Field | Source / class |
+|-------|----------------|
+| `budget` | `sw23_tenant_budget_config` → REAL, or `NOT_CONFIGURED` (no invented budget) |
+| `period.day/month` exposure | `sw23_budget_ledger` reserved+committed (same basis the reserve fn enforces) |
+| `committed_actual_usd` | committed `actual_usd` (null until committed) |
+| `cost_events` | `sw19_cost_events` → REAL, or `UNAVAILABLE` when none emitted |
+| `quota` | `sw9_quota_counters` (REAL recorded counters) + `sw9_quota_block_log` (REAL blocks) |
+| `models` | `sw23_model_catalog` carrying each row's own `cost_status` (real/unknown) |
+| phone minutes / Voice Web Speech cost | `UNAVAILABLE` (not stored / browser vendor emits no usable metric) |
+
+**Limit states** (`sw_cost_limit_state`, using the tenant's own
+`alert_threshold_pct` — not hard-coded 80/90/100): `NORMAL` → `WARNING` (≥ alert
+threshold) → `SOFT_LIMIT` (≥ budget, `hard_stop=false`) → `HARD_LIMIT` (≥ budget,
+`hard_stop=true`); the top-level `governance_state` escalates to `BLOCKED` when
+the tenant has real quota blocks today. **Rule:** a financial quota may block
+**non-critical** actions at `HARD_LIMIT`; **critical/safety** actions must not be
+broken by a budget quota alone (they surface `SOFT_LIMIT`). Enforcement stays in
+the write engine; this reader only reports.
+
+**Real E2E (SQL impersonation, all rolled back — zero fixtures persisted):**
+unauthenticated → `UNAUTHENTICATED`; heliosolar → REAL quota (67 recorded calls,
+real `QUOTA_EXCEEDED`/`RATE_LIMITED` blocks) + REAL model catalog + budget
+`NOT_CONFIGURED` + cost_events `UNAVAILABLE`; **reserve→WARNING at threshold →
+commit → over-budget reserve rejected (HARD_LIMIT) → idempotent replay (no double
+counting) → release frees budget (WARNING→NORMAL)**, snapshot tracking each step;
+**cross-tenant** → `SW23_TENANT_MISMATCH` on the engine and caller-tenant-only in
+the reader.

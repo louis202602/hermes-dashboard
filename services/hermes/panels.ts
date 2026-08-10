@@ -5,6 +5,14 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   AvailableCapabilities,
   AvailableCapability,
+  CostBudget,
+  CostEventProvider,
+  CostGovernanceSnapshot,
+  CostLimitState,
+  CostModel,
+  CostPeriod,
+  CostQuotaBlock,
+  CostQuotaProvider,
   ObsExecution,
   ObsGateway,
   ObsIncident,
@@ -19,6 +27,12 @@ import type {
 function toNumber(value: unknown): number {
   const n = typeof value === "string" ? Number(value) : (value as number);
   return Number.isFinite(n) ? n : 0;
+}
+
+function toNumOrNull(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const n = typeof value === "string" ? Number(value) : (value as number);
+  return Number.isFinite(n) ? n : null;
 }
 
 /**
@@ -251,6 +265,158 @@ export async function getObservabilitySnapshot(
       ok: false,
       provenance: "UNAVAILABLE",
       error: "Observability service unavailable.",
+    };
+  }
+}
+
+function mapCostPeriod(raw: Record<string, unknown>): CostPeriod {
+  return {
+    periodKey: String(raw.period_key ?? ""),
+    exposureUsd: toNumber(raw.exposure_usd),
+    committedActualUsd: toNumber(raw.committed_actual_usd),
+    budgetUsd: toNumOrNull(raw.budget_usd),
+    remainingUsd: toNumOrNull(raw.remaining_usd),
+    usageRatio: toNumOrNull(raw.usage_ratio),
+    limitState: (raw.limit_state as CostLimitState) ?? "NORMAL",
+    provenance:
+      (raw.provenance as CostPeriod["provenance"]) ?? "NOT_CONFIGURED",
+  };
+}
+
+/**
+ * Tenant cost/budget/quota snapshot (`public.get_cost_governance_snapshot`).
+ * Read-only over the real SW23/SW9 tables — reserve/commit/release and quota
+ * enforcement stay in the existing engine. Unmeasured signals are surfaced as
+ * UNAVAILABLE / NOT_CONFIGURED, never fabricated.
+ */
+export async function getCostGovernanceSnapshot(
+  limit = 8,
+): Promise<ServiceResult<CostGovernanceSnapshot>> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase.rpc(
+      "get_cost_governance_snapshot",
+      { p_limit: limit },
+    );
+    if (error) {
+      logEvent("error", "cost_governance.rpc_error", { code: error.code });
+      return { ok: false, provenance: "UNAVAILABLE", error: error.message };
+    }
+    const payload = (data ?? {}) as Record<string, unknown>;
+    const rawBudget = (payload.budget ?? {}) as Record<string, unknown>;
+    const rawPeriod = (payload.period ?? {}) as Record<string, unknown>;
+    const rawQuota = (payload.quota ?? {}) as Record<string, unknown>;
+    const rawCe = (payload.cost_events ?? {}) as Record<string, unknown>;
+
+    const budget: CostBudget =
+      rawBudget.provenance === "REAL"
+        ? {
+            provenance: "REAL",
+            dailyBudgetUsd: toNumOrNull(rawBudget.daily_budget_usd),
+            monthlyBudgetUsd: toNumOrNull(rawBudget.monthly_budget_usd),
+            perRequestBudgetUsd: toNumOrNull(rawBudget.per_request_budget_usd),
+            alertThresholdPct: toNumOrNull(rawBudget.alert_threshold_pct),
+            hardStop: Boolean(rawBudget.hard_stop),
+          }
+        : { provenance: "NOT_CONFIGURED" };
+
+    const quotaBy = Array.isArray(rawQuota.by_provider)
+      ? (rawQuota.by_provider as Record<string, unknown>[])
+      : [];
+    const quotaBlocks = Array.isArray(rawQuota.recent_blocks)
+      ? (rawQuota.recent_blocks as Record<string, unknown>[])
+      : [];
+    const byProvider: CostQuotaProvider[] = quotaBy.map((q) => ({
+      provider: String(q.provider ?? ""),
+      service: String(q.service ?? ""),
+      calls: toNumber(q.calls),
+      costAccumulated: toNumber(q.cost_accumulated),
+    }));
+    const recentBlocks: CostQuotaBlock[] = quotaBlocks.map((b) => ({
+      provider: String(b.provider ?? ""),
+      service: String(b.service ?? ""),
+      reason: String(b.reason ?? ""),
+      callCountAtBlock: toNumber(b.call_count_at_block),
+      blockedAt: (b.blocked_at as string) ?? null,
+    }));
+
+    const rawModels = Array.isArray(payload.models)
+      ? (payload.models as Record<string, unknown>[])
+      : [];
+    const models: CostModel[] = rawModels.map((m) => ({
+      provider: String(m.provider ?? ""),
+      modelId: String(m.model_id ?? ""),
+      enabled: Boolean(m.enabled),
+      inputCost: toNumOrNull(m.input_cost),
+      outputCost: toNumOrNull(m.output_cost),
+      currency: (m.currency as string) ?? null,
+      pricingUnit: (m.pricing_unit as string) ?? null,
+      costStatus: (m.cost_status as string) ?? null,
+    }));
+
+    const costEvents: CostGovernanceSnapshot["costEvents"] =
+      rawCe.provenance === "REAL"
+        ? {
+            provenance: "REAL",
+            requests: toNumber(rawCe.requests),
+            totalUsd: toNumber(rawCe.total_usd),
+            byProvider: (Array.isArray(rawCe.by_provider)
+              ? (rawCe.by_provider as Record<string, unknown>[])
+              : []
+            ).map(
+              (c): CostEventProvider => ({
+                provider: String(c.provider ?? ""),
+                modelOrService: (c.model_or_service as string) ?? null,
+                totalUsd: toNumber(c.total_usd),
+                requests: toNumber(c.requests),
+                measurementStatus: (c.measurement_status as string) ?? null,
+              }),
+            ),
+          }
+        : { provenance: "UNAVAILABLE" };
+
+    const unavailable = Array.isArray(payload.unavailable)
+      ? (payload.unavailable as string[])
+      : [];
+
+    return {
+      ok: true,
+      provenance: "REAL",
+      data: {
+        resolutionStatus: (payload.resolution_status ??
+          "UNAUTHENTICATED") as TenantResolutionStatus,
+        tenantId: (payload.tenant_id as string) ?? null,
+        asOf: (payload.as_of as string) ?? null,
+        governanceState:
+          (payload.governance_state as CostLimitState) ?? "NORMAL",
+        budget,
+        period: {
+          day: mapCostPeriod((rawPeriod.day ?? {}) as Record<string, unknown>),
+          month: mapCostPeriod(
+            (rawPeriod.month ?? {}) as Record<string, unknown>,
+          ),
+        },
+        costEvents,
+        quota: {
+          provenance: "REAL",
+          totalCalls: toNumber(rawQuota.total_calls),
+          totalCostAccumulated: toNumber(rawQuota.total_cost_accumulated),
+          blocksToday: toNumber(rawQuota.blocks_today),
+          byProvider,
+          recentBlocks,
+        },
+        models,
+        unavailable,
+      },
+    };
+  } catch (err) {
+    logEvent("error", "cost_governance.exception", {
+      message: (err as Error).message,
+    });
+    return {
+      ok: false,
+      provenance: "UNAVAILABLE",
+      error: "Cost governance service unavailable.",
     };
   }
 }
