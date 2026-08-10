@@ -2773,3 +2773,36 @@ html[data-theme="light"] .hermes-core-label {
     justify-content: space-between;
   }
 }
+
+/* ---- Cost governance panel --------------------------------------------- */
+.cost-state-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text-secondary);
+}
+.cost-state-pill.is-normal {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 45%, transparent);
+}
+.cost-state-pill.is-urgent {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+}
+.cost-state-pill.is-critical {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
+.cost-sub {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}

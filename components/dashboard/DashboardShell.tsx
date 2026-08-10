@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import AgentActionPanel from "@/components/dashboard/AgentActionPanel";
 import ApprovalsPanel from "@/components/dashboard/ApprovalsPanel";
+import CostGovernance from "@/components/dashboard/CostGovernance";
 import Header from "@/components/dashboard/Header";
 import HermesPanel from "@/components/dashboard/HermesPanel";
 import KpiGrid from "@/components/dashboard/KpiGrid";
@@ -15,6 +16,7 @@ import SystemStatus from "@/components/dashboard/SystemStatus";
 import TasksPanel from "@/components/dashboard/TasksPanel";
 import type {
   AvailableCapabilities,
+  CostGovernanceSnapshot,
   DashboardProjects,
   ObservabilitySnapshot,
   OperationalPriorities,
@@ -31,6 +33,7 @@ type DashboardShellProps = {
   capabilities: ServiceResult<AvailableCapabilities>;
   priorities: ServiceResult<OperationalPriorities>;
   observability: ServiceResult<ObservabilitySnapshot>;
+  cost: ServiceResult<CostGovernanceSnapshot>;
 };
 
 export default function DashboardShell({
@@ -41,6 +44,7 @@ export default function DashboardShell({
   capabilities,
   priorities,
   observability,
+  cost,
 }: DashboardShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -108,6 +112,8 @@ export default function DashboardShell({
           <QuickActions capabilities={capabilities} />
 
           <SystemStatus observability={observability} />
+
+          <CostGovernance cost={cost} />
         </div>
       </div>
     </main>
