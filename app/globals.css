@@ -2588,3 +2588,188 @@ html[data-theme="light"] .hermes-core-label {
   opacity: 0.55;
   cursor: progress;
 }
+
+/* ---- Voice interface (Hermès command center) ---------------------------- */
+.hermes-mode-switch {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-soft);
+}
+
+.hermes-mode-chip {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0.32rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-secondary);
+  background: transparent;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.hermes-mode-chip:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.hermes-mode-chip.is-active {
+  color: #04121f;
+  background: var(--accent);
+}
+
+.hermes-mode-chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.hermes-voice-note {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+
+.hermes-voice-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.6rem 0 0.2rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  min-height: 2rem;
+}
+
+.hermes-voice-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex: 0 0 auto;
+}
+
+.hermes-voice-status.is-listening .hermes-voice-dot {
+  background: var(--danger);
+  animation: hermes-voice-pulse 1.2s ease-in-out infinite;
+}
+
+.hermes-voice-status.is-speaking .hermes-voice-dot {
+  background: var(--accent);
+  animation: hermes-voice-pulse 1.2s ease-in-out infinite;
+}
+
+.hermes-voice-status.is-requesting_permission .hermes-voice-dot {
+  background: var(--warning);
+}
+
+.hermes-voice-status.is-error .hermes-voice-dot {
+  background: var(--danger);
+}
+
+@keyframes hermes-voice-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.7);
+  }
+}
+
+.hermes-voice-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hermes-voice-status.is-error .hermes-voice-text {
+  color: var(--danger);
+  white-space: normal;
+}
+
+.hermes-voice-stop {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.72rem;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.hermes-command-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hermes-mic-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.hermes-mic-button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.hermes-mic-button.is-listening {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.hermes-mic-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hermes-voice-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--accent);
+}
+
+@media (max-width: 640px) {
+  .hermes-command-header {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .hermes-mode-switch {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
