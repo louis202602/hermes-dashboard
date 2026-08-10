@@ -246,3 +246,38 @@ conversation id, title, preview, outcome and timestamp. Granted to
 member → sees only their own conversation with the real assistant preview +
 outcome; a user on another tenant → empty (isolation). `lint` / `typecheck` /
 `build` green; all test fixtures cleaned.
+
+## Dashboard wiring — remove remaining mocks (2026-08-10)
+
+Replaces the last three mock panels (QuickActions, Tasks, SystemStatus) with REAL
+sources or an **honest UNAVAILABLE**. No fictional data is presented as real.
+
+| File | Applied migration | Purpose |
+|------|-------------------|---------|
+| `20260810_hermes_dashboard_panel_readers_1.sql` | `hermes_dashboard_panel_readers` | `get_available_capabilities()`, `get_operational_priorities()`, `get_platform_health()` |
+| `20260810_hermes_dashboard_panel_readers_9_rollback.sql` | — | Reversible teardown |
+
+- **QuickActions → `get_available_capabilities()`** (REAL): the capabilities the
+  caller is permitted to run (`agent_action_catalog` ⋈ `user_tenant_permissions`).
+  Buttons route to the Hermès command center (`#hermes-command`) — the existing
+  secure path (orchestrator → gateway → permissions → SW15). **No direct
+  mutation, no bypass.** Sensitive capabilities are flagged.
+- **TasksPanel → `get_operational_priorities()`** (DERIVED from real rows):
+  pending approvals + open quality incidents + chantiers to qualify + late
+  chantiers, tenant-scoped. Each item maps to a real row; the panel badges it
+  `DERIVED` (rule-based prioritisation, never a fabricated task engine).
+- **SystemStatus → `get_platform_health()`** (REAL + UNAVAILABLE): real component
+  registry counts (registered / active) + last recorded execution. Infra SLA /
+  latency / uptime are **not measured** from the dashboard and are shown as
+  **« Non mesuré »** — the fabricated `99,99 %` / `24 ms` / `99,8/100` numbers are
+  removed.
+
+All three are `SECURITY DEFINER`, `search_path` locked, fail-closed
+(unauthenticated / no-tenant / cross-tenant → empty + `resolution_status`),
+granted to `authenticated` only, and expose **no** secrets or internal ids.
+
+**Verified E2E (SQL impersonation):** unauthenticated → `UNAUTHENTICATED` empty
+for all three; heliosolar member → 4 permitted capabilities, real priorities
+(1 open incident, 5 chantiers to qualify), real platform health (95 registered /
+64 active). `lint` / `typecheck` / `build` green. The `dashboard-mock-region`
+"Démonstration" flags are removed — no panel remains mock.

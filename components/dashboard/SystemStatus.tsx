@@ -1,56 +1,41 @@
-"use client";
-
 import {
-  Activity,
-  Bot,
-  CheckCircle2,
-  Cloud,
+  Boxes,
+  CircleSlash,
+  Clock,
   Database,
-  Gauge,
-  Server,
-  ShieldCheck,
+  Cloud,
   Workflow,
 } from "lucide-react";
 
-const services = [
-  {
-    name: "Hermès Core",
-    detail: "Orchestration centrale",
-    value: "99,99 %",
-    status: "Opérationnel",
-    icon: Bot,
-  },
-  {
-    name: "n8n Cloud",
-    detail: "Automatisations",
-    value: "112 actifs",
-    status: "Stable",
-    icon: Workflow,
-  },
-  {
-    name: "Supabase",
-    detail: "Données et authentification",
-    value: "24 ms",
-    status: "Disponible",
-    icon: Database,
-  },
-  {
-    name: "Vercel",
-    detail: "Application et déploiement",
-    value: "Déployé",
-    status: "En ligne",
-    icon: Cloud,
-  },
-  {
-    name: "Infrastructure",
-    detail: "Services critiques",
-    value: "7 / 7",
-    status: "Nominal",
-    icon: Server,
-  },
+import ProvenanceBadge from "@/components/common/ProvenanceBadge";
+import type { PlatformHealth, ServiceResult } from "@/types/hermes";
+
+type SystemStatusProps = {
+  health: ServiceResult<PlatformHealth>;
+};
+
+// Infra signals we do NOT measure from the dashboard. Shown honestly as
+// "Non mesuré" — never as an invented SLA / latency number.
+const UNMEASURED = [
+  { name: "Disponibilité n8n", detail: "Uptime automatisations", icon: Workflow },
+  { name: "Latence Supabase", detail: "Temps de réponse données", icon: Database },
+  { name: "Uptime Vercel", detail: "Disponibilité applicative", icon: Cloud },
 ];
 
-export default function SystemStatus() {
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function Frame({ children }: { children: React.ReactNode }) {
   return (
     <section className="dashboard-card system-status-card">
       <div className="dashboard-card-header">
@@ -58,67 +43,82 @@ export default function SystemStatus() {
           <span className="panel-eyebrow">INFRASTRUCTURE</span>
           <h3>État du système</h3>
         </div>
-
-        <div className="system-health-badge">
-          <span className="status-pulse" />
-          <span>Tous les services sont opérationnels</span>
-        </div>
+        <ProvenanceBadge provenance="REAL" />
       </div>
+      {children}
+    </section>
+  );
+}
 
-      <div className="system-score-panel">
-        <div className="system-score-icon">
-          <Gauge size={24} strokeWidth={1.8} />
-        </div>
+export default function SystemStatus({ health }: SystemStatusProps) {
+  const ok = health.ok && health.data.resolutionStatus === "OK";
+  const data = health.ok ? health.data : null;
 
-        <div className="system-score-copy">
-          <span>Score global</span>
-          <strong>99,8 / 100</strong>
-        </div>
-
-        <div className="system-score-meta">
-          <ShieldCheck size={17} strokeWidth={1.8} />
-          <span>Sécurité renforcée</span>
-        </div>
-      </div>
-
+  return (
+    <Frame>
       <div className="system-services-list">
-        {services.map((service) => {
-          const Icon = service.icon;
+        {/* REAL measured facts from the component registry + execution log. */}
+        <div className="system-service-item">
+          <span className="system-service-icon">
+            <Boxes size={18} strokeWidth={1.8} />
+          </span>
+          <div className="system-service-copy">
+            <strong>Composants enregistrés</strong>
+            <span>Registre Hermès OS</span>
+          </div>
+          <div className="system-service-value">
+            <strong>
+              {ok && data
+                ? `${data.componentsActive} / ${data.componentsRegistered}`
+                : "—"}
+            </strong>
+            <span>{ok ? "actifs" : "Indisponible"}</span>
+          </div>
+        </div>
 
+        <div className="system-service-item">
+          <span className="system-service-icon">
+            <Clock size={18} strokeWidth={1.8} />
+          </span>
+          <div className="system-service-copy">
+            <strong>Dernière exécution</strong>
+            <span>Journal d’exécution réel</span>
+          </div>
+          <div className="system-service-value">
+            <strong>{ok && data ? formatDate(data.lastExecutionAt) : "—"}</strong>
+            <span>{ok ? "enregistrée" : "Indisponible"}</span>
+          </div>
+        </div>
+
+        {/* Honestly UNAVAILABLE — not measured, never faked. */}
+        {UNMEASURED.map((service) => {
+          const Icon = service.icon;
           return (
-            <div className="system-service-item" key={service.name}>
+            <div className="system-service-item is-unavailable" key={service.name}>
               <span className="system-service-icon">
                 <Icon size={18} strokeWidth={1.8} />
               </span>
-
               <div className="system-service-copy">
                 <strong>{service.name}</strong>
                 <span>{service.detail}</span>
               </div>
-
               <div className="system-service-value">
-                <strong>{service.value}</strong>
-                <span>{service.status}</span>
+                <span className="system-service-unavailable">
+                  <CircleSlash size={14} strokeWidth={1.9} />
+                  Non mesuré
+                </span>
               </div>
-
-              <CheckCircle2
-                className="system-service-check"
-                size={18}
-                strokeWidth={1.8}
-              />
             </div>
           );
         })}
       </div>
 
       <div className="system-footer">
-        <div>
-          <Activity size={17} strokeWidth={1.8} />
-          <span>Dernière vérification il y a 2 minutes</span>
-        </div>
-
-        <button type="button">Voir le monitoring complet</button>
+        <ProvenanceBadge provenance="UNAVAILABLE" />
+        <span>
+          Aucun SLA n’est affiché tant qu’il n’est pas réellement mesuré.
+        </span>
       </div>
-    </section>
+    </Frame>
   );
 }

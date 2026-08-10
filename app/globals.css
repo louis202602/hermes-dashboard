@@ -2188,6 +2188,12 @@ html[data-theme="light"] .hermes-core-label {
   background: rgba(255, 189, 89, 0.1);
 }
 
+.provenance-badge.is-derived {
+  color: var(--accent);
+  border-color: rgba(120, 160, 255, 0.35);
+  background: rgba(120, 160, 255, 0.1);
+}
+
 .provenance-badge.is-unavailable {
   color: var(--text-muted);
 }
@@ -2217,7 +2223,9 @@ html[data-theme="light"] .hermes-core-label {
   font-size: 0.9rem;
 }
 
-.conversations-footer-note {
+.conversations-footer-note,
+.tasks-footer-note,
+.quick-actions-note {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -2228,25 +2236,52 @@ html[data-theme="light"] .hermes-core-label {
   font-size: 0.8rem;
 }
 
-/* Illustrative (non-real) regions are clearly flagged. */
-.dashboard-mock-region {
-  position: relative;
+.quick-actions-note {
+  margin: 0.75rem 0 0;
 }
 
-.dashboard-mock-region::before {
-  content: "Démonstration";
-  position: absolute;
-  top: -0.6rem;
-  right: 0.75rem;
-  z-index: 1;
-  font-size: 0.62rem;
-  letter-spacing: 0.06em;
+.tasks-empty,
+.quick-actions-empty {
+  margin: 0;
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+/* Anchor-based quick actions inherit the button look. */
+.quick-action-item {
+  text-decoration: none;
+  color: inherit;
+}
+
+.quick-action-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  padding: 0.15rem 0.5rem;
+  padding: 0.15rem 0.45rem;
   border-radius: 999px;
   border: 1px solid rgba(255, 189, 89, 0.35);
-  background: var(--surface-strong);
+  background: rgba(255, 189, 89, 0.1);
   color: var(--warning);
+}
+
+/* Honestly-unavailable rows are visibly muted. */
+.system-service-item.is-unavailable {
+  opacity: 0.7;
+}
+
+.system-service-unavailable {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
 }
 
 .header-profile form {
