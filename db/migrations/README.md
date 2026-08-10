@@ -221,3 +221,28 @@ claims **only its own `action_key`** — proven that the diag and planning
 consumers cannot claim a queued suivi request. The read branches require a read
 verb and exclude write phrasings (write verbs / any percentage), so they never
 swallow the WRITE.
+
+## Dashboard wiring — Recent conversations (2026-08-10)
+
+Wires the dashboard's previously-mock **"Conversations récentes"** panel to REAL
+data. No new business logic — a thin read over the orchestrator's own audit
+trail.
+
+| File | Applied migration | Purpose |
+|------|-------------------|---------|
+| `20260810_hermes_recent_conversations_reader_1.sql` | `hermes_recent_conversations_reader` | `public.get_recent_hermes_conversations(p_limit)` — the caller's own recent conversations (title, latest assistant-reply preview, outcome, timestamp), tenant/user-scoped |
+| `20260810_hermes_recent_conversations_reader_9_rollback.sql` | — | Reversible teardown |
+
+Read-only, `SECURITY DEFINER`, `search_path` locked. Scoped to `user_id =
+auth.uid()` on the resolved tenant; unauthenticated / no-tenant / cross-tenant
+return an empty list with a `resolution_status` (fail-closed). Exposes **no**
+internal ids (request / correlation / workflow) or secrets — only the user's own
+conversation id, title, preview, outcome and timestamp. Granted to
+`authenticated` only (like the other dashboard readers), so it is unreachable by
+`anon` / `service_role`. Consumed by `services/hermes/conversations.ts` →
+`components/dashboard/RecentConversations.tsx` (server-rendered, `provenance=REAL`).
+
+**Verified E2E (SQL impersonation):** unauthenticated → `UNAUTHENTICATED` empty;
+member → sees only their own conversation with the real assistant preview +
+outcome; a user on another tenant → empty (isolation). `lint` / `typecheck` /
+`build` green; all test fixtures cleaned.

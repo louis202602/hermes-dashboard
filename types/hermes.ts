@@ -57,3 +57,23 @@ export type DashboardProjects = {
     totalEstimatedValueEur: number | null;
   };
 };
+
+/**
+ * A single recent Hermès conversation belonging to the caller, from
+ * `public.get_recent_hermes_conversations()`. `preview` is the latest assistant
+ * reply (truncated); `outcome` is its business outcome (e.g. `ANSWER_ONLY`,
+ * `ACTION`). No internal ids (request / correlation / workflow) are exposed.
+ */
+export type RecentConversation = {
+  id: string;
+  title: string;
+  preview: string;
+  outcome: string | null;
+  lastMessageAt: string | null;
+};
+
+export type RecentConversations = {
+  resolutionStatus: TenantResolutionStatus;
+  tenantId: string | null;
+  conversations: RecentConversation[];
+};

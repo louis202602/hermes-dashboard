@@ -16,6 +16,7 @@ import TasksPanel from "@/components/dashboard/TasksPanel";
 import type {
   DashboardProjects,
   PublicKpis,
+  RecentConversations as RecentConversationsData,
   ServiceResult,
 } from "@/types/hermes";
 
@@ -23,12 +24,14 @@ type DashboardShellProps = {
   userEmail: string;
   kpis: ServiceResult<PublicKpis>;
   projects: ServiceResult<DashboardProjects>;
+  conversations: ServiceResult<RecentConversationsData>;
 };
 
 export default function DashboardShell({
   userEmail,
   kpis,
   projects,
+  conversations,
 }: DashboardShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -61,9 +64,9 @@ export default function DashboardShell({
               <span className="panel-eyebrow">HELIOSOLAR OS</span>
               <h2>Poste de commande</h2>
               <p>
-                Indicateurs plateforme et portefeuille projets en données réelles.
-                Les autres panneaux sont illustratifs et seront connectés
-                progressivement.
+                Indicateurs plateforme, portefeuille projets et conversations
+                Hermès en données réelles. Les panneaux restants sont illustratifs
+                et seront connectés progressivement.
               </p>
             </div>
 
@@ -86,13 +89,15 @@ export default function DashboardShell({
 
           <ApprovalsPanel />
 
-          <div className="dashboard-mock-region">
-            <QuickActions />
+          <div className="dashboard-secondary-grid">
+            <RecentConversations conversations={conversations} />
+            <div className="dashboard-mock-region">
+              <TasksPanel />
+            </div>
           </div>
 
-          <div className="dashboard-secondary-grid dashboard-mock-region">
-            <TasksPanel />
-            <RecentConversations />
+          <div className="dashboard-mock-region">
+            <QuickActions />
           </div>
 
           <div className="dashboard-mock-region">
