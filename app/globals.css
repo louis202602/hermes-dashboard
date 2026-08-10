@@ -2209,6 +2209,25 @@ html[data-theme="light"] .hermes-core-label {
   font-size: 0.9rem;
 }
 
+.conversations-empty {
+  margin: 0;
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.conversations-footer-note {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.18));
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
 /* Illustrative (non-real) regions are clearly flagged. */
 .dashboard-mock-region {
   position: relative;
