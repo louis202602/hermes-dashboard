@@ -122,3 +122,57 @@ export type PlatformHealth = {
   componentsActive: number;
   lastExecutionAt: string | null;
 };
+
+/** A recent platform execution (non-identifying telemetry — no tenant/user/payload). */
+export type ObsExecution = {
+  domain: string | null;
+  status: string | null;
+  latencyMs: number | null;
+  degraded: boolean;
+  finishedAt: string | null;
+};
+
+/** A recent gateway request for the caller's tenant. */
+export type ObsGateway = {
+  actionKey: string;
+  status: string | null;
+  policyDecision: string | null;
+  errorCode: string | null;
+  createdAt: string | null;
+};
+
+/** A quality incident for the caller's tenant. */
+export type ObsIncident = {
+  type: string | null;
+  severity: string | null;
+  status: string | null;
+  chantier: string | null;
+  createdAt: string | null;
+  resolvedAt: string | null;
+};
+
+/**
+ * Observability snapshot. Platform aggregates + non-identifying execution
+ * telemetry are REAL and platform-wide; gateway activity and incidents are the
+ * caller's tenant only. Heartbeat / SLA / uptime are not stored and are shown as
+ * UNAVAILABLE by the frontend — never fabricated. `medianLatencyMs` is a robust
+ * (median) real latency; the raw mean is intentionally not used (outlier-skewed).
+ */
+export type ObservabilitySnapshot = {
+  resolutionStatus: "OK" | "UNAUTHENTICATED";
+  tenantResolution: TenantResolutionStatus | null;
+  tenantId: string | null;
+  platform: {
+    componentsRegistered: number;
+    componentsActive: number;
+    executionsTotal: number;
+    executionsDegraded: number;
+    executionsWithLatency: number;
+    medianLatencyMs: number | null;
+    lastExecutionAt: string | null;
+    byStatus: Record<string, number>;
+  };
+  executions: ObsExecution[];
+  gateway: ObsGateway[];
+  incidents: ObsIncident[];
+};

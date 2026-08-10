@@ -2284,6 +2284,128 @@ html[data-theme="light"] .hermes-core-label {
   color: var(--text-muted);
 }
 
+/* ---- Observability panel ------------------------------------------------ */
+.system-empty {
+  margin: 0;
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.system-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.system-metric {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  color: var(--accent);
+}
+
+.system-metric > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.system-metric span {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.system-metric strong {
+  font-size: 0.92rem;
+  color: var(--text-primary);
+}
+
+.system-subsection {
+  margin-top: 0.9rem;
+}
+
+.system-subsection-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.system-subsection-head .provenance-badge {
+  margin-left: auto;
+}
+
+.system-line-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.system-line {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  background: var(--surface-soft);
+}
+
+.system-line strong {
+  font-size: 0.82rem;
+  color: var(--text-primary);
+}
+
+.system-line span {
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
+
+.system-line.is-critical {
+  border-left-color: var(--danger, #ff6b6b);
+}
+
+.system-line.is-urgent {
+  border-left-color: var(--warning, #ffbd59);
+}
+
+.system-line.is-normal {
+  border-left-color: var(--success, #42d99c);
+}
+
+.system-line.is-unavailable {
+  border-left-color: var(--border-strong);
+  opacity: 0.75;
+}
+
+.system-line-empty {
+  margin: 0;
+  padding: 0.6rem 0.65rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 640px) {
+  .system-metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
 .header-profile form {
   display: flex;
 }
