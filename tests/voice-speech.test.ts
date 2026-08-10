@@ -104,6 +104,30 @@ test("sanitizeForSpeech caps very long replies", () => {
   assert.ok(spoken.length <= 600);
 });
 
+test("sanitizeForSpeech collapses newlines into a single spoken line", () => {
+  const spoken = sanitizeForSpeech("Ligne un.\n\nLigne deux.\nLigne trois.");
+  assert.ok(!/\n/.test(spoken), "no raw newlines are spoken");
+  assert.ok(spoken.includes("Ligne un.") && spoken.includes("Ligne trois."));
+});
+
+test("sanitizeForSpeech removes several ids/tokens in one reply", () => {
+  const jwtLike =
+    "eyJhbGciOiJodeADERxxxx.eyJzdWIiOiIxMjM0NTY3ODkwIn0xxxx.SIGNATUREblobblob";
+  const reply =
+    "Fait. 3f2504e0-4f89-41d3-9a0c-0305e82c3301 et " +
+    "11111111-2222-3333-4444-555555555555 jeton " +
+    jwtLike;
+  const spoken = sanitizeForSpeech(reply);
+  assert.ok(!/[0-9a-f]{8}-[0-9a-f]{4}/i.test(spoken), "all UUIDs removed");
+  assert.ok(!spoken.includes(jwtLike), "JWT-like blob removed");
+  assert.ok(spoken.startsWith("Fait."));
+});
+
+test("sanitizeForSpeech preserves ordinary accented French words", () => {
+  const spoken = sanitizeForSpeech("Chantier qualifié, coût estimé validé.");
+  assert.equal(spoken, "Chantier qualifié, coût estimé validé.");
+});
+
 test("isSpeakable: an id-only reply collapses to nothing (no TTS)", () => {
   assert.equal(
     isSpeakable("Réf. 3f2504e0-4f89-41d3-9a0c-0305e82c3301"),

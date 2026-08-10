@@ -87,7 +87,11 @@ const DEFAULT_LANG = "fr-FR";
 
 /**
  * Browser-native voice I/O for Hermès. Real STT (`SpeechRecognition`) and real
- * TTS (`speechSynthesis`), no provider secret, no server round-trip for audio.
+ * TTS (`speechSynthesis`), with no provider secret in our app and no audio sent
+ * to our backend. NOTE: `SpeechRecognition` is browser-native but not guaranteed
+ * local — Chrome/Chromium streams audio to the vendor speech service (Google),
+ * so it needs network and fails offline; that path is outside our app and
+ * carries no secret of ours (see lib/voice/README.md).
  * Fail-closed: unsupported browsers (e.g. iOS Safari for STT) report
  * `support.stt = false` and the UI keeps text fully usable.
  */
@@ -210,6 +214,17 @@ export function useVoice(): UseVoice {
       window.speechSynthesis.cancel();
       const utter = new SpeechSynthesisUtterance(clean);
       utter.lang = lang;
+      // Best-effort: prefer an installed voice matching the language (e.g. a
+      // French voice for fr-FR). If none is available yet, the browser falls
+      // back to its default voice for that lang — never blocks output.
+      try {
+        const voices = window.speechSynthesis.getVoices();
+        const prefix = lang.slice(0, 2).toLowerCase();
+        const match = voices.find((v) => v.lang?.toLowerCase().startsWith(prefix));
+        if (match) utter.voice = match;
+      } catch {
+        // getVoices unavailable — default voice is fine
+      }
       utter.onstart = () => setSpeaking(true);
       utter.onend = () => setSpeaking(false);
       utter.onerror = () => setSpeaking(false);
