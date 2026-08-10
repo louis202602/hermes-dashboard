@@ -168,6 +168,7 @@ layer.
 | File | Applied migration | Purpose |
 |------|-------------------|---------|
 | `20260809_hermes_business_lot3_1_suivi_and_reads.sql` | `hermes_business_lot3_suivi_and_reads` (+ guard refinement) | registers `btp.suivi.progress.report` (WRITE, `is_sensitive=true`, runner = **GW Consumer — BTP Suivi** `1xCiexp3oVj0R8Tk`); adds read-only **reporting/blockers**, **fournisseurs** and **avancement** consultation to `_hermes_informational` |
+| `20260809_hermes_business_lot3_2_canonical_suivi_service.sql` | `hermes_btp_suivi_canonical_service` | **single canonical business service** `hermes_os.record_btp_suivi_progress(...)` — the suivi write + optional incident, called by BOTH Agent BTP-Suivi (SW4) and the gateway consumer |
 | `20260809_hermes_business_lot3_9_rollback.sql` | — | Reversible teardown |
 
 **Audit result (heliosolar).** Real BTP tables carry data:
@@ -180,16 +181,25 @@ Communications / relance stay out (no consent/channel infra → SEND unsafe).
 
 **New capabilities (third lot):**
 - **`btp.suivi.progress.report`** (P0, WRITE, sensitive): records a progress
-  report (phase + %) on an existing chantier, applying the **real Agent
-  BTP-Suivi canonical idempotent contract** (`INSERT btp_suivi_avancement …
-  ON CONFLICT (tenant_id, chantier_id, date_rapport) DO NOTHING`). Two required
-  params (`chantier_name` + `pct`); `nl_keywords` empty → semantic routing.
-  Flows through the standard gateway → SW15 → consumer → `complete_agent_action`;
-  **no direct mutation from HermesPanel**. Fail-closed on a missing chantier
-  (`NO_CHANTIER`) or write error (`WRITE_ERROR`). The consumer applies the
-  contract directly rather than invoking the agent workflow, because that agent's
-  legacy `workflowTrigger` is not Execute-Sub-workflow-invokable — the production
-  agent is left untouched (SW4 remains its sole caller).
+  report (phase + %) on an existing chantier via the **single canonical service**
+  `hermes_os.record_btp_suivi_progress(...)` (idempotent by
+  `(tenant_id, chantier_id, date_rapport)`, plus an optional quality incident).
+  Two required params (`chantier_name` + `pct`); `nl_keywords` empty → semantic
+  routing. Flows through the standard gateway → SW15 → consumer → canonical
+  service → `complete_agent_action`; **no direct mutation from HermesPanel**.
+  Fail-closed on a missing chantier (`NO_CHANTIER`) or write error
+  (`WRITE_ERROR`). The gateway consumer calls it with `incident=null`
+  (progress-only subset).
+
+**Architectural convergence (PR #12 review).** The suivi write previously existed
+as two inline copies — one in Agent BTP-Suivi (called by SW4), one in the gateway
+consumer. Both were converged onto the one `hermes_os.record_btp_suivi_progress`
+function, so there is **no divergent second business engine**. Agent BTP-Suivi's
+inline `INSERT` nodes were replaced by a single call to the function; its trigger,
+tenant validation, reject path and return contract are unchanged and its
+`callerPolicy` stays SW4-only, so **SW4 behaviour is preserved** (verified E2E:
+same suivi write + same incident-on-new-row side-effect, idempotent, no
+duplicates). See `n8n/hermes-btp-suivi-agent.workflow.js`.
 - **Consultation — reporting / point d'activité** (read-only): summarises real
   chantiers-by-status + fournisseurs + open incidents (blockers) + last
   avancement, `ANSWER_ONLY`. Covers "fais-moi le point", "résume mes chantiers",

@@ -17,3 +17,14 @@ delete from hermes_os.agent_action_catalog where action_key = 'btp.suivi.progres
 --     _hermes_informational to its lot-2 definition exactly. The lot-3 read
 --     branches are additive, so leaving them in place is harmless if a full
 --     revert is not wanted — only (a) changes routable/executable behaviour.
+
+-- (c) Canonical suivi service (added by
+--     20260809_hermes_business_lot3_2_canonical_suivi_service.sql). Dropping it
+--     requires first reverting the two callers back to inline SQL:
+--       - Agent BTP-Suivi (n8n O9BLGvhAGjd8oiv3): restore its "Check Idempotent"
+--         + "Create Suivi" + "Create Incident if Needed" nodes;
+--       - GW Consumer — BTP Suivi (n8n 1xCiexp3oVj0R8Tk): restore its inline
+--         "Record Suivi" INSERT.
+--     Both n8n reverts are available in git history. Only after both callers no
+--     longer reference it:
+-- drop function if exists hermes_os.record_btp_suivi_progress(text,uuid,date,text,integer,text,text,jsonb);

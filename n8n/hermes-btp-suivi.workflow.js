@@ -4,17 +4,20 @@
 // no Schedule Trigger). It is the WRITE runner behind the gateway capability
 // `btp.suivi.progress.report`: it claims queued requests (action-scoped claim),
 // records + gates the SW15 policy, resolves the chantier by name (tenant-scoped),
-// then applies the REAL Agent BTP-Suivi CANONICAL idempotent progress write —
-// INSERT INTO btp_suivi_avancement … ON CONFLICT (tenant_id, chantier_id,
-// date_rapport) DO NOTHING — and writes the result back with complete_agent_action.
+// then calls the SINGLE canonical business service
+// `hermes_os.record_btp_suivi_progress(...)` — and writes the result back with
+// complete_agent_action.
 //
-// Why the write is applied directly rather than by invoking the agent workflow:
-// Agent BTP-Suivi (O9BLGvhAGjd8oiv3) uses the legacy `workflowTrigger` node,
-// which is NOT invokable as an Execute Sub-workflow — a call fails with
-// "Missing node to start execution". Changing that production agent's trigger
-// would risk its SW4 caller, so the consumer reproduces the agent's exact
-// idempotent contract instead. The production agent is left completely untouched
-// (SW4 `lFopccFfaudvNHZi` remains its sole caller).
+// ONE business implementation: the suivi write (idempotent by
+// (tenant_id, chantier_id, date_rapport), plus the optional quality incident)
+// lives only in `hermes_os.record_btp_suivi_progress`. Both this gateway consumer
+// AND the real Agent BTP-Suivi (O9BLGvhAGjd8oiv3, called by SW4) invoke that same
+// function, so there is no divergent second engine. This consumer passes
+// request_id=null and incident=null (a deliberate safe subset — the
+// `btp.suivi.progress.report` capability records progress only, not incidents);
+// SW4 passes the incident through, exercising the same function's incident path.
+// The agent workflow itself is not invoked here (its legacy `workflowTrigger` is
+// not Execute-Sub-workflow-invokable) — only the canonical DB function is shared.
 //
 // All auth/tenant/permission/idempotency are enforced upstream by
 // request_agent_action; `btp.suivi.progress.report` is is_sensitive=true, so the
@@ -133,8 +136,9 @@ const mapAgentInput = node({
   },
 });
 
-// Agent BTP-Suivi canonical idempotent write (same contract as the agent's
-// "Check Idempotent" node): idempotent by (tenant_id, chantier_id, date_rapport).
+// Single canonical business service (shared with Agent BTP-Suivi / SW4).
+// Idempotent by (tenant_id, chantier_id, date_rapport). This consumer passes
+// request_id=null and incident=null (progress-only subset).
 const recordSuivi = node({
   type: 'n8n-nodes-base.postgres',
   version: 2.7,
@@ -144,7 +148,7 @@ const recordSuivi = node({
     parameters: {
       operation: 'executeQuery',
       alwaysOutputData: true,
-      query: 'insert into hermes_os.btp_suivi_avancement (tenant_id, chantier_id, date_rapport, phase_en_cours, pct_global, observations) values ($1,$2::uuid,$3::date,$4,$5,$6) on conflict (tenant_id, chantier_id, date_rapport) do nothing returning id',
+      query: 'select hermes_os.record_btp_suivi_progress($1,$2::uuid,$3::date,$4,$5,$6,null,null) as res',
       options: { queryReplacement: expr("{{ [ $json.tenant_id, $json.chantier_id, $json.date, $json.phase, $json.pct, $json.notes ] }}") },
     },
     credentials: PG,
@@ -160,8 +164,8 @@ const mapResult = node({
       mode: 'manual',
       includeOtherFields: false,
       assignments: { assignments: [
-        { id: 'code', name: 'code', type: 'string', value: expr("{{ $json.id ? 'SUIVI_RECORDED' : 'IDEMPOTENT' }}") },
-        { id: 'sid', name: 'suivi_id', type: 'string', value: expr("{{ $json.id || '' }}") },
+        { id: 'code', name: 'code', type: 'string', value: expr("{{ $json.res.code }}") },
+        { id: 'sid', name: 'suivi_id', type: 'string', value: expr("{{ $json.res.suivi_id || '' }}") },
       ] },
     },
   },

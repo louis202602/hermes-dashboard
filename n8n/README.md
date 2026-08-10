@@ -66,6 +66,22 @@ Source for **GW Consumer — BTP Planning** (n8n id `2MMvwJ8zb3jBftDi`).
   `request_agent_action`. It claims **only** its own `action_key`, so it cannot
   steal another consumer's queued request.
 
+## `hermes-btp-suivi-agent.workflow.js`
+
+Source for the pre-existing **production** agent **Agent BTP-Suivi** (n8n id
+`O9BLGvhAGjd8oiv3`), called by **SW4 - Agent Execution** (`lFopccFfaudvNHZi`).
+
+- **Trigger:** legacy `workflowTrigger` — **UNCHANGED** so SW4 keeps invoking it
+  exactly as before. `callerPolicy` stays `workflowsFromAList` (SW4 only).
+- Tracked here to record the PR #12 convergence: its inline suivi `INSERT` and
+  incident `INSERT` nodes were replaced by a single call to the canonical
+  `hermes_os.record_btp_suivi_progress(...)`. Validate Tenant, Reject - Invalid
+  and both Return nodes are preserved, so the return contract
+  (`{status, code}` with `SUIVI_RECORDED` / `IDEMPOTENT` / error) is identical.
+- Behaviour verified E2E as identical to the previous inline logic (same suivi
+  write + same incident-on-new-row side-effect, idempotent, no duplicates). SW4
+  is unaffected.
+
 ## `hermes-btp-suivi.workflow.js`
 
 Source for **GW Consumer — BTP Suivi** (n8n id `1xCiexp3oVj0R8Tk`).
@@ -75,17 +91,18 @@ Source for **GW Consumer — BTP Suivi** (n8n id `1xCiexp3oVj0R8Tk`).
   Claims queued requests (action-scoped `claim_agent_action('btp.suivi.progress.report', …)`),
   records + gates the **SW15** policy (proceeds only on `PERMIT`, incl. an
   admin-approved `PENDING` request), resolves the chantier by name
-  (tenant-scoped), then applies the **real Agent BTP-Suivi canonical idempotent
-  contract** — `INSERT btp_suivi_avancement … ON CONFLICT (tenant_id,
-  chantier_id, date_rapport) DO NOTHING` — and writes the result back with
+  (tenant-scoped), then calls the **single canonical business service**
+  `hermes_os.record_btp_suivi_progress(...)` and writes the result back with
   `complete_agent_action`.
-- **Why the write is applied directly** (not by invoking the agent): Agent
-  BTP-Suivi (`O9BLGvhAGjd8oiv3`) uses the legacy `workflowTrigger` node, which is
-  not invokable as an Execute Sub-workflow ("Missing node to start execution").
-  Changing that production agent's trigger would risk its SW4 caller, so the
-  consumer reproduces the agent's exact idempotent contract. **The production
-  agent is left completely untouched** (SW4 `lFopccFfaudvNHZi` remains its sole
-  caller).
+- **One business implementation.** The suivi write (idempotent by
+  `(tenant_id, chantier_id, date_rapport)`, plus the optional quality incident)
+  lives only in `hermes_os.record_btp_suivi_progress`. Both this consumer AND the
+  real Agent BTP-Suivi (`O9BLGvhAGjd8oiv3`, called by SW4) invoke that same
+  function — there is no divergent second engine. The consumer passes
+  `incident=null` (progress-only subset); SW4 passes the incident through. The
+  agent workflow object itself is not invoked here (its legacy `workflowTrigger`
+  is not Execute-Sub-workflow-invokable) — only the canonical DB function is
+  shared. See `hermes-btp-suivi-agent.workflow.js`.
 - **Fail-closed:** the chantier lookup is a scalar subquery (always one row, `id`
   null when absent) → a missing chantier completes `FAILED` with `NO_CHANTIER`;
   a write error routes to `WRITE_ERROR`. `btp.suivi.progress.report` is
