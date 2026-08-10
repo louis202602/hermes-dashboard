@@ -8,6 +8,7 @@ import {
   getPublicKpis,
 } from "@/services/hermes/dashboard";
 import {
+  getActionAuditTrail,
   getAvailableCapabilities,
   getCostGovernanceSnapshot,
   getObservabilitySnapshot,
@@ -34,6 +35,7 @@ export default async function HomePage() {
     priorities,
     observability,
     cost,
+    audit,
   ] = await Promise.all([
     getPublicKpis(),
     getDashboardProjects(),
@@ -42,6 +44,7 @@ export default async function HomePage() {
     getOperationalPriorities(),
     getObservabilitySnapshot(),
     getCostGovernanceSnapshot(),
+    getActionAuditTrail(),
   ]);
 
   return (
@@ -54,6 +57,7 @@ export default async function HomePage() {
       priorities={priorities}
       observability={observability}
       cost={cost}
+      audit={audit}
     />
   );
 }

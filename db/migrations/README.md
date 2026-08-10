@@ -366,3 +366,30 @@ commit → over-budget reserve rejected (HARD_LIMIT) → idempotent replay (no d
 counting) → release frees budget (WARNING→NORMAL)**, snapshot tracking each step;
 **cross-tenant** → `SW23_TENANT_MISMATCH` on the engine and caller-tenant-only in
 the reader.
+
+## Action & approval audit trail (safety-critical accountability)
+
+`20260810_hermes_action_audit_trail_1.sql` adds a **read-only** tenant-scoped
+audit trail of agent actions and their SW15 approval decisions. The dashboard
+already lists **pending** approvals (`list_pending_agent_approvals`) but had no
+view of the **decided** history — a mission-critical / safety-critical
+autonomous system must expose who/what was requested, the policy decision,
+whether approval was required and its outcome, retries, terminal status, and
+error code. **No write path, no second orchestrator, no consumer activation** —
+it only reads the real gateway table `agent_action_requests`.
+
+- **`public.get_action_audit_trail(p_limit)`** — SECURITY DEFINER, `search_path`
+  locked, granted to `authenticated` only, fail-closed (unauthenticated →
+  `UNAUTHENTICATED`; tenant via `resolve_active_tenant`, caller's tenant only;
+  non-member → `NO_TENANT`, no rows). **Non-identifying**: no payload, no
+  requester/approver user id, error **code** only.
+- **`public.sw_action_approval_outcome(...)`** — pure/immutable mapping to
+  `APPROVED` / `REJECTED` / `PENDING_APPROVAL` / `NOT_REQUIRED`. Paired rollback.
+- Provenance: `actions[]` + `summary` are **REAL** (`agent_action_requests`).
+  The dedicated SW23 audit logs (`sw23_audit_log`, `sw23_policy_audit`) are empty
+  in this project and reported **UNAVAILABLE**, never fabricated.
+
+**Real E2E (SQL impersonation, rolled back — zero fixtures):** unauthenticated →
+`UNAUTHENTICATED`; heliosolar → real trail (actions still `QUEUED` because the
+runner is intentionally **INACTIVE**, shown honestly) + real counts + no PII;
+non-member uid → `NO_TENANT` with **no actions leaked**; helper outcomes verified.

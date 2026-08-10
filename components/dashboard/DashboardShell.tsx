@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import ActionAuditTrail from "@/components/dashboard/ActionAuditTrail";
 import AgentActionPanel from "@/components/dashboard/AgentActionPanel";
 import ApprovalsPanel from "@/components/dashboard/ApprovalsPanel";
 import CostGovernance from "@/components/dashboard/CostGovernance";
@@ -15,6 +16,7 @@ import Sidebar from "@/components/dashboard/Sidebar";
 import SystemStatus from "@/components/dashboard/SystemStatus";
 import TasksPanel from "@/components/dashboard/TasksPanel";
 import type {
+  ActionAuditTrail as ActionAuditTrailData,
   AvailableCapabilities,
   CostGovernanceSnapshot,
   DashboardProjects,
@@ -34,6 +36,7 @@ type DashboardShellProps = {
   priorities: ServiceResult<OperationalPriorities>;
   observability: ServiceResult<ObservabilitySnapshot>;
   cost: ServiceResult<CostGovernanceSnapshot>;
+  audit: ServiceResult<ActionAuditTrailData>;
 };
 
 export default function DashboardShell({
@@ -45,6 +48,7 @@ export default function DashboardShell({
   priorities,
   observability,
   cost,
+  audit,
 }: DashboardShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -112,6 +116,8 @@ export default function DashboardShell({
           <QuickActions capabilities={capabilities} />
 
           <SystemStatus observability={observability} />
+
+          <ActionAuditTrail audit={audit} />
 
           <CostGovernance cost={cost} />
         </div>
