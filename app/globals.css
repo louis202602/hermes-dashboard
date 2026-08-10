@@ -1034,6 +1034,112 @@ html[data-theme="light"] .hermes-core-label {
   line-height: 1.5;
 }
 
+/* ---- Voice command controls -------------------------------------------- */
+.hermes-voice-modes {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.hermes-voice-mode {
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.hermes-voice-mode.is-active {
+  color: white;
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+}
+
+.hermes-voice-mode:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.hermes-voice-feedback {
+  margin: 8px 0 0;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--text-secondary);
+  font-size: 11px;
+  min-height: 34px;
+}
+
+.hermes-command-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hermes-mic-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  color: var(--text);
+  background: var(--surface-soft);
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.hermes-mic-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hermes-mic-button.is-listening {
+  color: white;
+  background: linear-gradient(135deg, var(--danger, #ff6d7a), #ff9aa2);
+  border-color: transparent;
+  animation: hermes-mic-pulse 1.3s ease-in-out infinite;
+}
+
+@keyframes hermes-mic-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 109, 122, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(255, 109, 122, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hermes-mic-button.is-listening {
+    animation: none;
+  }
+}
+
+.hermes-voice-stop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 11px;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+
 /* Conversational thread inside the insight panel */
 .hermes-thread {
   display: flex;

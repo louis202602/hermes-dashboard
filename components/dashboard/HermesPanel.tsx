@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { ArrowUp, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowUp, Mic, Square, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { pollAgentActionResultAction } from "@/app/actions/agent-actions";
@@ -9,7 +9,20 @@ import {
   applyHermesResolutionAction,
   submitHermesMessageAction,
 } from "@/app/actions/hermes-orchestration";
+import { useVoice } from "@/lib/voice/useVoice";
 import { TERMINAL_RESULT_STATUSES } from "@/types/agent-actions";
+
+type VoiceMode = "TEXT" | "VOICE_TEXT" | "VOICE_VOICE";
+
+// Assistant states whose text is a stable, user-safe final reply worth speaking.
+const SPEAKABLE_LIFECYCLE = new Set([
+  "PENDING_APPROVAL",
+  "SUCCEEDED",
+  "FAILED",
+  "REJECTED",
+  "POLICY_DENIED",
+  "TIMEOUT",
+]);
 
 type HoloState =
   | "idle"
@@ -145,7 +158,23 @@ export default function HermesPanel() {
   const [activeResolve, setActiveResolve] = useState<
     { resolveRequestId: string; conversationId: string; turnId: string } | null
   >(null);
+  const [voiceMode, setVoiceMode] = useState<VoiceMode>("TEXT");
   const threadRef = useRef<HTMLDivElement>(null);
+  const spokenRef = useRef<string | null>(null);
+
+  const {
+    sttSupported,
+    ttsSupported,
+    state: voiceState,
+    interim,
+    error: voiceError,
+    speaking,
+    start: startListening,
+    stop: stopListening,
+    speak,
+    cancelSpeak,
+  } = useVoice("fr-FR");
+  const listening = voiceState === "LISTENING" || voiceState === "REQUESTING_PERMISSION";
 
   // Poll the gateway for an in-flight ACTION and reflect its lifecycle on the
   // matching assistant turn. State is only set inside async callbacks (never
@@ -239,6 +268,40 @@ export default function HermesPanel() {
     const el = threadRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [turns]);
+
+  // Voice output: speak the latest assistant reply once it is a stable, final,
+  // user-safe answer. Only reads the reply text (never ids/payloads/telemetry).
+  useEffect(() => {
+    if (voiceMode !== "VOICE_VOICE" || !ttsSupported) return;
+    const la = [...turns].reverse().find((t) => t.role === "assistant");
+    if (!la || !la.text) return;
+    // Wait until the turn has settled: no live lifecycle, or a terminal one.
+    const settled =
+      !la.lifecycle || SPEAKABLE_LIFECYCLE.has(la.lifecycle);
+    if (!settled || la.outcome === "RESOLVING") return;
+    const key = `${la.id}:${la.lifecycle ?? la.outcome ?? ""}`;
+    if (spokenRef.current === key) return;
+    spokenRef.current = key;
+    speak(la.text);
+  }, [turns, voiceMode, ttsSupported, speak]);
+
+  // Stop speaking if the user leaves voice-output mode.
+  useEffect(() => {
+    if (voiceMode !== "VOICE_VOICE") cancelSpeak();
+  }, [voiceMode, cancelSpeak]);
+
+  function handleMic() {
+    if (listening) {
+      stopListening();
+      return;
+    }
+    cancelSpeak();
+    // Real transcript flows into EXACTLY the same pipeline as typed input.
+    startListening((text) => {
+      setInput("");
+      void send(text);
+    });
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -405,7 +468,62 @@ export default function HermesPanel() {
             <span className="panel-eyebrow">COMMANDE</span>
             <strong>Demandez à Hermès ou lancez une action…</strong>
           </div>
+
+          <div
+            className="hermes-voice-modes"
+            role="group"
+            aria-label="Mode d’interaction"
+          >
+            <button
+              type="button"
+              className={`hermes-voice-mode ${voiceMode === "TEXT" ? "is-active" : ""}`}
+              aria-pressed={voiceMode === "TEXT"}
+              onClick={() => setVoiceMode("TEXT")}
+            >
+              Texte
+            </button>
+            <button
+              type="button"
+              className={`hermes-voice-mode ${voiceMode === "VOICE_TEXT" ? "is-active" : ""}`}
+              aria-pressed={voiceMode === "VOICE_TEXT"}
+              disabled={!sttSupported}
+              title={sttSupported ? undefined : "Reconnaissance vocale indisponible sur ce navigateur"}
+              onClick={() => setVoiceMode("VOICE_TEXT")}
+            >
+              Voix → texte
+            </button>
+            <button
+              type="button"
+              className={`hermes-voice-mode ${voiceMode === "VOICE_VOICE" ? "is-active" : ""}`}
+              aria-pressed={voiceMode === "VOICE_VOICE"}
+              disabled={!sttSupported || !ttsSupported}
+              title={
+                sttSupported && ttsSupported
+                  ? undefined
+                  : "Voix complète indisponible sur ce navigateur"
+              }
+              onClick={() => setVoiceMode("VOICE_VOICE")}
+            >
+              Voix → voix
+            </button>
+          </div>
         </div>
+
+        {voiceMode !== "TEXT" ? (
+          <p className="hermes-voice-feedback" aria-live="polite">
+            {voiceError
+              ? voiceError
+              : listening
+                ? interim
+                  ? `« ${interim} »`
+                  : "Hermès vous écoute…"
+                : speaking
+                  ? "Hermès répond à voix haute…"
+                  : sttSupported
+                    ? "Appuyez sur le micro et parlez."
+                    : "Reconnaissance vocale indisponible : utilisez le mode texte."}
+          </p>
+        ) : null}
 
         <div className="hermes-command-box">
           <textarea
@@ -428,14 +546,42 @@ export default function HermesPanel() {
               contourne jamais permissions ni SW15.
             </span>
 
-            <button
-              type="submit"
-              className="hermes-send-button"
-              disabled={inFlight || input.trim().length === 0}
-            >
-              <span>{sending ? "Envoi…" : "Envoyer à Hermès"}</span>
-              <ArrowUp size={17} strokeWidth={2} />
-            </button>
+            <div className="hermes-command-buttons">
+              {speaking ? (
+                <button
+                  type="button"
+                  className="hermes-voice-stop"
+                  onClick={cancelSpeak}
+                  aria-label="Arrêter la lecture vocale"
+                >
+                  <Square size={15} strokeWidth={2} />
+                  <span>Stop</span>
+                </button>
+              ) : null}
+
+              {voiceMode !== "TEXT" && sttSupported ? (
+                <button
+                  type="button"
+                  className={`hermes-mic-button ${listening ? "is-listening" : ""}`}
+                  onClick={handleMic}
+                  disabled={inFlight}
+                  aria-pressed={listening}
+                  aria-label={listening ? "Arrêter le micro" : "Parler à Hermès"}
+                >
+                  <Mic size={17} strokeWidth={2} />
+                  <span>{listening ? "Écoute…" : "Parler"}</span>
+                </button>
+              ) : null}
+
+              <button
+                type="submit"
+                className="hermes-send-button"
+                disabled={inFlight || input.trim().length === 0}
+              >
+                <span>{sending ? "Envoi…" : "Envoyer à Hermès"}</span>
+                <ArrowUp size={17} strokeWidth={2} />
+              </button>
+            </div>
           </div>
         </div>
       </form>

@@ -25,8 +25,11 @@ export const STATIC_SECURITY_HEADERS: ReadonlyArray<{
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "X-Frame-Options", value: "DENY" },
   {
+    // Microphone is allowed for same-origin only, to enable the Hermès voice
+    // command center (browser-native Web Speech API — no audio leaves the device
+    // via the app, no provider key). Camera / geolocation stay fully disabled.
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), browsing-topics=()",
+    value: "camera=(), microphone=(self), geolocation=(), browsing-topics=()",
   },
   {
     key: "Strict-Transport-Security",
