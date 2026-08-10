@@ -7,6 +7,11 @@ import {
   getDashboardProjects,
   getPublicKpis,
 } from "@/services/hermes/dashboard";
+import {
+  getAvailableCapabilities,
+  getOperationalPriorities,
+  getPlatformHealth,
+} from "@/services/hermes/panels";
 
 export default async function HomePage() {
   // Server-side auth boundary: unauthenticated users never reach the dashboard.
@@ -20,11 +25,15 @@ export default async function HomePage() {
   }
 
   // Real backend reads. Tenant authorization is enforced inside the RPCs.
-  const [kpis, projects, conversations] = await Promise.all([
-    getPublicKpis(),
-    getDashboardProjects(),
-    getRecentConversations(),
-  ]);
+  const [kpis, projects, conversations, capabilities, priorities, health] =
+    await Promise.all([
+      getPublicKpis(),
+      getDashboardProjects(),
+      getRecentConversations(),
+      getAvailableCapabilities(),
+      getOperationalPriorities(),
+      getPlatformHealth(),
+    ]);
 
   return (
     <DashboardShell
@@ -32,6 +41,9 @@ export default async function HomePage() {
       kpis={kpis}
       projects={projects}
       conversations={conversations}
+      capabilities={capabilities}
+      priorities={priorities}
+      health={health}
     />
   );
 }

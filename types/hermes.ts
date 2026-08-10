@@ -77,3 +77,48 @@ export type RecentConversations = {
   tenantId: string | null;
   conversations: RecentConversation[];
 };
+
+/** A capability the caller is permitted to run, from `agent_action_catalog`. */
+export type AvailableCapability = {
+  actionKey: string;
+  displayName: string;
+  description: string | null;
+  isSensitive: boolean;
+};
+
+export type AvailableCapabilities = {
+  resolutionStatus: TenantResolutionStatus;
+  tenantId: string | null;
+  capabilities: AvailableCapability[];
+};
+
+/** A single operational priority, DERIVED from a real backend row. */
+export type OperationalPriority = {
+  kind: "approval" | "incident" | "qualify" | "late";
+  severity: "critical" | "urgent" | "normal";
+  label: string;
+  detail: string | null;
+};
+
+export type OperationalPriorities = {
+  resolutionStatus: TenantResolutionStatus;
+  tenantId: string | null;
+  summary: {
+    pendingApprovals: number;
+    openIncidents: number;
+    toQualify: number;
+    late: number;
+  };
+  items: OperationalPriority[];
+};
+
+/**
+ * Real, measured platform facts. Infra SLA / latency / uptime are intentionally
+ * NOT here — the frontend surfaces those as UNAVAILABLE rather than inventing them.
+ */
+export type PlatformHealth = {
+  resolutionStatus: "OK" | "UNAUTHENTICATED";
+  componentsRegistered: number;
+  componentsActive: number;
+  lastExecutionAt: string | null;
+};

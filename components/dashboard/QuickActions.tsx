@@ -1,81 +1,128 @@
-"use client";
-
 import {
+  Activity,
   Bot,
-  FileSearch,
-  MailPlus,
-  Plus,
-  Rocket,
+  CalendarPlus,
   ScanSearch,
-  Workflow,
+  ShieldAlert,
+  Sparkles,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
-const actions = [
-  {
-    title: "Créer un agent",
-    description: "Ajouter un nouvel agent spécialisé à Hermès OS.",
-    icon: Bot,
-  },
-  {
-    title: "Lancer un workflow",
-    description: "Exécuter rapidement une automatisation n8n.",
-    icon: Workflow,
-  },
-  {
-    title: "Analyser un prospect",
-    description: "Qualifier un nouveau dossier commercial.",
-    icon: ScanSearch,
-  },
-  {
-    title: "Préparer un message",
-    description: "Générer un email ou une relance personnalisée.",
-    icon: MailPlus,
-  },
-  {
-    title: "Examiner un document",
-    description: "Analyser un devis, une facture ou une étude.",
-    icon: FileSearch,
-  },
-  {
-    title: "Démarrer une mission",
-    description: "Confier une opération complète à Hermès.",
-    icon: Rocket,
-  },
-];
+import ProvenanceBadge from "@/components/common/ProvenanceBadge";
+import type {
+  AvailableCapabilities,
+  AvailableCapability,
+  ServiceResult,
+  TenantResolutionStatus,
+} from "@/types/hermes";
 
-export default function QuickActions() {
+type QuickActionsProps = {
+  capabilities: ServiceResult<AvailableCapabilities>;
+};
+
+const RESOLUTION_MESSAGES: Record<TenantResolutionStatus, string> = {
+  OK: "",
+  UNAUTHENTICATED: "Session expirée. Reconnectez-vous.",
+  NO_TENANT: "Aucun tenant n’est associé à votre compte.",
+  ACCESS_DENIED: "Accès refusé pour le tenant demandé.",
+  AMBIGUOUS_TENANT_REQUIRE_SELECTION:
+    "Plusieurs tenants disponibles : sélection requise.",
+};
+
+function iconFor(actionKey: string): LucideIcon {
+  if (actionKey.includes("qualification")) return ScanSearch;
+  if (actionKey.includes("planning")) return CalendarPlus;
+  if (actionKey.includes("suivi")) return Activity;
+  if (actionKey.includes("diag")) return Bot;
+  return Sparkles;
+}
+
+function Frame({ children }: { children: React.ReactNode }) {
   return (
     <section className="dashboard-card quick-actions-card">
       <div className="dashboard-card-header">
         <div>
           <span className="panel-eyebrow">EXÉCUTION</span>
-          <h3>Actions rapides</h3>
+          <h3>Actions disponibles</h3>
         </div>
-
-        <button type="button" className="card-secondary-button">
-          <Plus size={16} strokeWidth={1.9} />
-          <span>Nouvelle action</span>
-        </button>
+        <ProvenanceBadge provenance="REAL" />
       </div>
+      {children}
+    </section>
+  );
+}
 
+export default function QuickActions({ capabilities }: QuickActionsProps) {
+  if (!capabilities.ok) {
+    return (
+      <Frame>
+        <p className="quick-actions-empty">
+          Les actions disponibles sont indisponibles pour le moment.
+        </p>
+      </Frame>
+    );
+  }
+
+  const { resolutionStatus, capabilities: rows } = capabilities.data;
+
+  if (resolutionStatus !== "OK") {
+    return (
+      <Frame>
+        <p className="quick-actions-empty">
+          {RESOLUTION_MESSAGES[resolutionStatus]}
+        </p>
+      </Frame>
+    );
+  }
+
+  if (rows.length === 0) {
+    return (
+      <Frame>
+        <p className="quick-actions-empty">
+          Aucune action n’est autorisée pour votre profil sur ce tenant.
+        </p>
+      </Frame>
+    );
+  }
+
+  return (
+    <Frame>
       <div className="quick-actions-grid">
-        {actions.map((action) => {
-          const Icon = action.icon;
+        {rows.map((capability: AvailableCapability) => {
+          const Icon = iconFor(capability.actionKey);
 
           return (
-            <button type="button" className="quick-action-item" key={action.title}>
+            // Routes to the Hermès command center (the existing secure path:
+            // orchestrator → gateway → permissions → SW15). Never a direct mutation.
+            <a
+              className="quick-action-item"
+              href="#hermes-command"
+              key={capability.actionKey}
+            >
               <span className="quick-action-icon">
                 <Icon size={19} strokeWidth={1.8} />
               </span>
 
               <span className="quick-action-copy">
-                <strong>{action.title}</strong>
-                <span>{action.description}</span>
+                <strong>{capability.displayName}</strong>
+                <span>{capability.description ?? capability.actionKey}</span>
               </span>
-            </button>
+
+              {capability.isSensitive ? (
+                <span className="quick-action-flag" title="Action sensible : approbation SW15 requise">
+                  <ShieldAlert size={14} strokeWidth={1.9} />
+                  <span>Sensible</span>
+                </span>
+              ) : null}
+            </a>
           );
         })}
       </div>
-    </section>
+
+      <p className="quick-actions-note">
+        Ces actions passent par Hermès : permissions, tenant et politique SW15
+        appliqués. Décrivez votre demande dans le poste de commande ci-dessus.
+      </p>
+    </Frame>
   );
 }

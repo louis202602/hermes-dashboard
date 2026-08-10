@@ -14,7 +14,10 @@ import Sidebar from "@/components/dashboard/Sidebar";
 import SystemStatus from "@/components/dashboard/SystemStatus";
 import TasksPanel from "@/components/dashboard/TasksPanel";
 import type {
+  AvailableCapabilities,
   DashboardProjects,
+  OperationalPriorities,
+  PlatformHealth,
   PublicKpis,
   RecentConversations as RecentConversationsData,
   ServiceResult,
@@ -25,6 +28,9 @@ type DashboardShellProps = {
   kpis: ServiceResult<PublicKpis>;
   projects: ServiceResult<DashboardProjects>;
   conversations: ServiceResult<RecentConversationsData>;
+  capabilities: ServiceResult<AvailableCapabilities>;
+  priorities: ServiceResult<OperationalPriorities>;
+  health: ServiceResult<PlatformHealth>;
 };
 
 export default function DashboardShell({
@@ -32,6 +38,9 @@ export default function DashboardShell({
   kpis,
   projects,
   conversations,
+  capabilities,
+  priorities,
+  health,
 }: DashboardShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -64,9 +73,9 @@ export default function DashboardShell({
               <span className="panel-eyebrow">HELIOSOLAR OS</span>
               <h2>Poste de commande</h2>
               <p>
-                Indicateurs plateforme, portefeuille projets et conversations
-                Hermès en données réelles. Les panneaux restants sont illustratifs
-                et seront connectés progressivement.
+                Tous les panneaux sont branchés sur des données réelles ou
+                marqués « Indisponible » lorsqu’une mesure n’existe pas. Aucune
+                donnée fictive n’est présentée comme réelle.
               </p>
             </div>
 
@@ -79,7 +88,9 @@ export default function DashboardShell({
             </div>
           </section>
 
-          <HermesPanel />
+          <div id="hermes-command">
+            <HermesPanel />
+          </div>
 
           <KpiGrid kpis={kpis} />
 
@@ -91,18 +102,12 @@ export default function DashboardShell({
 
           <div className="dashboard-secondary-grid">
             <RecentConversations conversations={conversations} />
-            <div className="dashboard-mock-region">
-              <TasksPanel />
-            </div>
+            <TasksPanel priorities={priorities} />
           </div>
 
-          <div className="dashboard-mock-region">
-            <QuickActions />
-          </div>
+          <QuickActions capabilities={capabilities} />
 
-          <div className="dashboard-mock-region">
-            <SystemStatus />
-          </div>
+          <SystemStatus health={health} />
         </div>
       </div>
     </main>
