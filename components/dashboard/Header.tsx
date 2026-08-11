@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { signOutAction } from "@/app/login/actions";
+import { HermesLogoSymbol } from "@/components/common/HermesLogo";
 import { useTheme } from "@/hooks/useTheme";
 
 type HeaderProps = {
@@ -40,6 +41,10 @@ export default function Header({ onMenuClick, userEmail }: HeaderProps) {
         >
           <Menu size={20} strokeWidth={1.8} />
         </button>
+
+        <span className="header-brand-mobile" aria-hidden="true">
+          <HermesLogoSymbol size={24} />
+        </span>
 
         <div className="header-title-block">
           <span className="header-eyebrow">CENTRE DE COMMANDE</span>

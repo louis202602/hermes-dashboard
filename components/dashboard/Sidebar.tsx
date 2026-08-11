@@ -9,7 +9,6 @@ import {
   CalendarDays,
   ChevronRight,
   FileText,
-  Gauge,
   Home,
   Inbox,
   Layers3,
@@ -20,25 +19,30 @@ import {
   Workflow,
 } from "lucide-react";
 
+import { HermesLogoSymbol } from "@/components/common/HermesLogo";
+
+// `active` = the section that is actually built (the current Command Center).
+// `soon` = a section not yet implemented — shown honestly as "Bientôt", never as
+// a working button (no fake navigation).
 const navigation = [
   { label: "Accueil", icon: Home, active: true },
-  { label: "Hermès", icon: Sparkles },
-  { label: "Agents IA", icon: Bot },
-  { label: "Workflows", icon: Workflow },
-  { label: "CRM", icon: Users },
-  { label: "Projets", icon: Building2 },
-  { label: "Documents", icon: FileText },
-  { label: "Planning", icon: CalendarDays },
-  { label: "Messages", icon: Inbox },
-  { label: "Analytics", icon: BarChart3 },
+  { label: "Hermès", icon: Sparkles, soon: true },
+  { label: "Agents IA", icon: Bot, soon: true },
+  { label: "Workflows", icon: Workflow, soon: true },
+  { label: "CRM", icon: Users, soon: true },
+  { label: "Projets", icon: Building2, soon: true },
+  { label: "Documents", icon: FileText, soon: true },
+  { label: "Planning", icon: CalendarDays, soon: true },
+  { label: "Messages", icon: Inbox, soon: true },
+  { label: "Analytics", icon: BarChart3, soon: true },
 ];
 
 const secondaryNavigation = [
-  { label: "Système", icon: Activity },
-  { label: "Sécurité", icon: ShieldCheck },
-  { label: "Mémoire IA", icon: BrainCircuit },
-  { label: "Infrastructure", icon: Layers3 },
-  { label: "Paramètres", icon: Settings },
+  { label: "Système", icon: Activity, soon: true },
+  { label: "Sécurité", icon: ShieldCheck, soon: true },
+  { label: "Mémoire IA", icon: BrainCircuit, soon: true },
+  { label: "Infrastructure", icon: Layers3, soon: true },
+  { label: "Paramètres", icon: Settings, soon: true },
 ];
 
 export default function Sidebar() {
@@ -46,12 +50,12 @@ export default function Sidebar() {
     <aside className="dashboard-sidebar">
       <div className="sidebar-brand">
         <div className="sidebar-brand-mark">
-          <Gauge size={21} strokeWidth={1.9} />
+          <HermesLogoSymbol size={24} />
         </div>
 
         <div className="sidebar-brand-copy">
-          <strong>HELIOSOLAR</strong>
-          <span>HERMÈS OS</span>
+          <strong>HERMÈS OS</strong>
+          <span>DIRECTEUR GÉNÉRAL IA</span>
         </div>
       </div>
 
@@ -61,12 +65,18 @@ export default function Sidebar() {
         <nav className="sidebar-navigation" aria-label="Navigation principale">
           {navigation.map((item) => {
             const Icon = item.icon;
+            const soon = "soon" in item && item.soon;
 
             return (
               <button
                 type="button"
                 key={item.label}
-                className={`sidebar-link ${item.active ? "is-active" : ""}`}
+                className={`sidebar-link ${item.active ? "is-active" : ""} ${
+                  soon ? "is-soon" : ""
+                }`}
+                disabled={soon}
+                aria-disabled={soon || undefined}
+                title={soon ? "Bientôt disponible" : undefined}
               >
                 <span className="sidebar-link-content">
                   <Icon size={18} strokeWidth={1.8} />
@@ -75,6 +85,8 @@ export default function Sidebar() {
 
                 {item.active ? (
                   <span className="sidebar-active-dot" />
+                ) : soon ? (
+                  <span className="sidebar-soon-pill">Bientôt</span>
                 ) : (
                   <ChevronRight
                     className="sidebar-link-chevron"
@@ -96,19 +108,31 @@ export default function Sidebar() {
         <nav className="sidebar-navigation" aria-label="Navigation secondaire">
           {secondaryNavigation.map((item) => {
             const Icon = item.icon;
+            const soon = "soon" in item && item.soon;
 
             return (
-              <button type="button" key={item.label} className="sidebar-link">
+              <button
+                type="button"
+                key={item.label}
+                className={`sidebar-link ${soon ? "is-soon" : ""}`}
+                disabled={soon}
+                aria-disabled={soon || undefined}
+                title={soon ? "Bientôt disponible" : undefined}
+              >
                 <span className="sidebar-link-content">
                   <Icon size={18} strokeWidth={1.8} />
                   <span>{item.label}</span>
                 </span>
 
-                <ChevronRight
-                  className="sidebar-link-chevron"
-                  size={15}
-                  strokeWidth={1.8}
-                />
+                {soon ? (
+                  <span className="sidebar-soon-pill">Bientôt</span>
+                ) : (
+                  <ChevronRight
+                    className="sidebar-link-chevron"
+                    size={15}
+                    strokeWidth={1.8}
+                  />
+                )}
               </button>
             );
           })}
@@ -129,21 +153,10 @@ export default function Sidebar() {
           </div>
         </div>
 
-        <div className="sidebar-agent-status">
+          <div className="sidebar-agent-status">
           <span className="status-pulse" />
-          <span>Système opérationnel</span>
+          <span>Directeur Général IA</span>
         </div>
-      </div>
-
-      <div className="sidebar-user">
-        <div className="sidebar-user-avatar">LP</div>
-
-        <div className="sidebar-user-copy">
-          <strong>Louis Preira</strong>
-          <span>Administrateur</span>
-        </div>
-
-        <ChevronRight size={16} strokeWidth={1.8} />
       </div>
     </aside>
   );
