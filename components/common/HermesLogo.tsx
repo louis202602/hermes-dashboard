@@ -29,16 +29,15 @@ export function HermesLogoSymbol({ size = 28 }: { size?: number }) {
           <stop offset="1" stopColor="var(--hermes-blue)" />
         </linearGradient>
       </defs>
-      {/* Geometric H — two uprights + crossbar */}
+      {/* Geometric H — two symmetric uprights + a balanced crossbar */}
       <path
-        d="M11 7h6v13.5h14V7h6v34h-6V26.5H17V41h-6V7Z"
+        d="M10 8h5v13h18V8h5v32h-5V27H15v13h-5V8Z"
         fill="url(#hermesLogoGrad)"
       />
-      {/* Central star / core */}
+      {/* Central core — a compact 4-point sparkle, legible at small sizes */}
       <path
-        d="M24 16.6l1.9 4.1 4.5.5-3.3 3 .9 4.4-4-2.2-4 2.2.9-4.4-3.3-3 4.5-.5 1.9-4.1Z"
+        d="M24 18.5 L25.6 22.4 L29.5 24 L25.6 25.6 L24 29.5 L22.4 25.6 L18.5 24 L22.4 22.4 Z"
         fill="var(--text-primary)"
-        opacity="0.96"
       />
     </svg>
   );

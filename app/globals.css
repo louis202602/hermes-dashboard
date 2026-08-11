@@ -15,7 +15,7 @@
   --bg-primary: #06121f;
   --bg-secondary: #0b1b2e;
   --surface: rgba(11, 27, 46, 0.66);
-  --surface-strong: rgba(9, 24, 43, 0.82);
+  --surface-strong: rgba(9, 24, 43, 0.70);
   --surface-soft: rgba(150, 195, 245, 0.05);
   --surface-hover: rgba(150, 195, 245, 0.09);
   --border: rgba(120, 175, 230, 0.18);
@@ -30,10 +30,14 @@
   --warning: #f5b74c;
   --danger: #ff6470;
   --shadow: 0 22px 55px rgba(0, 8, 20, 0.42);
-  --cloud-1: rgba(52, 152, 255, 0.16);
-  --cloud-2: rgba(90, 215, 255, 0.1);
-  --cloud-3: rgba(160, 132, 255, 0.09);
-  --atmosphere-veil: rgba(6, 18, 31, 0.4);
+  /* atmospheric sky (dark = deep night blue, never flat black) */
+  --sky-top: #0c2444;
+  --sky-mid: #081a30;
+  --sky-bottom: #050f1d;
+  --cloud-hi: rgba(196, 226, 255, 0.16); /* soft light cloud crest */
+  --cloud-blue: rgba(70, 160, 255, 0.26); /* blue glow body */
+  --cloud-cyan: rgba(96, 218, 255, 0.22); /* subtle cyan light */
+  --cloud-deep: rgba(10, 32, 60, 0.55); /* shadowed cloud underside */
 
   /* --- legacy aliases (keep the 2800 lines of component CSS working) --- */
   --bg: var(--bg-primary);
@@ -76,7 +80,7 @@ html[data-theme="light"] {
   --bg-primary: #dce8f2;
   --bg-secondary: #c9dae8;
   --surface: rgba(248, 251, 255, 0.68);
-  --surface-strong: rgba(250, 252, 255, 0.82);
+  --surface-strong: rgba(250, 252, 255, 0.72);
   --surface-soft: rgba(23, 127, 234, 0.05);
   --surface-hover: rgba(23, 127, 234, 0.08);
   --border: rgba(255, 255, 255, 0.55);
@@ -91,10 +95,14 @@ html[data-theme="light"] {
   --warning: #e49a26;
   --danger: #d94b55;
   --shadow: 0 18px 45px rgba(48, 79, 112, 0.16);
-  --cloud-1: rgba(255, 255, 255, 0.75);
-  --cloud-2: rgba(23, 127, 234, 0.12);
-  --cloud-3: rgba(124, 92, 252, 0.08);
-  --atmosphere-veil: rgba(220, 232, 242, 0.35);
+  /* atmospheric sky (light = luminous premium sky with soft white clouds) */
+  --sky-top: #eef6fd;
+  --sky-mid: #dce8f2;
+  --sky-bottom: #c7dbec;
+  --cloud-hi: rgba(255, 255, 255, 0.92); /* bright white cloud crest */
+  --cloud-blue: rgba(255, 255, 255, 0.6); /* soft white body */
+  --cloud-cyan: rgba(120, 178, 236, 0.18); /* faint blue depth */
+  --cloud-deep: rgba(150, 186, 220, 0.24); /* soft cloud shadow */
 
   --accent-strong: #075ebd;
   --accent-soft: rgba(23, 127, 234, 0.12);
@@ -119,10 +127,14 @@ body {
   min-height: 100vh;
   margin: 0;
   position: relative;
-  background:
-    radial-gradient(circle at 72% -6%, var(--cloud-1), transparent 34%),
-    radial-gradient(circle at 12% 108%, var(--cloud-3), transparent 36%),
-    linear-gradient(150deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+  /* Vertical sky gradient — luminous near the top, deeper toward the bottom, so
+     the background reads as atmospheric depth rather than a flat fill. */
+  background: linear-gradient(
+    177deg,
+    var(--sky-top) 0%,
+    var(--sky-mid) 52%,
+    var(--sky-bottom) 100%
+  );
   background-attachment: fixed;
   color: var(--text-primary);
   font-family:
@@ -133,41 +145,61 @@ body {
 }
 
 /*
- * Official atmospheric cloud layer. Part of the Hermès OS visual identity — a
- * soft, blurred cloud texture drifting behind the glass surfaces. Pure CSS +
- * an inline SVG (no external asset, CSP-safe), theme-aware, and non-interactive.
- * The drift is disabled under prefers-reduced-motion.
+ * Official atmospheric cloud identity. Soft volumetric cloud masses built from
+ * large, heavily-blurred radial gradients — white/light crests, a blue/cyan
+ * glow body, and shadowed undersides — giving a premium sky with real depth in
+ * both themes (never flat black, never a generic SaaS gradient, no visible
+ * procedural noise). Pure CSS, non-interactive; drift disabled under
+ * prefers-reduced-motion.
  */
 body::before {
   content: "";
   position: fixed;
-  inset: -12vmax;
-  z-index: -1;
+  inset: -14vmax;
+  z-index: -2;
   pointer-events: none;
-  background-image:
-    radial-gradient(ellipse 40% 30% at 20% 22%, var(--cloud-2), transparent 60%),
-    radial-gradient(ellipse 46% 34% at 82% 30%, var(--cloud-1), transparent 62%),
-    radial-gradient(ellipse 52% 40% at 62% 84%, var(--cloud-3), transparent 64%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='560' height='560'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='3' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='560' height='560' filter='url(%23c)' opacity='0.5'/%3E%3C/svg%3E");
-  background-size: cover, cover, cover, 620px 620px;
-  background-repeat: no-repeat, no-repeat, no-repeat, repeat;
-  filter: blur(6px) saturate(115%);
-  opacity: 0.9;
-  animation: hermes-cloud-drift 90s var(--easing) infinite alternate;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1440' height='900' preserveAspectRatio='xMidYMid slice'%3E%3Cfilter id='c' x='-10%' y='-10%' width='120%' height='120%'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.004 0.007' numOctaves='4' seed='14' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0.7 0.7 0.7 0 -0.62'/%3E%3CfeGaussianBlur stdDeviation='11'/%3E%3C/filter%3E%3Crect width='1440' height='900' filter='url(%23c)'/%3E%3C/svg%3E");
+  background-size: 150% 150%;
+  background-position: center;
+  filter: blur(2px);
+  opacity: 0.32;
+  mix-blend-mode: screen;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 16%, #000 84%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 16%, #000 84%, transparent 100%);
+  will-change: transform;
+  animation: hermes-cloud-drift 120s var(--easing) infinite alternate;
 }
 
 html[data-theme="light"] body::before {
-  opacity: 0.6;
-  mix-blend-mode: soft-light;
+  opacity: 0.62;
+  mix-blend-mode: normal;
+}
+
+/* Depth glows — luminous atmospheric pools that give the sky real depth. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: -20vmax;
+  z-index: -3;
+  pointer-events: none;
+  background-image:
+    radial-gradient(ellipse 56% 40% at 78% 16%, var(--cloud-blue), transparent 66%),
+    radial-gradient(ellipse 60% 42% at 14% 30%, var(--cloud-cyan), transparent 68%),
+    radial-gradient(ellipse 92% 52% at 50% 116%, var(--cloud-deep), transparent 72%),
+    radial-gradient(ellipse 50% 34% at 60% 60%, var(--cloud-hi), transparent 64%);
+  filter: blur(30px);
+  opacity: 0.92;
+  will-change: transform;
+  animation: hermes-cloud-drift-slow 150s var(--easing) infinite alternate;
 }
 
 @keyframes hermes-cloud-drift {
-  from {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  to {
-    transform: translate3d(2.5%, -2%, 0) scale(1.06);
-  }
+  from { transform: translate3d(-1.5%, 0, 0) scale(1.05); }
+  to { transform: translate3d(2.5%, -2.5%, 0) scale(1.12); }
+}
+@keyframes hermes-cloud-drift-slow {
+  from { transform: translate3d(1.5%, 1%, 0) scale(1.04); }
+  to { transform: translate3d(-2%, -1.5%, 0) scale(1.1); }
 }
 
 button,
@@ -2162,7 +2194,7 @@ html[data-theme="light"] .hermes-core-label {
   align-items: center;
   justify-content: center;
   padding: 2rem;
-  background: var(--bg);
+  background: transparent;
   color: var(--text);
 }
 
@@ -2902,7 +2934,8 @@ html[data-theme="light"] .hermes-core-label {
  * to the existing card classes so every panel adopts the look without a rewrite. */
 .dashboard-card,
 .hermes-panel,
-.system-status-card {
+.system-status-card,
+.login-card {
   backdrop-filter: blur(var(--glass-blur)) saturate(130%);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(130%);
 }
