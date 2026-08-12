@@ -586,10 +586,10 @@ html[data-theme="light"] .dashboard-sidebar {
 .dashboard-content {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
   width: min(1680px, 100%);
   margin: 0 auto;
-  padding: 26px 27px 48px;
+  padding: 18px 24px 40px;
 }
 
 .dashboard-intro {
@@ -598,6 +598,16 @@ html[data-theme="light"] .dashboard-sidebar {
   justify-content: space-between;
   gap: 20px;
   padding: 4px 2px 3px;
+}
+
+/* Compact executive header: a slim title + status row, not a hero banner. */
+.dashboard-intro-compact {
+  align-items: center;
+  padding: 2px 2px 0;
+}
+
+.dashboard-intro-compact h2 {
+  font-size: clamp(20px, 2vw, 25px);
 }
 
 .dashboard-intro h2 {
@@ -642,7 +652,24 @@ html[data-theme="light"] .dashboard-sidebar {
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 13px;
+  gap: 12px;
+}
+
+/* Executive grids — group panels by importance, not by component of origin.
+   exec-grid-2 = two equal halves (alerts). exec-grid-metier = wide table + a
+   narrower action form. Both collapse to one column on tablet/mobile. */
+.exec-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.exec-grid-metier {
+  display: grid;
+  grid-template-columns: minmax(0, 1.62fr) minmax(288px, 1fr);
+  gap: 14px;
+  align-items: start;
 }
 
 .kpi-card,
@@ -658,8 +685,8 @@ html[data-theme="light"] .dashboard-sidebar {
 }
 
 .kpi-card {
-  min-height: 132px;
-  padding: 17px;
+  min-height: auto;
+  padding: 14px 15px;
 }
 
 .kpi-card::after {
@@ -675,7 +702,7 @@ html[data-theme="light"] .dashboard-sidebar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 17px;
+  margin-bottom: 11px;
 }
 
 .kpi-icon {
@@ -724,18 +751,8 @@ html[data-theme="light"] .dashboard-sidebar {
 }
 
 .hermes-panel {
-  min-height: 590px;
-  padding: 21px;
-}
-
-.hermes-panel-glow {
-  position: absolute;
-  top: -150px;
-  left: 20%;
-  width: 430px;
-  height: 430px;
-  background: radial-gradient(circle, rgba(48, 126, 235, 0.18), transparent 66%);
-  pointer-events: none;
+  min-height: auto;
+  padding: 18px;
 }
 
 .hermes-panel-header,
@@ -755,7 +772,7 @@ html[data-theme="light"] .dashboard-sidebar {
 }
 
 .hermes-panel-header h2 {
-  font-size: 28px;
+  font-size: 23px;
 }
 
 .dashboard-card-header h3 {
@@ -763,11 +780,39 @@ html[data-theme="light"] .dashboard-sidebar {
 }
 
 .hermes-panel-header p {
-  max-width: 560px;
-  margin: 7px 0 0;
+  max-width: 620px;
+  margin: 6px 0 0;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 11.5px;
   line-height: 1.55;
+}
+
+.hermes-head-titles {
+  min-width: 0;
+}
+
+.hermes-head-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+
+/* Discreet "functioning" indicator — real backend connection, never a fake badge. */
+.hermes-conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.hermes-conn > svg {
+  color: var(--hermes-cyan);
 }
 
 .hermes-status-badge,
@@ -791,109 +836,27 @@ html[data-theme="light"] .dashboard-sidebar {
   height: 6px;
 }
 
-.hermes-panel-content {
+/* Executive Hermès layout: the composer is the primary column (interacting with
+   Hermès is the centre of this block); live state + thread sit in a compact
+   secondary column. Collapses to one column on tablet/mobile. */
+.hermes-exec-grid {
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-columns: minmax(300px, 1fr) minmax(250px, 0.72fr);
-  gap: 18px;
-  margin-top: 19px;
-}
-
-.hermes-visual-zone {
-  position: relative;
-  min-height: 298px;
-  background:
-    radial-gradient(circle at center, rgba(52, 135, 244, 0.11), transparent 53%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent);
-  border: 1px solid var(--border);
-  border-radius: 17px;
-  overflow: hidden;
-}
-
-.hermes-orbit {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  border: 1px solid rgba(91, 167, 255, 0.15);
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-
-.hermes-orbit-one {
-  width: 210px;
-  height: 210px;
-}
-
-.hermes-orbit-two {
-  width: 268px;
-  height: 268px;
-  border-style: dashed;
-  animation: orbit-spin 24s linear infinite;
-}
-
-.hermes-orbit-three {
-  width: 326px;
-  height: 326px;
-  opacity: 0.42;
-}
-
-@keyframes orbit-spin {
-  to {
-    transform: translate(-50%, -50%) rotate(360deg);
-  }
-}
-
-.hermes-hologram-frame {
-  position: absolute;
-  inset: 12px;
-  min-height: 270px;
-}
-
-.hermes-hologram-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  height: 100%;
-  min-height: 270px;
-  color: var(--accent);
-  font-size: 11px;
-}
-
-.hermes-core-label {
-  position: absolute;
-  bottom: 14px;
-  left: 50%;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 9px;
-  color: var(--accent);
-  background: rgba(7, 13, 25, 0.7);
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  transform: translateX(-50%);
-  backdrop-filter: blur(12px);
-  font-size: 8px;
-  font-weight: 750;
-  letter-spacing: 0.13em;
-  white-space: nowrap;
-}
-
-html[data-theme="light"] .hermes-core-label {
-  background: rgba(247, 251, 255, 0.76);
+  grid-template-columns: minmax(0, 1.4fr) minmax(272px, 0.85fr);
+  gap: 16px;
+  margin-top: 16px;
+  align-items: stretch;
 }
 
 .hermes-insight-panel {
   display: flex;
   flex-direction: column;
-  min-height: 298px;
-  padding: 16px;
+  min-height: auto;
+  padding: 14px;
   background: var(--surface-soft);
   border: 1px solid var(--border);
-  border-radius: 17px;
+  border-radius: 15px;
 }
 
 .hermes-insight-top {
@@ -935,48 +898,19 @@ html[data-theme="light"] .hermes-core-label {
   line-height: 1.6;
 }
 
-.hermes-indicator-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  margin-top: auto;
-}
-
-.hermes-indicator-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px;
-  background: var(--surface-soft);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-}
-
-.hermes-indicator-card > svg {
-  color: var(--accent);
-}
-
-.hermes-indicator-card > div {
-  display: flex;
-  flex-direction: column;
-}
-
-.hermes-indicator-card span {
-  color: var(--text-muted);
-  font-size: 8px;
-}
-
-.hermes-indicator-card strong {
-  margin-top: 2px;
-  font-size: 10px;
-}
-
+/* Composer = the hero of the Hermès block. A prominent, immediately usable card
+   (a distinct accent-lifted surface), not a strip under a decorative visual. */
 .hermes-command-zone {
   position: relative;
   z-index: 2;
-  margin-top: 18px;
-  padding-top: 18px;
-  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 15px;
+  background:
+    linear-gradient(180deg, var(--accent-soft), transparent 62%),
+    var(--surface-soft);
+  border: 1px solid var(--border-strong);
+  border-radius: 15px;
 }
 
 .hermes-command-header {
@@ -1003,22 +937,22 @@ html[data-theme="light"] .hermes-core-label {
 
 .hermes-command-box {
   margin-top: 11px;
-  padding: 12px;
-  background: var(--surface-soft);
+  padding: 13px 14px;
+  background: var(--surface-strong);
   border: 1px solid var(--border);
-  border-radius: 15px;
+  border-radius: 14px;
 }
 
 .hermes-command-box textarea {
   width: 100%;
-  min-height: 62px;
+  min-height: 76px;
   padding: 0;
   resize: none;
   background: transparent;
   border: 0;
   outline: 0;
   color: var(--text);
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
@@ -1894,7 +1828,13 @@ html[data-theme="light"] .hermes-core-label {
   }
 
   .dashboard-primary-grid,
-  .dashboard-secondary-grid {
+  .dashboard-secondary-grid,
+  .exec-grid-metier {
+    grid-template-columns: 1fr;
+  }
+
+  /* Tablet: composer stacks above the thread; alerts stay side by side. */
+  .hermes-exec-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1904,10 +1844,6 @@ html[data-theme="light"] .hermes-core-label {
 
   .quick-actions-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .hermes-panel-content {
-    grid-template-columns: 1fr;
   }
 
   .hermes-insight-panel {
@@ -1977,6 +1913,11 @@ html[data-theme="light"] .hermes-core-label {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  /* Below tablet landscape, the alert pair stacks. */
+  .exec-grid-2 {
+    grid-template-columns: 1fr;
+  }
+
   .system-health-badge {
     display: none;
   }
@@ -2021,29 +1962,23 @@ html[data-theme="light"] .hermes-core-label {
     flex-direction: column;
   }
 
+  .hermes-head-meta {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
   .hermes-panel {
     min-height: auto;
   }
 
-  .hermes-panel-content {
+  .hermes-exec-grid {
     grid-template-columns: 1fr;
-  }
-
-  .hermes-visual-zone {
-    min-height: 270px;
-  }
-
-  .hermes-hologram-frame {
-    min-height: 245px;
   }
 
   .hermes-command-header {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .hermes-command-shortcut {
-    display: none;
   }
 
   .hermes-command-actions {

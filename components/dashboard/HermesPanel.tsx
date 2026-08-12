@@ -1,11 +1,9 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import {
   ArrowUp,
   Mic,
   ShieldCheck,
-  Sparkles,
   Square,
   Volume2,
 } from "lucide-react";
@@ -33,28 +31,6 @@ const VOICE_MODES: VoiceMode[] = [
   "VOICE_INPUT_TEXT_OUTPUT",
   "VOICE_INPUT_VOICE_OUTPUT",
 ];
-
-type HoloState =
-  | "idle"
-  | "listening"
-  | "thinking"
-  | "success"
-  | "warning"
-  | "error"
-  | "offline";
-
-const HermesHologram = dynamic(
-  () => import("@/components/hermes/HermesHologram"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="hermes-hologram-loading">
-        <Sparkles size={28} strokeWidth={1.7} />
-        <span>Initialisation d’Hermès…</span>
-      </div>
-    ),
-  },
-);
 
 type Turn = {
   id: string;
@@ -90,33 +66,6 @@ const STATE_LABEL: Record<string, string> = {
   NO_TENANT: "Aucun tenant",
   ERROR: "Erreur",
 };
-
-function holoFor(state: string): HoloState {
-  switch (state) {
-    case "IDLE":
-    case "ANSWER_ONLY":
-      return "idle";
-    case "SUBMITTING":
-      return "listening";
-    case "RESOLVING":
-    case "QUEUED":
-    case "RUNNING":
-      return "thinking";
-    case "PENDING_APPROVAL":
-    case "TIMEOUT":
-    case "NEEDS_CLARIFICATION":
-    case "VALIDATION_FAILED":
-      return "warning";
-    case "SUCCEEDED":
-      return "success";
-    case "RPC_ERROR":
-      return "offline";
-    case "IDLE_DEFAULT":
-      return "idle";
-    default:
-      return "error";
-  }
-}
 
 function toneFor(state: string): "ok" | "bad" | "warn" | "pending" {
   if (state === "SUCCEEDED") return "ok";
@@ -350,7 +299,6 @@ export default function HermesPanel() {
     state = lastAssistant.lifecycle ?? lastAssistant.outcome ?? "IDLE";
   }
 
-  const holo = holoFor(turns.length === 0 && !sending ? "IDLE" : state);
   const tone = toneFor(state);
   const label = STATE_LABEL[state] ?? state;
   const inFlight =
@@ -404,43 +352,181 @@ export default function HermesPanel() {
   else if (micRequested) micPhase = "REQUESTING_PERMISSION";
 
   return (
-    <section className="hermes-panel">
-      <div className="hermes-panel-glow" />
-
+    <section className="hermes-panel hermes-panel-exec">
       <div className="hermes-panel-header">
-        <div>
+        <div className="hermes-head-titles">
           <span className="panel-eyebrow">DIRECTEUR GÉNÉRAL IA</span>
           <h2>Hermès</h2>
           <p>
-            Parlez à Hermès en langage naturel : il comprend votre intention,
-            sélectionne une capacité autorisée et l’exécute via la passerelle
-            sécurisée (permissions, SW15, audit).
+            Décrivez votre intention en langage naturel. Hermès choisit une
+            capacité autorisée et l’exécute via la passerelle sécurisée —
+            permissions, SW15, audit.
           </p>
         </div>
 
-        <div className={`hermes-status-badge is-${tone}`} data-testid="hermes-state">
-          <span className="status-pulse" />
-          <span>{label}</span>
+        <div className="hermes-head-meta">
+          <div className={`hermes-status-badge is-${tone}`} data-testid="hermes-state">
+            <span className="status-pulse" />
+            <span>{label}</span>
+          </div>
+          <span
+            className="hermes-conn"
+            title="Connecté au backend Hermès — données réelles"
+          >
+            <ShieldCheck size={12} strokeWidth={2} />
+            <span>Connecté à hermes_os</span>
+          </span>
         </div>
       </div>
 
-      <div className="hermes-panel-content">
-        <div className="hermes-visual-zone">
-          <div className="hermes-orbit hermes-orbit-one" />
-          <div className="hermes-orbit hermes-orbit-two" />
-          <div className="hermes-orbit hermes-orbit-three" />
+      <div className="hermes-exec-grid">
+        {/* PRIMARY — interact with Hermès (the real centre of this block). */}
+        <form onSubmit={handleSubmit} className="hermes-command-zone">
+          <div className="hermes-command-header">
+            <div>
+              <span className="panel-eyebrow">DEMANDER À HERMÈS</span>
+              <strong>Posez une question ou lancez une action…</strong>
+            </div>
 
-          <div className="hermes-hologram-frame">
-            <HermesHologram state={holo} />
+            <div
+              className="hermes-mode-switch"
+              role="group"
+              aria-label="Mode d’interaction"
+              data-testid="hermes-mode-switch"
+            >
+              {VOICE_MODES.map((mode) => {
+                const disabled = isVoiceInputMode(mode) && !voice.support.stt;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={`hermes-mode-chip${
+                      voiceMode === mode ? " is-active" : ""
+                    }`}
+                    aria-pressed={voiceMode === mode}
+                    disabled={disabled}
+                    title={
+                      disabled
+                        ? "Reconnaissance vocale non disponible sur ce navigateur"
+                        : undefined
+                    }
+                    onClick={() => handleModeChange(mode)}
+                  >
+                    {VOICE_MODE_LABEL[mode]}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="hermes-core-label">
-            <Sparkles size={14} strokeWidth={1.8} />
-            <span>HERMÈS CORE</span>
-          </div>
-        </div>
+          {voiceInputActive && !voice.support.stt ? (
+            <p className="hermes-voice-note" role="note">
+              La reconnaissance vocale n’est pas disponible sur ce navigateur (par
+              ex. Safari iOS). Le mode texte reste pleinement utilisable.
+            </p>
+          ) : null}
 
-        <div className="hermes-insight-panel">
+          <div className="hermes-command-box">
+            <textarea
+              name="command"
+              aria-label="Message pour Hermès"
+              placeholder="Exemple : qualifie le chantier Toiture Atelier Nord"
+              rows={3}
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }}
+            />
+
+            {voiceInputActive ? (
+              <div
+                className={`hermes-voice-status is-${micPhase.toLowerCase()}`}
+                data-testid="hermes-voice-status"
+                data-phase={micPhase}
+                aria-live="polite"
+              >
+                <span className="hermes-voice-dot" />
+                <span className="hermes-voice-text">
+                  {voice.error
+                    ? voice.error
+                    : voice.listening
+                      ? voice.interim
+                        ? `« ${voice.interim} »`
+                        : "Écoute… parlez maintenant."
+                      : voice.speaking
+                        ? "Hermès parle…"
+                        : micRequested
+                          ? "Autorisation micro…"
+                          : "Micro prêt. Touchez pour parler."}
+                </span>
+                {voice.speaking ? (
+                  <button
+                    type="button"
+                    className="hermes-voice-stop"
+                    onClick={() => voice.cancelSpeech()}
+                    data-testid="hermes-voice-stop"
+                  >
+                    <Square size={13} strokeWidth={2} />
+                    <span>Stop</span>
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="hermes-command-actions">
+              <span className="hermes-command-hint">
+                Actions réelles : qualification de chantier, diagnostic. Hermès ne
+                contourne jamais permissions ni SW15.
+              </span>
+
+              <div className="hermes-command-buttons">
+                {voiceInputActive ? (
+                  <button
+                    type="button"
+                    className={`hermes-mic-button${
+                      voice.listening ? " is-listening" : ""
+                    }`}
+                    onClick={handleMicClick}
+                    disabled={!canListen || inFlight}
+                    aria-pressed={voice.listening}
+                    aria-label={
+                      voice.listening ? "Arrêter l’écoute" : "Parler à Hermès"
+                    }
+                    data-testid="hermes-mic-button"
+                  >
+                    {voice.listening ? (
+                      <Square size={16} strokeWidth={2} />
+                    ) : (
+                      <Mic size={16} strokeWidth={2} />
+                    )}
+                    <span>{voice.listening ? "Arrêter" : "Parler"}</span>
+                  </button>
+                ) : null}
+
+                {isVoiceOutputMode(voiceMode) && voice.support.tts ? (
+                  <span className="hermes-voice-badge" title="Réponse vocale active">
+                    <Volume2 size={14} strokeWidth={1.9} />
+                  </span>
+                ) : null}
+
+                <button
+                  type="submit"
+                  className="hermes-send-button"
+                  disabled={inFlight || input.trim().length === 0}
+                >
+                  <span>{sending ? "Envoi…" : "Envoyer à Hermès"}</span>
+                  <ArrowUp size={17} strokeWidth={2} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+
+        {/* SECONDARY — live state + recent turns (compact, never the centre). */}
+        <aside className="hermes-insight-panel">
           <div className="hermes-insight-top">
             <div className={`hermes-insight-icon is-${tone}`}>
               <ShieldCheck size={18} strokeWidth={1.8} />
@@ -496,152 +582,8 @@ export default function HermesPanel() {
               ))
             )}
           </div>
-        </div>
+        </aside>
       </div>
-
-      <form onSubmit={handleSubmit} className="hermes-command-zone">
-        <div className="hermes-command-header">
-          <div>
-            <span className="panel-eyebrow">COMMANDE</span>
-            <strong>Demandez à Hermès ou lancez une action…</strong>
-          </div>
-
-          <div
-            className="hermes-mode-switch"
-            role="group"
-            aria-label="Mode d’interaction"
-            data-testid="hermes-mode-switch"
-          >
-            {VOICE_MODES.map((mode) => {
-              const disabled = isVoiceInputMode(mode) && !voice.support.stt;
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  className={`hermes-mode-chip${
-                    voiceMode === mode ? " is-active" : ""
-                  }`}
-                  aria-pressed={voiceMode === mode}
-                  disabled={disabled}
-                  title={
-                    disabled
-                      ? "Reconnaissance vocale non disponible sur ce navigateur"
-                      : undefined
-                  }
-                  onClick={() => handleModeChange(mode)}
-                >
-                  {VOICE_MODE_LABEL[mode]}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {voiceInputActive && !voice.support.stt ? (
-          <p className="hermes-voice-note" role="note">
-            La reconnaissance vocale n’est pas disponible sur ce navigateur (par
-            ex. Safari iOS). Le mode texte reste pleinement utilisable.
-          </p>
-        ) : null}
-
-        <div className="hermes-command-box">
-          <textarea
-            name="command"
-            aria-label="Message pour Hermès"
-            placeholder="Exemple : qualifie le chantier Toiture Atelier Nord"
-            rows={3}
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                event.currentTarget.form?.requestSubmit();
-              }
-            }}
-          />
-
-          {voiceInputActive ? (
-            <div
-              className={`hermes-voice-status is-${micPhase.toLowerCase()}`}
-              data-testid="hermes-voice-status"
-              data-phase={micPhase}
-              aria-live="polite"
-            >
-              <span className="hermes-voice-dot" />
-              <span className="hermes-voice-text">
-                {voice.error
-                  ? voice.error
-                  : voice.listening
-                    ? voice.interim
-                      ? `« ${voice.interim} »`
-                      : "Écoute… parlez maintenant."
-                    : voice.speaking
-                      ? "Hermès parle…"
-                      : micRequested
-                        ? "Autorisation micro…"
-                        : "Micro prêt. Touchez pour parler."}
-              </span>
-              {voice.speaking ? (
-                <button
-                  type="button"
-                  className="hermes-voice-stop"
-                  onClick={() => voice.cancelSpeech()}
-                  data-testid="hermes-voice-stop"
-                >
-                  <Square size={13} strokeWidth={2} />
-                  <span>Stop</span>
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-
-          <div className="hermes-command-actions">
-            <span className="hermes-command-hint">
-              Actions réelles : qualification de chantier, diagnostic. Hermès ne
-              contourne jamais permissions ni SW15.
-            </span>
-
-            <div className="hermes-command-buttons">
-              {voiceInputActive ? (
-                <button
-                  type="button"
-                  className={`hermes-mic-button${
-                    voice.listening ? " is-listening" : ""
-                  }`}
-                  onClick={handleMicClick}
-                  disabled={!canListen || inFlight}
-                  aria-pressed={voice.listening}
-                  aria-label={
-                    voice.listening ? "Arrêter l’écoute" : "Parler à Hermès"
-                  }
-                  data-testid="hermes-mic-button"
-                >
-                  {voice.listening ? (
-                    <Square size={16} strokeWidth={2} />
-                  ) : (
-                    <Mic size={16} strokeWidth={2} />
-                  )}
-                  <span>{voice.listening ? "Arrêter" : "Parler"}</span>
-                </button>
-              ) : null}
-
-              {isVoiceOutputMode(voiceMode) && voice.support.tts ? (
-                <span className="hermes-voice-badge" title="Réponse vocale active">
-                  <Volume2 size={14} strokeWidth={1.9} />
-                </span>
-              ) : null}
-
-              <button
-                type="submit"
-                className="hermes-send-button"
-                disabled={inFlight || input.trim().length === 0}
-              >
-                <span>{sending ? "Envoi…" : "Envoyer à Hermès"}</span>
-                <ArrowUp size={17} strokeWidth={2} />
-              </button>
-            </div>
-          </div>
-        </div>
-      </form>
     </section>
   );
 }

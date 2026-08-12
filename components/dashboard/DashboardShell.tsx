@@ -77,47 +77,52 @@ export default function DashboardShell({
         />
 
         <div className="dashboard-content">
-          <section className="dashboard-intro">
+          {/* Compact executive header — the workspace, not a hero banner. */}
+          <section className="dashboard-intro dashboard-intro-compact">
             <div>
-              <span className="panel-eyebrow">HELIOSOLAR OS</span>
+              <span className="panel-eyebrow">HELIOSOLAR OS · COMMAND CENTER</span>
               <h2>Poste de commande</h2>
-              <p>
-                Tous les panneaux sont branchés sur des données réelles ou
-                marqués « Indisponible » lorsqu’une mesure n’existe pas. Aucune
-                donnée fictive n’est présentée comme réelle.
-              </p>
             </div>
 
             <div className="dashboard-intro-status">
               <span className="status-pulse" />
               <div>
                 <strong>Connecté à hermes_os</strong>
-                <span>Données réelles via contrats backend</span>
+                <span>Données réelles · aucune donnée fictive</span>
               </div>
             </div>
           </section>
 
+          {/* 1 — Identité / état Hermès + Demander à Hermès. */}
           <div id="hermes-command">
             <HermesPanel />
           </div>
 
+          {/* 2 — KPI exécutifs, above the fold. */}
           <KpiGrid kpis={kpis} />
 
-          <ProjectsTable projects={projects} />
-
-          <AgentActionPanel />
-
-          <ApprovalsPanel />
-
-          <div className="dashboard-secondary-grid">
-            <RecentConversations conversations={conversations} />
+          {/* 3 — Alertes : approbations à traiter + priorités opérationnelles. */}
+          <div className="exec-grid-2">
+            <ApprovalsPanel />
             <TasksPanel priorities={priorities} />
           </div>
 
+          {/* 4 — Activité récente (synthétique). */}
+          <RecentConversations conversations={conversations} />
+
+          {/* 5 — Métier : portefeuille projets + action agent. */}
+          <div className="exec-grid-metier">
+            <ProjectsTable projects={projects} />
+            <AgentActionPanel />
+          </div>
+
+          {/* Actions disponibles (compactes). */}
           <QuickActions capabilities={capabilities} />
 
+          {/* 6 — Observabilité (synthèse). */}
           <SystemStatus observability={observability} />
 
+          {/* 7 — Coûts / informations techniques secondaires. */}
           <CostGovernance cost={cost} />
         </div>
       </div>
