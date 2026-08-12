@@ -20,17 +20,10 @@ import {
   isVoiceOutputMode,
   normalizeTranscript,
   sanitizeForSpeech,
-  VOICE_MODE_LABEL,
   type VoiceMode,
   type VoicePhase,
 } from "@/lib/voice/speech";
 import { TERMINAL_RESULT_STATUSES } from "@/types/agent-actions";
-
-const VOICE_MODES: VoiceMode[] = [
-  "TEXT_ONLY",
-  "VOICE_INPUT_TEXT_OUTPUT",
-  "VOICE_INPUT_VOICE_OUTPUT",
-];
 
 type Turn = {
   id: string;
@@ -123,9 +116,18 @@ export default function HermesPanel() {
   // Voice is purely an input/output layer over the SAME orchestrator pipeline.
   // The transcript is submitted exactly like typed text; TTS only reads the
   // final reply and never approves, never bypasses SW15.
-  const [voiceMode, setVoiceMode] = useState<VoiceMode>("TEXT_ONLY");
+  // Voice output ("lire les réponses à voix haute") is a discreet persistent
+  // toggle; voice input (mic) is press-to-talk. The three technical VoiceModes
+  // still drive the pipeline exactly as before, but are DERIVED from these —
+  // never exposed to the user as a mode selector.
+  const [readAloud, setReadAloud] = useState(false);
   const [micRequested, setMicRequested] = useState(false);
   const voice = useVoice();
+  const voiceMode: VoiceMode = !voice.support.stt
+    ? "TEXT_ONLY"
+    : readAloud && voice.support.tts
+      ? "VOICE_INPUT_VOICE_OUTPUT"
+      : "VOICE_INPUT_TEXT_OUTPUT";
   // Refs so async flows (send / resolve effect) read the latest mode + voice
   // handles without widening effect dependencies.
   const voiceModeRef = useRef(voiceMode);
@@ -310,18 +312,15 @@ export default function HermesPanel() {
 
   // --- Voice controls ------------------------------------------------------
   const voiceInputActive = isVoiceInputMode(voiceMode);
-  const canListen = voiceInputActive && voice.support.stt;
+  const canListen = voice.support.stt;
 
-  function handleModeChange(mode: VoiceMode) {
-    if (isVoiceInputMode(mode) && !voice.support.stt) {
-      // Fail-closed: this browser (e.g. iOS Safari) has no speech recognition —
-      // do not offer a voice-input mode that cannot work; text stays available.
-      return;
-    }
-    voice.cancelSpeech();
-    voice.stopListening();
-    setMicRequested(false);
-    setVoiceMode(mode);
+  function toggleReadAloud() {
+    setReadAloud((on) => {
+      const next = !on;
+      // Disabling stops any in-progress speech immediately.
+      if (!next) voice.cancelSpeech();
+      return next;
+    });
   }
 
   async function handleFinalTranscript(raw: string) {
@@ -387,44 +386,7 @@ export default function HermesPanel() {
               <span className="panel-eyebrow">DEMANDER À HERMÈS</span>
               <strong>Posez une question ou lancez une action…</strong>
             </div>
-
-            <div
-              className="hermes-mode-switch"
-              role="group"
-              aria-label="Mode d’interaction"
-              data-testid="hermes-mode-switch"
-            >
-              {VOICE_MODES.map((mode) => {
-                const disabled = isVoiceInputMode(mode) && !voice.support.stt;
-                return (
-                  <button
-                    key={mode}
-                    type="button"
-                    className={`hermes-mode-chip${
-                      voiceMode === mode ? " is-active" : ""
-                    }`}
-                    aria-pressed={voiceMode === mode}
-                    disabled={disabled}
-                    title={
-                      disabled
-                        ? "Reconnaissance vocale non disponible sur ce navigateur"
-                        : undefined
-                    }
-                    onClick={() => handleModeChange(mode)}
-                  >
-                    {VOICE_MODE_LABEL[mode]}
-                  </button>
-                );
-              })}
-            </div>
           </div>
-
-          {voiceInputActive && !voice.support.stt ? (
-            <p className="hermes-voice-note" role="note">
-              La reconnaissance vocale n’est pas disponible sur ce navigateur (par
-              ex. Safari iOS). Le mode texte reste pleinement utilisable.
-            </p>
-          ) : null}
 
           <div className="hermes-command-box">
             <textarea
@@ -441,7 +403,9 @@ export default function HermesPanel() {
               }}
             />
 
-            {voiceInputActive ? (
+            {/* Voice feedback is contextual — it appears only while the mic or
+                speech is actually active, never as a permanent panel. */}
+            {micPhase !== "IDLE" ? (
               <div
                 className={`hermes-voice-status is-${micPhase.toLowerCase()}`}
                 data-testid="hermes-voice-status"
@@ -460,7 +424,7 @@ export default function HermesPanel() {
                         ? "Hermès parle…"
                         : micRequested
                           ? "Autorisation micro…"
-                          : "Micro prêt. Touchez pour parler."}
+                          : "Analyse en cours…"}
                 </span>
                 {voice.speaking ? (
                   <button
@@ -482,15 +446,34 @@ export default function HermesPanel() {
                 contourne jamais permissions ni SW15.
               </span>
 
+              {/* Mic + read-aloud sit in the input's action bar, like a native
+                  premium assistant — not a technical mode selector. */}
               <div className="hermes-command-buttons">
-                {voiceInputActive ? (
+                {voice.support.tts ? (
+                  <button
+                    type="button"
+                    className={`hermes-io-toggle${readAloud ? " is-on" : ""}`}
+                    onClick={toggleReadAloud}
+                    aria-pressed={readAloud}
+                    title={
+                      readAloud
+                        ? "Réponses lues à voix haute — désactiver"
+                        : "Lire les réponses à voix haute"
+                    }
+                    data-testid="hermes-readaloud-toggle"
+                  >
+                    <Volume2 size={16} strokeWidth={1.9} />
+                  </button>
+                ) : null}
+
+                {voice.support.stt ? (
                   <button
                     type="button"
                     className={`hermes-mic-button${
                       voice.listening ? " is-listening" : ""
                     }`}
                     onClick={handleMicClick}
-                    disabled={!canListen || inFlight}
+                    disabled={inFlight}
                     aria-pressed={voice.listening}
                     aria-label={
                       voice.listening ? "Arrêter l’écoute" : "Parler à Hermès"
@@ -502,14 +485,7 @@ export default function HermesPanel() {
                     ) : (
                       <Mic size={16} strokeWidth={2} />
                     )}
-                    <span>{voice.listening ? "Arrêter" : "Parler"}</span>
                   </button>
-                ) : null}
-
-                {isVoiceOutputMode(voiceMode) && voice.support.tts ? (
-                  <span className="hermes-voice-badge" title="Réponse vocale active">
-                    <Volume2 size={14} strokeWidth={1.9} />
-                  </span>
                 ) : null}
 
                 <button

@@ -45,7 +45,7 @@
   --solar: var(--warning);
 
   /* --- layout / geometry --- */
-  --sidebar-width: 268px;
+  --sidebar-width: 248px;
   --header-height: 82px;
   --radius-sm: 14px;
   --radius-md: 18px;
@@ -76,12 +76,14 @@ html[data-theme="light"] {
   /* --- official LIGHT palette --- */
   --bg-primary: #dce8f2;
   --bg-secondary: #c9dae8;
-  --surface: rgba(250, 252, 255, 0.85);
-  --surface-strong: rgba(253, 254, 255, 0.93);
-  --surface-soft: rgba(23, 127, 234, 0.05);
-  --surface-hover: rgba(23, 127, 234, 0.08);
-  --border: rgba(255, 255, 255, 0.55);
-  --border-strong: rgba(23, 127, 234, 0.28);
+  --surface: rgba(250, 252, 255, 0.86);
+  --surface-strong: rgba(253, 254, 255, 0.94);
+  --surface-soft: rgba(31, 94, 160, 0.055);
+  --surface-hover: rgba(23, 127, 234, 0.09);
+  /* Subtle blue-grey edges (not white) so BG → card → inner card → input all
+     separate cleanly in light mode. */
+  --border: rgba(37, 84, 143, 0.16);
+  --border-strong: rgba(23, 127, 234, 0.30);
   --text-primary: #102033;
   --text-secondary: #53687c;
   --text-muted: #7688a0;
@@ -91,7 +93,9 @@ html[data-theme="light"] {
   --success: #22a66f;
   --warning: #e49a26;
   --danger: #d94b55;
-  --shadow: 0 18px 45px rgba(48, 79, 112, 0.16);
+  /* Two-layer shadow: a crisp contact edge + a soft ambient lift, so cards read
+     as raised planes on the light workspace rather than flat panes. */
+  --shadow: 0 1px 2px rgba(30, 58, 95, 0.07), 0 16px 40px rgba(37, 71, 110, 0.13);
   /* Command Center background — cool premium blue-grey gradient (no image, no
      clouds, no photographic texture); subtle depth, never flat/washed white. */
   --bg-gradient:
@@ -658,18 +662,42 @@ html[data-theme="light"] .dashboard-sidebar {
 /* Executive grids — group panels by importance, not by component of origin.
    exec-grid-2 = two equal halves (alerts). exec-grid-metier = wide table + a
    narrower action form. Both collapse to one column on tablet/mobile. */
+/* Equal-height columns so an empty/short panel can never leave a big void with
+   the sibling stranded in a narrow column — balanced in every state
+   (REAL / DERIVED / UNAVAILABLE / EMPTY). */
 .exec-grid-2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
+}
+
+.exec-grid-2 > * {
+  height: 100%;
+}
+
+/* Stretched cards distribute their content so an empty state reads as centered
+   and intentional, never a card with a large blank bottom. */
+.exec-grid-2 > .dashboard-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.exec-grid-2 .tasks-empty,
+.exec-grid-2 .projects-empty {
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 .exec-grid-metier {
   display: grid;
   grid-template-columns: minmax(0, 1.62fr) minmax(288px, 1fr);
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
+}
+
+.exec-grid-metier > * {
+  height: 100%;
 }
 
 .kpi-card,
@@ -905,12 +933,12 @@ html[data-theme="light"] .dashboard-sidebar {
   z-index: 2;
   display: flex;
   flex-direction: column;
-  padding: 15px;
+  padding: 13px;
   background:
-    linear-gradient(180deg, var(--accent-soft), transparent 62%),
+    linear-gradient(180deg, var(--accent-soft), transparent 58%),
     var(--surface-soft);
   border: 1px solid var(--border-strong);
-  border-radius: 15px;
+  border-radius: 14px;
 }
 
 .hermes-command-header {
@@ -936,16 +964,16 @@ html[data-theme="light"] .dashboard-sidebar {
 }
 
 .hermes-command-box {
-  margin-top: 11px;
-  padding: 13px 14px;
+  margin-top: 9px;
+  padding: 11px 12px;
   background: var(--surface-strong);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 13px;
 }
 
 .hermes-command-box textarea {
   width: 100%;
-  min-height: 76px;
+  min-height: 58px;
   padding: 0;
   resize: none;
   background: transparent;
@@ -1162,21 +1190,21 @@ html[data-theme="light"] .dashboard-sidebar {
 
 .quick-actions-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 9px;
-  margin-top: 17px;
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
 }
 
 .quick-action-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 72px;
-  padding: 12px;
+  gap: 11px;
+  min-height: auto;
+  padding: 10px 11px;
   text-align: left;
   background: var(--surface-soft);
   border: 1px solid var(--border);
-  border-radius: 13px;
+  border-radius: 12px;
   cursor: pointer;
   transition:
     transform 160ms ease,
@@ -1194,12 +1222,12 @@ html[data-theme="light"] .dashboard-sidebar {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
   color: var(--accent);
   background: var(--accent-soft);
   border: 1px solid var(--border-strong);
-  border-radius: 11px;
+  border-radius: 10px;
 }
 
 .quick-action-copy {
@@ -1822,6 +1850,16 @@ html[data-theme="light"] .dashboard-sidebar {
   }
 }
 
+/* Tablet: never leave a card stranded in a mini-column beside a big void.
+   The height-variable executive pairs (alerts, métier) go full-width and use
+   the whole available width — a tablet is not a shrunken desktop. */
+@media (max-width: 1200px) {
+  .exec-grid-2,
+  .exec-grid-metier {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 1080px) {
   :root {
     --sidebar-width: 238px;
@@ -2191,7 +2229,37 @@ html[data-theme="light"] .dashboard-sidebar {
 }
 
 .kpi-card-unavailable {
-  opacity: 0.8;
+  grid-column: 1 / -1;
+}
+
+.kpi-unavailable-inner {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.kpi-unavailable-inner > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.kpi-unavailable-inner > div strong {
+  font-size: 14px;
+}
+
+.kpi-unavailable-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  color: var(--text-muted);
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 11px;
 }
 
 .projects-empty {
@@ -2577,53 +2645,6 @@ html[data-theme="light"] .dashboard-sidebar {
 }
 
 /* ---- Voice interface (Hermès command center) ---------------------------- */
-.hermes-mode-switch {
-  display: inline-flex;
-  gap: 0.25rem;
-  padding: 0.2rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface-soft);
-}
-
-.hermes-mode-chip {
-  appearance: none;
-  border: 0;
-  cursor: pointer;
-  padding: 0.32rem 0.7rem;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: var(--text-secondary);
-  background: transparent;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.hermes-mode-chip:hover:not(:disabled) {
-  color: var(--text-primary);
-}
-
-.hermes-mode-chip.is-active {
-  color: #04121f;
-  background: var(--accent);
-}
-
-.hermes-mode-chip:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.hermes-voice-note {
-  margin: 0.5rem 0 0;
-  padding: 0.5rem 0.7rem;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-soft);
-  color: var(--text-secondary);
-  font-size: 0.76rem;
-}
-
 .hermes-voice-status {
   display: flex;
   align-items: center;
@@ -2706,58 +2727,55 @@ html[data-theme="light"] .dashboard-sidebar {
 .hermes-command-buttons {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
+  flex: 0 0 auto;
 }
 
+/* Integrated action-bar controls: read-aloud toggle + press-to-talk mic, both
+   compact icon buttons sized to the send button — an assistant composer, not a
+   settings panel. */
+.hermes-io-toggle,
 .hermes-mic-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 0.85rem;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
   border: 1px solid var(--border-strong);
-  border-radius: 12px;
+  border-radius: 11px;
   background: var(--surface-soft);
-  color: var(--text-primary);
-  font-size: 0.82rem;
-  font-weight: 600;
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
+.hermes-io-toggle:hover:not(:disabled),
 .hermes-mic-button:hover:not(:disabled) {
+  color: var(--text-primary);
   border-color: var(--accent);
+}
+
+.hermes-io-toggle.is-on {
+  color: var(--hermes-cyan);
+  border-color: var(--border-strong);
+  background: var(--accent-soft);
 }
 
 .hermes-mic-button.is-listening {
   border-color: var(--danger);
   color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
 }
 
+.hermes-io-toggle:disabled,
 .hermes-mic-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.hermes-voice-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.9rem;
-  height: 1.9rem;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--surface-soft);
-  color: var(--accent);
 }
 
 @media (max-width: 640px) {
   .hermes-command-header {
     flex-wrap: wrap;
     gap: 0.5rem;
-  }
-  .hermes-mode-switch {
-    width: 100%;
-    justify-content: space-between;
   }
 }
 
