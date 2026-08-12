@@ -49,7 +49,7 @@ const STATE_LABEL: Record<string, string> = {
   PENDING_APPROVAL: "Approbation requise",
   SUCCEEDED: "Succès",
   FAILED: "Échec",
-  POLICY_DENIED: "Refusée (SW15)",
+  POLICY_DENIED: "Refusée (sécurité)",
   REJECTED: "Refusée",
   TIMEOUT: "Délai dépassé",
   RPC_ERROR: "Service indisponible",
@@ -225,11 +225,26 @@ export default function HermesPanel() {
         setTurns((prev) =>
           prev.map((t) =>
             t.id === turnId
-              ? { ...t, text: "Délai d’analyse dépassé. Réessayez.", outcome: "ERROR" }
+              ? {
+                  ...t,
+                  // Honest: the request was accepted and queued, but no result
+                  // came back in time. Never presented as a failure of intent or
+                  // as a (fake) success.
+                  text:
+                    "Votre demande a bien été reçue et mise en file, mais n’a pas encore été traitée (délai d’attente dépassé). Réessayez plus tard.",
+                  outcome: "TIMEOUT",
+                  lifecycle: undefined,
+                }
               : t,
           ),
         );
         setActiveResolve(null);
+      } else {
+        // Reflect the real, honest queue status while waiting (QUEUED / RUNNING)
+        // instead of a static "analyse en cours".
+        setTurns((prev) =>
+          prev.map((t) => (t.id === turnId ? { ...t, lifecycle: r.status } : t)),
+        );
       }
     }, 1500);
     return () => clearInterval(timer);
@@ -357,9 +372,9 @@ export default function HermesPanel() {
           <span className="panel-eyebrow">DIRECTEUR GÉNÉRAL IA</span>
           <h2>Hermès</h2>
           <p>
-            Décrivez votre intention en langage naturel. Hermès choisit une
-            capacité autorisée et l’exécute via la passerelle sécurisée —
-            permissions, SW15, audit.
+            Décrivez votre intention en langage naturel : Hermès sélectionne une
+            action autorisée et l’exécute en toute sécurité — vos permissions et
+            un journal d’audit s’appliquent toujours.
           </p>
         </div>
 
@@ -381,122 +396,119 @@ export default function HermesPanel() {
       <div className="hermes-exec-grid">
         {/* PRIMARY — interact with Hermès (the real centre of this block). */}
         <form onSubmit={handleSubmit} className="hermes-command-zone">
-          <div className="hermes-command-header">
-            <div>
-              <span className="panel-eyebrow">DEMANDER À HERMÈS</span>
-              <strong>Posez une question ou lancez une action…</strong>
-            </div>
-          </div>
+          <span className="panel-eyebrow hermes-composer-eyebrow">
+            Demander à Hermès
+          </span>
 
-          <div className="hermes-command-box">
-            <textarea
-              name="command"
-              aria-label="Message pour Hermès"
-              placeholder="Exemple : qualifie le chantier Toiture Atelier Nord"
-              rows={3}
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                  event.currentTarget.form?.requestSubmit();
-                }
-              }}
-            />
+          <textarea
+            name="command"
+            aria-label="Message pour Hermès"
+            className="hermes-composer-input"
+            placeholder="Demandez à Hermès — ex. « qualifie le chantier Toiture Atelier Nord »"
+            rows={2}
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+          />
 
-            {/* Voice feedback is contextual — it appears only while the mic or
-                speech is actually active, never as a permanent panel. */}
-            {micPhase !== "IDLE" ? (
-              <div
-                className={`hermes-voice-status is-${micPhase.toLowerCase()}`}
-                data-testid="hermes-voice-status"
-                data-phase={micPhase}
-                aria-live="polite"
-              >
-                <span className="hermes-voice-dot" />
-                <span className="hermes-voice-text">
-                  {voice.error
-                    ? voice.error
-                    : voice.listening
-                      ? voice.interim
-                        ? `« ${voice.interim} »`
-                        : "Écoute… parlez maintenant."
-                      : voice.speaking
-                        ? "Hermès parle…"
-                        : micRequested
-                          ? "Autorisation micro…"
-                          : "Analyse en cours…"}
-                </span>
-                {voice.speaking ? (
-                  <button
-                    type="button"
-                    className="hermes-voice-stop"
-                    onClick={() => voice.cancelSpeech()}
-                    data-testid="hermes-voice-stop"
-                  >
-                    <Square size={13} strokeWidth={2} />
-                    <span>Stop</span>
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-
-            <div className="hermes-command-actions">
-              <span className="hermes-command-hint">
-                Actions réelles : qualification de chantier, diagnostic. Hermès ne
-                contourne jamais permissions ni SW15.
+          {/* Voice feedback is contextual — only while the mic or speech is
+              actually active, never a permanent panel. */}
+          {micPhase !== "IDLE" ? (
+            <div
+              className={`hermes-voice-status is-${micPhase.toLowerCase()}`}
+              data-testid="hermes-voice-status"
+              data-phase={micPhase}
+              aria-live="polite"
+            >
+              <span className="hermes-voice-dot" />
+              <span className="hermes-voice-text">
+                {voice.error
+                  ? voice.error
+                  : voice.listening
+                    ? voice.interim
+                      ? `« ${voice.interim} »`
+                      : "Écoute… parlez maintenant."
+                    : voice.speaking
+                      ? "Hermès parle…"
+                      : micRequested
+                        ? "Autorisation micro…"
+                        : "Analyse en cours…"}
               </span>
-
-              {/* Mic + read-aloud sit in the input's action bar, like a native
-                  premium assistant — not a technical mode selector. */}
-              <div className="hermes-command-buttons">
-                {voice.support.tts ? (
-                  <button
-                    type="button"
-                    className={`hermes-io-toggle${readAloud ? " is-on" : ""}`}
-                    onClick={toggleReadAloud}
-                    aria-pressed={readAloud}
-                    title={
-                      readAloud
-                        ? "Réponses lues à voix haute — désactiver"
-                        : "Lire les réponses à voix haute"
-                    }
-                    data-testid="hermes-readaloud-toggle"
-                  >
-                    <Volume2 size={16} strokeWidth={1.9} />
-                  </button>
-                ) : null}
-
-                {voice.support.stt ? (
-                  <button
-                    type="button"
-                    className={`hermes-mic-button${
-                      voice.listening ? " is-listening" : ""
-                    }`}
-                    onClick={handleMicClick}
-                    disabled={inFlight}
-                    aria-pressed={voice.listening}
-                    aria-label={
-                      voice.listening ? "Arrêter l’écoute" : "Parler à Hermès"
-                    }
-                    data-testid="hermes-mic-button"
-                  >
-                    {voice.listening ? (
-                      <Square size={16} strokeWidth={2} />
-                    ) : (
-                      <Mic size={16} strokeWidth={2} />
-                    )}
-                  </button>
-                ) : null}
-
+              {voice.speaking ? (
                 <button
-                  type="submit"
-                  className="hermes-send-button"
-                  disabled={inFlight || input.trim().length === 0}
+                  type="button"
+                  className="hermes-voice-stop"
+                  onClick={() => voice.cancelSpeech()}
+                  data-testid="hermes-voice-stop"
                 >
-                  <span>{sending ? "Envoi…" : "Envoyer à Hermès"}</span>
-                  <ArrowUp size={17} strokeWidth={2} />
+                  <Square size={13} strokeWidth={2} />
+                  <span>Stop</span>
                 </button>
-              </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="hermes-command-actions">
+            {/* Read-aloud is a discreet, secondary toggle. */}
+            <div className="hermes-command-left">
+              {voice.support.tts ? (
+                <button
+                  type="button"
+                  className={`hermes-io-toggle${readAloud ? " is-on" : ""}`}
+                  onClick={toggleReadAloud}
+                  aria-pressed={readAloud}
+                  title={
+                    readAloud
+                      ? "Réponses lues à voix haute — désactiver"
+                      : "Lire les réponses à voix haute"
+                  }
+                  data-testid="hermes-readaloud-toggle"
+                >
+                  <Volume2 size={15} strokeWidth={1.9} />
+                </button>
+              ) : null}
+              <span className="hermes-command-hint">
+                Vos permissions et un journal d’audit s’appliquent à chaque action.
+              </span>
+            </div>
+
+            {/* Mic = "parler à Hermès" (press-to-talk); send stays clear. */}
+            <div className="hermes-command-buttons">
+              {voice.support.stt ? (
+                <button
+                  type="button"
+                  className={`hermes-mic-button${
+                    voice.listening ? " is-listening" : ""
+                  }`}
+                  onClick={handleMicClick}
+                  disabled={inFlight}
+                  aria-pressed={voice.listening}
+                  title={voice.listening ? "Arrêter l’écoute" : "Parler à Hermès"}
+                  aria-label={
+                    voice.listening ? "Arrêter l’écoute" : "Parler à Hermès"
+                  }
+                  data-testid="hermes-mic-button"
+                >
+                  {voice.listening ? (
+                    <Square size={16} strokeWidth={2} />
+                  ) : (
+                    <Mic size={16} strokeWidth={2} />
+                  )}
+                </button>
+              ) : null}
+
+              <button
+                type="submit"
+                className="hermes-send-button"
+                disabled={inFlight || input.trim().length === 0}
+              >
+                <span>{sending ? "Envoi…" : "Envoyer"}</span>
+                <ArrowUp size={16} strokeWidth={2} />
+              </button>
             </div>
           </div>
         </form>
@@ -536,7 +548,7 @@ export default function HermesPanel() {
                   ) : null}
                   {t.role === "assistant" && t.lifecycle === "PENDING_APPROVAL" ? (
                     <span className="hermes-lifecycle-hint">
-                      Approbation humaine requise (SW15) — traitez la demande dans «
+                      Approbation humaine requise — traitez la demande dans «
                       Approbations en attente » ci-dessous ; la conversation
                       reprendra automatiquement après décision.
                     </span>
