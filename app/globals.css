@@ -14,8 +14,8 @@
   /* --- official DARK palette --- */
   --bg-primary: #06121f;
   --bg-secondary: #0b1b2e;
-  --surface: rgba(11, 27, 46, 0.66);
-  --surface-strong: rgba(9, 24, 43, 0.70);
+  --surface: rgba(12, 28, 47, 0.82);
+  --surface-strong: rgba(10, 25, 44, 0.90);
   --surface-soft: rgba(150, 195, 245, 0.05);
   --surface-hover: rgba(150, 195, 245, 0.09);
   --border: rgba(120, 175, 230, 0.18);
@@ -79,8 +79,8 @@ html[data-theme="light"] {
   /* --- official LIGHT palette --- */
   --bg-primary: #dce8f2;
   --bg-secondary: #c9dae8;
-  --surface: rgba(248, 251, 255, 0.68);
-  --surface-strong: rgba(250, 252, 255, 0.72);
+  --surface: rgba(250, 252, 255, 0.85);
+  --surface-strong: rgba(253, 254, 255, 0.93);
   --surface-soft: rgba(23, 127, 234, 0.05);
   --surface-hover: rgba(23, 127, 234, 0.08);
   --border: rgba(255, 255, 255, 0.55);
@@ -126,8 +126,8 @@ html[data-theme="light"] {
 /* Official atmospheric sky — baked, optimized local image assets (self-generated
    volumetric clouds; no remote dependency, no license issue), theme-swapped.
    The glass surfaces float over this sky. */
-:root { --atmosphere: url("/atmosphere-dark.jpg"); --content-base: rgba(6, 17, 30, 0.9); }
-html[data-theme="light"] { --atmosphere: url("/atmosphere-light.jpg"); --content-base: rgba(220, 232, 243, 0.88); }
+:root { --atmosphere: url("/atmosphere-dark.jpg"); --content-base: rgba(6, 15, 27, 0.94); }
+html[data-theme="light"] { --atmosphere: url("/atmosphere-light.jpg"); --content-base: rgba(216, 229, 241, 0.94); }
 
 body {
   min-height: 100vh;
@@ -158,8 +158,8 @@ body::before {
   background: linear-gradient(
     180deg,
     transparent 0%,
-    transparent 19%,
-    var(--content-base) 50%,
+    transparent 8%,
+    var(--content-base) 30%,
     var(--content-base) 100%
   );
 }
@@ -3094,6 +3094,14 @@ html[data-theme="light"] .hermes-core-label {
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(130%);
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+/* LIGHT: lift the rail off the background with an ultra-fine blue edge and a
+   soft shadow so the BG → SHELL hierarchy reads (a white rail on a light-blue
+   sky would otherwise blend into the page). */
+html[data-theme="light"] .hos-sidebar {
+  border-right: 1px solid rgba(23, 127, 234, 0.14);
+  box-shadow: 18px 0 48px rgba(48, 79, 112, 0.10);
 }
 
 /* Brand */
