@@ -126,8 +126,8 @@ html[data-theme="light"] {
 /* Official atmospheric sky — baked, optimized local image assets (self-generated
    volumetric clouds; no remote dependency, no license issue), theme-swapped.
    The glass surfaces float over this sky. */
-:root { --atmosphere: url("/atmosphere-dark.jpg"); --veil: rgba(4, 12, 24, 0.32); }
-html[data-theme="light"] { --atmosphere: url("/atmosphere-light.jpg"); --veil: rgba(210, 226, 242, 0.20); }
+:root { --atmosphere: url("/atmosphere-dark.jpg"); --content-base: rgba(6, 17, 30, 0.9); }
+html[data-theme="light"] { --atmosphere: url("/atmosphere-light.jpg"); --content-base: rgba(220, 232, 243, 0.88); }
 
 body {
   min-height: 100vh;
@@ -155,9 +155,13 @@ body::before {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background:
-    radial-gradient(130% 100% at 50% -10%, transparent 42%, var(--veil) 100%),
-    linear-gradient(180deg, transparent 52%, var(--veil) 100%);
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    transparent 19%,
+    var(--content-base) 50%,
+    var(--content-base) 100%
+  );
 }
 
 button,
@@ -3066,4 +3070,167 @@ html[data-theme="light"] .hermes-core-label {
     display: grid;
     place-items: center;
   }
+}
+
+/* =====================================================================
+ * Hermès OS — Command Center shell (INCRÉMENT 1)
+ * Left icon+label sidebar rail, slim premium top bar, glass surfaces on the
+ * atmospheric sky. Matches the master mockup composition. Real user only.
+ * ===================================================================== */
+
+/* The fixed wrapper is transparent; the rail paints itself. */
+.dashboard-sidebar-wrapper { background: transparent; }
+
+.hos-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 4px;
+  padding: 18px 14px 14px;
+  background: var(--surface-strong);
+  border-right: 1px solid var(--border);
+  box-shadow: 20px 0 60px rgba(0, 8, 20, 0.18);
+  backdrop-filter: blur(var(--glass-blur)) saturate(130%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(130%);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Brand */
+.hos-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 6px 8px 16px;
+}
+.hos-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.hos-brand-copy { display: flex; flex-direction: column; line-height: 1.12; min-width: 0; }
+.hos-brand-copy strong {
+  font-size: 1.02rem; font-weight: 750; letter-spacing: 0.02em; color: var(--text-primary);
+  white-space: nowrap;
+}
+.hos-accent { color: var(--hermes-blue); }
+.hos-brand-copy span {
+  font-size: 0.64rem; letter-spacing: 0.06em; color: var(--text-muted); white-space: nowrap;
+}
+
+/* Nav */
+.hos-nav { display: flex; flex-direction: column; gap: 2px; padding: 4px 0; }
+.hos-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-weight: 550;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--motion-fast) var(--easing), color var(--motion-fast) var(--easing);
+  white-space: nowrap;
+}
+.hos-nav-item > svg { flex: 0 0 auto; }
+.hos-nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.hos-nav-item:hover:not(:disabled) { background: var(--surface-hover); color: var(--text-primary); }
+.hos-nav-item.is-active {
+  background: color-mix(in srgb, var(--hermes-blue) 16%, transparent);
+  color: var(--hermes-blue);
+  font-weight: 650;
+}
+html[data-theme="light"] .hos-nav-item.is-active {
+  background: color-mix(in srgb, var(--hermes-blue) 12%, transparent);
+}
+.hos-nav-item.is-soon { opacity: 0.5; cursor: not-allowed; }
+
+/* Sidebar footer */
+.hos-sidebar-foot { margin-top: auto; padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.hos-profile {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; margin-top: 4px;
+  border-radius: 12px; border: 1px solid var(--border); background: var(--surface-soft);
+}
+.hos-avatar {
+  display: grid; place-items: center; flex: 0 0 auto;
+  width: 34px; height: 34px; border-radius: 10px;
+  background: color-mix(in srgb, var(--hermes-blue) 22%, transparent);
+  color: var(--hermes-blue); font-size: 0.78rem; font-weight: 700;
+}
+.hos-avatar.sm { width: 30px; height: 30px; border-radius: 9px; font-size: 0.72rem; }
+.hos-profile-copy { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.hos-profile-copy strong { font-size: 0.84rem; color: var(--text-primary); }
+.hos-profile-copy span { font-size: 0.68rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; }
+.hos-foot-actions { display: flex; gap: 6px; }
+.hos-foot-form { flex: 1 1 auto; display: flex; }
+.hos-foot-btn {
+  display: flex; align-items: center; gap: 8px; flex: 1 1 auto;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px;
+  background: transparent; color: var(--text-secondary); font-size: 0.78rem; cursor: pointer;
+  transition: background var(--motion-fast) var(--easing), color var(--motion-fast) var(--easing);
+}
+.hos-foot-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
+.hos-collapse-btn { flex: 0 0 auto; }
+
+/* Collapsed rail (icons only) */
+.dashboard-shell.is-collapsed { --sidebar-width: 78px; }
+.hos-sidebar.is-collapsed { padding: 18px 12px 14px; }
+.hos-sidebar.is-collapsed .hos-nav-label,
+.hos-sidebar.is-collapsed .hos-brand-copy,
+.hos-sidebar.is-collapsed .hos-profile-copy { display: none; }
+.hos-sidebar.is-collapsed .hos-nav-item { justify-content: center; padding: 10px; }
+.hos-sidebar.is-collapsed .hos-brand { justify-content: center; padding: 6px 0 16px; }
+.hos-sidebar.is-collapsed .hos-profile { justify-content: center; padding: 8px; }
+.hos-sidebar.is-collapsed .hos-foot-actions { flex-direction: column; }
+.hos-sidebar.is-collapsed .hos-foot-btn { justify-content: center; }
+
+/* Slim premium top bar (right-aligned action cluster). */
+.hos-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--header-height);
+  padding: 0 26px;
+  background: transparent;
+}
+.hos-topbar-left { display: flex; align-items: center; gap: 12px; }
+.hos-topbar-brand { display: none; }
+.hos-topbar-right { display: flex; align-items: center; gap: 8px; }
+.hos-icon-btn {
+  display: grid; place-items: center;
+  width: 40px; height: 40px; border-radius: 12px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text-secondary); cursor: pointer;
+  backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  transition: background var(--motion-fast) var(--easing), color var(--motion-fast) var(--easing);
+}
+.hos-icon-btn:hover:not(:disabled) { color: var(--text-primary); background: var(--surface-strong); }
+.hos-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.hos-menu-btn { display: none; }
+.hos-userchip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 6px 4px 4px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface);
+  backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+/* Responsive: mobile shows the top-bar brand + menu button; sidebar off-canvas. */
+@media (max-width: 820px) {
+  .hos-menu-btn { display: grid; }
+  .hos-topbar-brand { display: grid; place-items: center; }
+  .hos-topbar { padding: 0 16px; }
 }

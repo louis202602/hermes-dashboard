@@ -1,16 +1,7 @@
 "use client";
 
-import {
-  Bell,
-  Command,
-  LogOut,
-  Menu,
-  Moon,
-  Search,
-  Sun,
-} from "lucide-react";
+import { Bell, HelpCircle, Menu, Moon, Sun } from "lucide-react";
 
-import { signOutAction } from "@/app/login/actions";
 import { HermesLogoSymbol } from "@/components/common/HermesLogo";
 import { useTheme } from "@/hooks/useTheme";
 
@@ -19,7 +10,7 @@ type HeaderProps = {
   userEmail?: string;
 };
 
-function initialsFromEmail(email: string): string {
+function initials(email: string): string {
   const local = email.split("@")[0] ?? "";
   const parts = local.split(/[.\-_]/).filter(Boolean);
   const letters = (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "");
@@ -31,54 +22,27 @@ export default function Header({ onMenuClick, userEmail }: HeaderProps) {
   const email = userEmail ?? "";
 
   return (
-    <header className="dashboard-header">
-      <div className="header-left">
+    <header className="hos-topbar">
+      <div className="hos-topbar-left">
         <button
           type="button"
-          className="header-icon-button header-menu-button"
+          className="hos-icon-btn hos-menu-btn"
           aria-label="Ouvrir le menu"
           onClick={onMenuClick}
         >
           <Menu size={20} strokeWidth={1.8} />
         </button>
-
-        <span className="header-brand-mobile" aria-hidden="true">
-          <HermesLogoSymbol size={24} />
+        <span className="hos-topbar-brand" aria-hidden="true">
+          <HermesLogoSymbol size={22} />
         </span>
-
-        <div className="header-title-block">
-          <span className="header-eyebrow">CENTRE DE COMMANDE</span>
-          <div className="header-title-row">
-            <h1>Vue d’ensemble</h1>
-            <span className="header-live-badge">
-              <span className="header-live-dot" />
-              En direct
-            </span>
-          </div>
-        </div>
       </div>
 
-      <div className="header-right">
-        <label className="header-search">
-          <Search size={17} strokeWidth={1.8} />
-          <input
-            type="search"
-            placeholder="Rechercher dans Hermès OS…"
-            aria-label="Rechercher dans Hermès OS"
-          />
-          <span className="header-search-shortcut">
-            <Command size={12} strokeWidth={1.8} />
-            K
-          </span>
-        </label>
-
+      <div className="hos-topbar-right">
         <button
           type="button"
-          className="header-icon-button"
+          className="hos-icon-btn"
           aria-label={
-            theme === "dark"
-              ? "Activer le thème clair"
-              : "Activer le thème sombre"
+            theme === "dark" ? "Activer le thème clair" : "Activer le thème sombre"
           }
           onClick={toggleTheme}
         >
@@ -91,34 +55,27 @@ export default function Header({ onMenuClick, userEmail }: HeaderProps) {
 
         <button
           type="button"
-          className="header-icon-button header-notification-button"
+          className="hos-icon-btn"
           aria-label="Notifications"
+          disabled
+          title="Bientôt disponible"
         >
           <Bell size={19} strokeWidth={1.8} />
-          <span className="header-notification-dot" />
         </button>
 
-        <div className="header-profile">
-          <div className="header-profile-avatar">
-            {email ? initialsFromEmail(email) : "?"}
-          </div>
+        <button
+          type="button"
+          className="hos-icon-btn"
+          aria-label="Aide"
+          disabled
+          title="Bientôt disponible"
+        >
+          <HelpCircle size={19} strokeWidth={1.8} />
+        </button>
 
-          <div className="header-profile-copy">
-            <strong>{email || "Utilisateur"}</strong>
-            <span>Session Hermès OS</span>
-          </div>
-
-          <form action={signOutAction}>
-            <button
-              type="submit"
-              className="header-icon-button"
-              aria-label="Se déconnecter"
-              title="Se déconnecter"
-            >
-              <LogOut size={18} strokeWidth={1.8} />
-            </button>
-          </form>
-        </div>
+        <span className="hos-userchip" title={email || undefined}>
+          <span className="hos-avatar sm">{email ? initials(email) : "?"}</span>
+        </span>
       </div>
     </header>
   );

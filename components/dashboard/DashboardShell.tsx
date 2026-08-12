@@ -47,13 +47,18 @@ export default function DashboardShell({
   cost,
 }: DashboardShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <main className="dashboard-shell">
+    <main className={`dashboard-shell${collapsed ? " is-collapsed" : ""}`}>
       <div
         className={`dashboard-sidebar-wrapper ${mobileMenuOpen ? "is-open" : ""}`}
       >
-        <Sidebar />
+        <Sidebar
+          userEmail={userEmail}
+          collapsed={collapsed}
+          onToggleCollapse={() => setCollapsed((value) => !value)}
+        />
       </div>
 
       {mobileMenuOpen ? (
