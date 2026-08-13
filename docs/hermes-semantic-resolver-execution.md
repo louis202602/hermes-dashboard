@@ -1,9 +1,44 @@
 # Hermès Semantic Resolver — Execution Continuity (audit + safe architecture)
 
-> Status: **AUDIT + DESIGN ONLY. NOTHING APPLIED. GO-LIVE DISABLED.**
-> No backend object was modified, no migration applied, no n8n workflow
-> activated or executed. The proposed SQL/driver below are **reviewable
-> proposals**, pending explicit authorization + a safe execution target.
+> Status: **Fix A + Fix B APPLIED to production + validated by isolated real
+> tests (2026-08-13). GO-LIVE STILL DISABLED — the consumer/Schedule driver was
+> NOT activated and no LLM was run.** Fix C (SW23 wiring) and the real
+> LLM/authenticated E2E remain BACKEND_FOLLOWUP / BLOCKED (see §8–§9).
+> Migrations: `db/migrations/20260813_hermes_resolver_execution_safety_1.sql`
+> (+ `_9_rollback.sql`).
+
+## 0. Controlled run — applied + tested (2026-08-13)
+
+Under explicit "run contrôlé en production" authorization, with all gateway
+consumers INACTIVE (zero live traffic through claim/complete):
+
+- **Applied** `hermes_resolver_execution_safety_1`: `lease_token` + `max_attempts`
+  columns; `claim_agent_action` now stamps/returns a per-claim `lease_token` and
+  refuses to reclaim past `max_attempts`; `complete_agent_action` gained a fenced
+  6-arg form (`status='RUNNING'` **and** lease-token match; trailing token
+  defaults to null so existing 5-arg callers keep working); additive
+  `reap_dead_letter_agent_actions()` reaper.
+- **Validated** with an isolated self-test on a dedicated test capability
+  (`test.resolver.recovery`, tenant `__rr_test__`) via `service_role` — **no
+  OpenAI, no auth, no real row touched**. Results (all ✅):
+  - double claim → **distinct rows** (single-winner); no reclaim of a live lease.
+  - lease-expiry **reclaim** works, fresh token minted.
+  - **ownership fence:** a stale worker (expired lease/old token) completion is
+    **IGNORED** (row stayed RUNNING, result not overwritten); the reclaiming
+    worker completed with its token → SUCCEEDED.
+  - invalid terminal status → raises.
+  - **bounded attempts:** claim refuses to reclaim once `attempts >= max_attempts`
+    (`claim_when_capped=false`); reaper parks it terminal `FAILED` /
+    `error.code=DEAD_LETTER`. No infinite reclaim; request_id preserved.
+  - SW12 audit emitted `{CLAIMED:5, SUCCEEDED:1, DEAD_LETTER:1, COMPLETE_IGNORED:1}`.
+- **Cleanup verified:** test rows / test capability / test audit / self-test fn
+  all removed; the **4 pre-existing real QUEUED `hermes.intent.resolve` rows
+  remain untouched**.
+- **OpenAI cost this run: €0.00** (the resolver workflow was not executed).
+- **Consumer/Schedule: still INACTIVE.**
+
+---
+
 
 This document diagnoses why a Hermès message that takes the *semantic* path
 times out, audits the existing execution machinery against 20 safety criteria,
