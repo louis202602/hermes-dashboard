@@ -2712,6 +2712,10 @@ html[data-theme="light"] .dashboard-sidebar {
 
 .approvals-card { display: flex; flex-direction: column; gap: 1rem; }
 
+/* Empty "Approbations" — content-driven and compact (header + one line). Slightly
+   tighter vertical padding than the shared empty style, staying premium. */
+.approvals-card .projects-empty { padding: 1.1rem 1.5rem; }
+
 .approvals-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
 
 .approval-item {
@@ -3259,17 +3263,31 @@ html[data-theme="light"] .hos-nav-item.is-active {
   justify-content: space-between;
   height: var(--header-height);
   padding: 0 26px;
-  /* Masked reserved zone: a faded, blurred bar so content scrolling underneath
-     is muted and never appears to overlap the theme/notifications/help/profile
-     controls. Works in both themes via --bg-primary + --border. */
-  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border-bottom: 1px solid var(--border);
+  /* TRANSPARENT bar — no full-width backdrop/veil over the workspace. Each
+     functional cluster (right controls, mobile menu) carries its OWN contained
+     glass background, so controls stay legible over scrolling content without
+     decolouring or darkening the whole width. The empty middle passes clicks
+     through to the content beneath. */
+  background: transparent;
+  pointer-events: none;
+}
+.hos-topbar > * {
+  pointer-events: auto;
 }
 .hos-topbar-left { display: flex; align-items: center; gap: 12px; }
 .hos-topbar-brand { display: none; }
-.hos-topbar-right { display: flex; align-items: center; gap: 8px; }
+
+/* Right controls sit in ONE contained glass pill — the backdrop is limited to
+   this cluster only, never the full bar width. */
+.hos-topbar-right {
+  display: flex; align-items: center; gap: 4px;
+  padding: 5px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
 .hos-icon-btn {
   display: grid; place-items: center;
   width: 40px; height: 40px; border-radius: 12px;
@@ -3281,11 +3299,26 @@ html[data-theme="light"] .hos-nav-item.is-active {
 .hos-icon-btn:hover:not(:disabled) { color: var(--text-primary); background: var(--surface-strong); }
 .hos-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .hos-menu-btn { display: none; }
+
+/* Inside the contained pill the individual controls are backgroundless so the
+   pill is the single glass surface (no double-stacked glass). */
+.hos-topbar-right .hos-icon-btn {
+  width: 38px; height: 38px; border-radius: 999px;
+  border-color: transparent; background: transparent;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+.hos-topbar-right .hos-icon-btn:hover:not(:disabled) { background: var(--surface-hover); }
+
 .hos-userchip {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 4px 6px 4px 4px; border-radius: 999px;
   border: 1px solid var(--border); background: var(--surface);
   backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+.hos-topbar-right .hos-userchip {
+  border-color: transparent; background: transparent;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  padding: 0 2px 0 4px;
 }
 
 /* Responsive: mobile shows the top-bar brand + menu button; sidebar off-canvas. */
