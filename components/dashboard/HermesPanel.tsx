@@ -2,10 +2,17 @@
 
 import {
   ArrowUp,
+  File as FileIcon,
+  FileText,
+  Film,
+  Image as ImageIcon,
   Mic,
+  Music,
+  Plus,
   ShieldCheck,
   Square,
   Volume2,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -14,6 +21,15 @@ import {
   applyHermesResolutionAction,
   submitHermesMessageAction,
 } from "@/app/actions/hermes-orchestration";
+import {
+  FILE_INPUT_ACCEPT,
+  formatBytes,
+  isPreviewable,
+  kindFor,
+  validateFiles,
+  type AttachmentKind,
+  type FileMeta,
+} from "@/lib/attachments/attachments";
 import { useVoice } from "@/lib/voice/useVoice";
 import {
   isVoiceInputMode,
@@ -37,6 +53,51 @@ type Turn = {
   chantierId?: string | null;
   userText?: string; // the user message that produced this turn (for retry)
 };
+
+// A LOCAL-only composer attachment (Phase A). It is never uploaded or sent to
+// Hermès — there is no storage/upload/multimodal backend yet (see PR audit).
+// `url` is a browser object URL used solely for an image/video thumbnail and is
+// revoked on remove/unmount.
+type LocalAttachment = {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  kind: AttachmentKind;
+  url?: string;
+};
+
+// Honest, user-facing wording — files are not transmitted in Phase A.
+const ATTACH_SEND_BLOCKED_MSG =
+  "L’envoi de fichiers à Hermès arrive prochainement. Retirez la pièce jointe pour envoyer votre message texte maintenant.";
+const ATTACH_LOCAL_ONLY_MSG =
+  "Aperçu local — les pièces jointes ne sont pas encore transmises à Hermès.";
+
+function attachmentKindLabel(kind: AttachmentKind): string {
+  switch (kind) {
+    case "image":
+      return "Image";
+    case "video":
+      return "Vidéo";
+    case "audio":
+      return "Audio";
+    case "pdf":
+      return "PDF";
+    case "document":
+      return "Document";
+    default:
+      return "Fichier";
+  }
+}
+
+function AttachmentGlyph({ kind }: { kind: AttachmentKind }) {
+  if (kind === "image") return <ImageIcon size={18} strokeWidth={1.8} />;
+  if (kind === "video") return <Film size={18} strokeWidth={1.8} />;
+  if (kind === "audio") return <Music size={18} strokeWidth={1.8} />;
+  if (kind === "pdf" || kind === "document")
+    return <FileText size={18} strokeWidth={1.8} />;
+  return <FileIcon size={18} strokeWidth={1.8} />;
+}
 
 const STATE_LABEL: Record<string, string> = {
   IDLE: "Au repos",
@@ -111,6 +172,65 @@ export default function HermesPanel() {
     { resolveRequestId: string; conversationId: string; turnId: string } | null
   >(null);
   const threadRef = useRef<HTMLDivElement>(null);
+
+  // --- LOCAL attachments (Phase A — browser-only, never transmitted) --------
+  // The composer's "+" lets the user pick files for a LOCAL preview only. There
+  // is no upload/storage/multimodal backend yet, so files are never sent; the
+  // send is blocked while any attachment is present and the UI says so plainly.
+  const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
+  const [attachNote, setAttachNote] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachmentsRef = useRef<LocalAttachment[]>([]);
+  useEffect(() => {
+    attachmentsRef.current = attachments;
+  }, [attachments]);
+  // Revoke any object URLs when the panel unmounts (previews are local only).
+  useEffect(() => {
+    return () => {
+      for (const a of attachmentsRef.current) {
+        if (a.url) URL.revokeObjectURL(a.url);
+      }
+    };
+  }, []);
+
+  function openFilePicker() {
+    fileInputRef.current?.click();
+  }
+
+  function onFilesPicked(event: React.ChangeEvent<HTMLInputElement>) {
+    const list = event.target.files;
+    if (!list || list.length === 0) return;
+    const added: LocalAttachment[] = [];
+    const ignored: string[] = [];
+    let current = attachments.length;
+    for (const file of Array.from(list)) {
+      const meta: FileMeta = { name: file.name, size: file.size, type: file.type };
+      const { accepted, errors } = validateFiles([meta], current);
+      if (accepted.length === 1) {
+        const kind = kindFor(meta);
+        const url = isPreviewable(kind) ? URL.createObjectURL(file) : undefined;
+        added.push({ id: newRequestId(), name: file.name, size: file.size, type: file.type, kind, url });
+        current += 1;
+      } else if (errors.length > 0) {
+        ignored.push(`${errors[0].name} (${errors[0].reason})`);
+      }
+    }
+    if (added.length > 0) setAttachments((prev) => [...prev, ...added]);
+    setAttachNote(
+      ignored.length > 0 ? `Fichier(s) ignoré(s) : ${ignored.join(" ; ")}` : null,
+    );
+    // Reset so re-picking the same file fires onChange again.
+    event.target.value = "";
+  }
+
+  function removeAttachment(id: string) {
+    setAttachments((prev) => {
+      const target = prev.find((a) => a.id === id);
+      if (target?.url) URL.revokeObjectURL(target.url);
+      return prev.filter((a) => a.id !== id);
+    });
+    setAttachNote(null);
+  }
 
   // --- Voice I/O (browser-native; no provider secret) ---------------------
   // Voice is purely an input/output layer over the SAME orchestrator pipeline.
@@ -260,12 +380,22 @@ export default function HermesPanel() {
     event.preventDefault();
     const text = input.trim();
     if (text.length === 0 || sending) return;
+    if (attachments.length > 0) {
+      setAttachNote(ATTACH_SEND_BLOCKED_MSG);
+      return;
+    }
     setInput("");
     await send(text);
   }
 
   async function send(text: string) {
     if (text.length === 0 || sending) return;
+    // Phase A: files are local-only. Never send a message while an attachment
+    // is present (avoids any impression the file was transmitted to Hermès).
+    if (attachmentsRef.current.length > 0) {
+      setAttachNote(ATTACH_SEND_BLOCKED_MSG);
+      return;
+    }
 
     setMicRequested(false);
     const rid = newRequestId();
@@ -415,6 +545,50 @@ export default function HermesPanel() {
             }}
           />
 
+          {/* LOCAL attachment previews (Phase A) — thumbnails for image/video,
+              icon + name + type + size otherwise; each removable. Never sent. */}
+          {attachments.length > 0 ? (
+            <div className="hermes-attachments" data-testid="hermes-attachments">
+              <ul className="hermes-attachment-list">
+                {attachments.map((a) => (
+                  <li key={a.id} className={`hermes-attachment is-${a.kind}`}>
+                    <span className="hermes-attachment-thumb">
+                      {a.url && a.kind === "image" ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={a.url} alt="" />
+                      ) : a.url && a.kind === "video" ? (
+                        <video src={a.url} muted playsInline preload="metadata" />
+                      ) : (
+                        <AttachmentGlyph kind={a.kind} />
+                      )}
+                    </span>
+                    <span className="hermes-attachment-meta">
+                      <strong title={a.name}>{a.name}</strong>
+                      <span>
+                        {attachmentKindLabel(a.kind)} · {formatBytes(a.size)}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      className="hermes-attachment-remove"
+                      onClick={() => removeAttachment(a.id)}
+                      aria-label={`Retirer ${a.name}`}
+                      title="Retirer"
+                    >
+                      <X size={13} strokeWidth={2} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <p className="hermes-attachment-note">{ATTACH_LOCAL_ONLY_MSG}</p>
+            </div>
+          ) : null}
+          {attachNote ? (
+            <p className="hermes-attachment-alert" role="status">
+              {attachNote}
+            </p>
+          ) : null}
+
           {/* Voice feedback is contextual — only while the mic or speech is
               actually active, never a permanent panel. */}
           {micPhase !== "IDLE" ? (
@@ -455,6 +629,28 @@ export default function HermesPanel() {
           <div className="hermes-command-actions">
             {/* Read-aloud is a discreet, secondary toggle. */}
             <div className="hermes-command-left">
+              {/* "+" — pick files for a LOCAL preview (Phase A, never sent). */}
+              <button
+                type="button"
+                className="hermes-plus-button"
+                onClick={openFilePicker}
+                aria-label="Ajouter une pièce jointe"
+                title="Ajouter une pièce jointe — image, vidéo, audio, PDF, document (aperçu local)"
+                data-testid="hermes-plus-button"
+              >
+                <Plus size={17} strokeWidth={2.2} />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={FILE_INPUT_ACCEPT}
+                multiple
+                onChange={onFilesPicked}
+                className="hermes-file-input"
+                tabIndex={-1}
+                aria-hidden="true"
+                data-testid="hermes-file-input"
+              />
               {voice.support.tts ? (
                 <button
                   type="button"
@@ -504,7 +700,10 @@ export default function HermesPanel() {
               <button
                 type="submit"
                 className="hermes-send-button"
-                disabled={inFlight || input.trim().length === 0}
+                disabled={
+                  inFlight || input.trim().length === 0 || attachments.length > 0
+                }
+                title={attachments.length > 0 ? ATTACH_SEND_BLOCKED_MSG : undefined}
               >
                 <span>{sending ? "Envoi…" : "Envoyer"}</span>
                 <ArrowUp size={16} strokeWidth={2} />
