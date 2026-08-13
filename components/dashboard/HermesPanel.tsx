@@ -2,6 +2,7 @@
 
 import {
   ArrowUp,
+  Camera,
   File as FileIcon,
   FileText,
   Film,
@@ -9,6 +10,7 @@ import {
   Mic,
   Music,
   Plus,
+  ScanLine,
   ShieldCheck,
   Square,
   Volume2,
@@ -33,7 +35,9 @@ import {
   type AttachmentKind,
   type FileMeta,
 } from "@/lib/attachments/attachments";
-import { ATTACHMENT_ACCEPT_V1 } from "@/lib/attachments/serverValidate";
+import { encodeImageFileToJpeg } from "@/lib/attachments/browserImage";
+import { attachInputConfig, type AttachMenuKind } from "@/lib/attachments/scan";
+import ScanDocumentModal from "@/components/dashboard/ScanDocumentModal";
 import type { AttachmentUploadState } from "@/types/hermes-attachments";
 import { useVoice } from "@/lib/voice/useVoice";
 import {
@@ -210,7 +214,13 @@ export default function HermesPanel() {
   // attachments are UPLOADED; blocked while any is uploading or failed.
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [attachNote, setAttachNote] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // "+" menu (camera / scan / photos / documents / audio) + scan modal.
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const photosInputRef = useRef<HTMLInputElement>(null);
+  const documentsInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   const attachmentsRef = useRef<ComposerAttachment[]>([]);
   useEffect(() => {
     attachmentsRef.current = attachments;
@@ -223,10 +233,6 @@ export default function HermesPanel() {
       }
     };
   }, []);
-
-  function openFilePicker() {
-    fileInputRef.current?.click();
-  }
 
   // Upload one file and reflect its transport state on the matching entry.
   const uploadOne = useCallback(async (id: string, file: File) => {
@@ -250,45 +256,92 @@ export default function HermesPanel() {
     );
   }, []);
 
+  // Add already-materialised File(s) as attachments and start the real upload.
+  // Shared by every entry point (menu pickers, camera capture, scan-to-PDF) so
+  // EVERYTHING funnels through the one canonical Phase B pipeline.
+  const ingestFiles = useCallback(
+    (files: File[]) => {
+      const added: ComposerAttachment[] = [];
+      const ignored: string[] = [];
+      let current = attachmentsRef.current.length;
+      for (const file of files) {
+        const meta: FileMeta = { name: file.name, size: file.size, type: file.type };
+        const { accepted, errors } = validateFiles([meta], current);
+        if (accepted.length === 1) {
+          const kind = kindFor(meta);
+          const url = isPreviewable(kind) ? URL.createObjectURL(file) : undefined;
+          added.push({
+            id: newRequestId(),
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            kind,
+            url,
+            state: "UPLOADING",
+            file,
+          });
+          current += 1;
+        } else if (errors.length > 0) {
+          ignored.push(`${errors[0].name} (${errors[0].reason})`);
+        }
+      }
+      if (added.length > 0) {
+        setAttachments((prev) => [...prev, ...added]);
+        for (const a of added) {
+          if (a.file) void uploadOne(a.id, a.file);
+        }
+      }
+      setAttachNote(
+        ignored.length > 0 ? `Fichier(s) ignoré(s) : ${ignored.join(" ; ")}` : null,
+      );
+    },
+    [uploadOne],
+  );
+
   function onFilesPicked(event: React.ChangeEvent<HTMLInputElement>) {
     const list = event.target.files;
-    if (!list || list.length === 0) return;
-    const added: ComposerAttachment[] = [];
-    const ignored: string[] = [];
-    let current = attachments.length;
-    for (const file of Array.from(list)) {
-      const meta: FileMeta = { name: file.name, size: file.size, type: file.type };
-      const { accepted, errors } = validateFiles([meta], current);
-      if (accepted.length === 1) {
-        const kind = kindFor(meta);
-        const url = isPreviewable(kind) ? URL.createObjectURL(file) : undefined;
-        added.push({
-          id: newRequestId(),
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          kind,
-          url,
-          state: "UPLOADING",
-          file,
-        });
-        current += 1;
-      } else if (errors.length > 0) {
-        ignored.push(`${errors[0].name} (${errors[0].reason})`);
-      }
-    }
-    if (added.length > 0) {
-      setAttachments((prev) => [...prev, ...added]);
-      // Kick off the real uploads (state → UPLOADED / FAILED as each settles).
-      for (const a of added) {
-        if (a.file) void uploadOne(a.id, a.file);
-      }
-    }
-    setAttachNote(
-      ignored.length > 0 ? `Fichier(s) ignoré(s) : ${ignored.join(" ; ")}` : null,
-    );
-    // Reset so re-picking the same file fires onChange again.
+    if (list && list.length > 0) ingestFiles(Array.from(list));
+    event.target.value = ""; // allow re-picking the same file
+  }
+
+  // Camera capture → normalise to a compressed JPEG (fixes HEIC / huge photos)
+  // before it enters the pipeline as a standard image attachment.
+  async function onCameraPhoto(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
     event.target.value = "";
+    if (!file) return;
+    try {
+      const enc = await encodeImageFileToJpeg(file);
+      const stamp = new Date();
+      const name = `photo-${stamp.getFullYear()}-${String(stamp.getMonth() + 1).padStart(2, "0")}-${String(stamp.getDate()).padStart(2, "0")}-${String(stamp.getHours()).padStart(2, "0")}${String(stamp.getMinutes()).padStart(2, "0")}.jpg`;
+      ingestFiles([new File([enc.blob], name, { type: "image/jpeg" })]);
+    } catch {
+      // Fallback: some browsers already deliver a usable JPEG — ingest as-is.
+      ingestFiles([file]);
+    }
+  }
+
+  // Route a "+" menu choice to the right native input or the scan modal.
+  function chooseAttachAction(kind: AttachMenuKind | "scan") {
+    setAttachMenuOpen(false);
+    if (kind === "scan") {
+      setScanOpen(true);
+      return;
+    }
+    const ref =
+      kind === "camera"
+        ? cameraInputRef
+        : kind === "photos"
+          ? photosInputRef
+          : kind === "documents"
+            ? documentsInputRef
+            : audioInputRef;
+    ref.current?.click();
+  }
+
+  function onScanComplete(file: File) {
+    setScanOpen(false);
+    ingestFiles([file]);
   }
 
   function retryAttachment(id: string) {
@@ -792,27 +845,99 @@ export default function HermesPanel() {
           <div className="hermes-command-actions">
             {/* Read-aloud is a discreet, secondary toggle. */}
             <div className="hermes-command-left">
-              {/* "+" — pick files for a LOCAL preview (Phase A, never sent). */}
-              <button
-                type="button"
-                className="hermes-plus-button"
-                onClick={openFilePicker}
-                aria-label="Ajouter une pièce jointe"
-                title="Ajouter une pièce jointe — image, PDF, document ou audio"
-                data-testid="hermes-plus-button"
-              >
-                <Plus size={17} strokeWidth={2.2} />
-              </button>
+              {/* "+" — opens a capture/pick menu; every choice ends up in the
+                  same Phase B upload pipeline. */}
+              <div className="hermes-attach">
+                <button
+                  type="button"
+                  className={`hermes-plus-button${attachMenuOpen ? " is-open" : ""}`}
+                  onClick={() => setAttachMenuOpen((v) => !v)}
+                  aria-label="Ajouter une pièce jointe"
+                  aria-haspopup="menu"
+                  aria-expanded={attachMenuOpen}
+                  title="Ajouter — photo, scan, document ou audio"
+                  data-testid="hermes-plus-button"
+                >
+                  <Plus size={17} strokeWidth={2.2} />
+                </button>
+                {attachMenuOpen ? (
+                  <>
+                    <button
+                      type="button"
+                      className="hermes-attach-scrim"
+                      aria-label="Fermer le menu"
+                      onClick={() => setAttachMenuOpen(false)}
+                    />
+                    <div className="hermes-attach-menu" role="menu" data-testid="hermes-attach-menu">
+                      <button type="button" role="menuitem" onClick={() => chooseAttachAction("camera")} data-testid="attach-camera">
+                        <Camera size={16} strokeWidth={1.8} />
+                        <span>Prendre une photo</span>
+                      </button>
+                      <button type="button" role="menuitem" onClick={() => chooseAttachAction("scan")} data-testid="attach-scan">
+                        <ScanLine size={16} strokeWidth={1.8} />
+                        <span>Scanner un document</span>
+                      </button>
+                      <button type="button" role="menuitem" onClick={() => chooseAttachAction("photos")} data-testid="attach-photos">
+                        <ImageIcon size={16} strokeWidth={1.8} />
+                        <span>Photos</span>
+                      </button>
+                      <button type="button" role="menuitem" onClick={() => chooseAttachAction("documents")} data-testid="attach-documents">
+                        <FileText size={16} strokeWidth={1.8} />
+                        <span>Documents</span>
+                      </button>
+                      <button type="button" role="menuitem" onClick={() => chooseAttachAction("audio")} data-testid="attach-audio">
+                        <Music size={16} strokeWidth={1.8} />
+                        <span>Audio</span>
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+              {/* Dedicated native inputs — camera (single, rear), then the
+                  category pickers. Video is never offered (out of V1). */}
               <input
-                ref={fileInputRef}
+                ref={cameraInputRef}
                 type="file"
-                accept={ATTACHMENT_ACCEPT_V1}
+                accept={attachInputConfig("camera").accept}
+                capture="environment"
+                onChange={onCameraPhoto}
+                className="hermes-file-input"
+                tabIndex={-1}
+                aria-hidden="true"
+                data-testid="hermes-camera-input"
+              />
+              <input
+                ref={photosInputRef}
+                type="file"
+                accept={attachInputConfig("photos").accept}
                 multiple
                 onChange={onFilesPicked}
                 className="hermes-file-input"
                 tabIndex={-1}
                 aria-hidden="true"
-                data-testid="hermes-file-input"
+                data-testid="hermes-photos-input"
+              />
+              <input
+                ref={documentsInputRef}
+                type="file"
+                accept={attachInputConfig("documents").accept}
+                multiple
+                onChange={onFilesPicked}
+                className="hermes-file-input"
+                tabIndex={-1}
+                aria-hidden="true"
+                data-testid="hermes-documents-input"
+              />
+              <input
+                ref={audioInputRef}
+                type="file"
+                accept={attachInputConfig("audio").accept}
+                multiple
+                onChange={onFilesPicked}
+                className="hermes-file-input"
+                tabIndex={-1}
+                aria-hidden="true"
+                data-testid="hermes-audio-input"
               />
               {voice.support.tts ? (
                 <button
@@ -956,6 +1081,10 @@ export default function HermesPanel() {
           </div>
         </aside>
       </div>
+
+      {scanOpen ? (
+        <ScanDocumentModal onComplete={onScanComplete} onClose={() => setScanOpen(false)} />
+      ) : null}
     </section>
   );
 }
