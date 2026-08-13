@@ -71,6 +71,32 @@ consumers INACTIVE (zero live traffic through claim/complete):
   add gpt-5.4-nano to the catalog with real pricing, or switch the resolver to a
   catalogued model (e.g. `claude-haiku-4-5`) via `route_and_reserve`.
 
+## 0ter. Pricing catalogued + workflow redeployed (2026-08-13, pass 3)
+
+- **`openai/gpt-5.4-nano` catalogued** in `sw23_model_catalog` with **real
+  pricing** (`db/migrations/20260813_sw23_catalog_gpt_5_4_nano_1.sql`): input
+  0.20 / output 1.25 USD per 1M tokens (`per_1M_tokens`, `cost_status='real'`,
+  `availability='available'`); cached-input 0.02 in `metadata`. Source: OpenAI
+  official API pricing as designated by the operator (not independently
+  re-derivable in this environment — provenance recorded in the row `metadata`).
+- **Validated (no OpenAI):** `get_active_price` returns the real price;
+  reservation computed from real price (`est 0.0011`, actual `0.001265`);
+  `reserve/commit ok`, `commit` idempotent replay, release-of-committed rejected;
+  **`route_and_reserve` selects+prices `openai/gpt-5.4-nano`** (`route_success:
+  true`). Test fixtures cleaned across `sw23_budget_ledger`/`_audit_log`/
+  `_idempotency_lock`.
+- **Resolver switched to the canonical `route_and_reserve` path** (SW23 computes
+  the reservation from the real price — no fixed estimate).
+- **Workflow `IS1I8g0K8VXbm4oH` REDEPLOYED** (n8n MCP `update_workflow`, 17 ops):
+  now `Claimed? → SW23 Route+Reserve → Reserved? → model → SW23 Commit →
+  Complete Success` and `agent error → SW23 Release → Complete Failed`, both
+  completions **6-arg with `lease_token`**. **Still INACTIVE** (`active:false`,
+  manual trigger only); the workflow was **not run** (no OpenAI call, €0), so the
+  4 real QUEUED rows were not drained.
+- **Remaining follow-up:** commit currently uses the routed estimate; switch to
+  actual provider token usage × price once the exact n8n usage field is confirmed
+  during the controlled OpenAI run.
+
 ---
 
 

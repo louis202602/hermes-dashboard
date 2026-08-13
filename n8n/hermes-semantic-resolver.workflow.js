@@ -14,17 +14,18 @@
 // Execution-safety hardening (PR #21):
 //  - LEASE-TOKEN FENCING: the claim returns a per-claim `lease_token`; it is
 //    carried through the run and passed to `complete_agent_action(...,lease_token)`
-//    (6-arg fenced form). A worker whose lease was stolen (reclaimed by another
-//    worker after lease expiry) can no longer overwrite the fresh result — its
-//    completion is ignored. This consumer no longer uses the legacy 5-arg form.
-//  - SW23 COST GOVERNANCE: before the model call the run RESERVES budget via the
-//    canonical SW23 engine (set_session_tenant → reserve_budget); on success it
-//    COMMITS the actual cost, on failure-before-billable it RELEASES the
-//    reservation. No second ledger, no parallel budget math. NOTE: the resolver
-//    model must exist in `sw23_model_catalog` with real pricing for a *priced*
-//    actual; until then the workflow reserves/commits a conservative fixed
-//    estimate (RESERVE_USD) so spend is governed by the real ledger — precise
-//    per-request pricing is a catalog follow-up.
+//    (6-arg fenced form). A worker whose lease was stolen (reclaimed after lease
+//    expiry) can no longer overwrite the fresh result. This consumer no longer
+//    uses the legacy 5-arg form.
+//  - SW23 COST GOVERNANCE (canonical path): before the model call the run calls
+//    `sw23_route_and_reserve` (set_session_tenant first) — SW23 selects the
+//    catalogued model (openai/gpt-5.4-nano, cost_status='real') and RESERVES the
+//    budget computed from the REAL catalog price and the token estimate (no
+//    arbitrary fixed amount). On success it COMMITS the routed cost via
+//    `sw23_commit_budget`; on model failure it RELEASES via `sw23_release_budget`.
+//    No second ledger, no parallel budget math. FOLLOW-UP (controlled run): the
+//    commit currently uses the routed estimate; switch to actual provider token
+//    usage × price once the exact n8n usage field is confirmed at run time.
 //  - BOUNDED RECLAIM / DEAD-LETTER is enforced DB-side (claim stops past
 //    max_attempts; a driver calls `reap_dead_letter_agent_actions()` before
 //    claim). See db/migrations/20260813_hermes_resolver_execution_safety_1.sql.
@@ -33,10 +34,11 @@
 // which apply() turns into a fail-closed ERROR — no execution.
 import { workflow, trigger, node, languageModel, outputParser, ifElse, expr } from '@n8n/workflow-sdk';
 
-// Conservative per-call reservation (USD) until the resolver model is catalogued
-// with real pricing. Governs spend via the real SW23 ledger without inventing a
-// second cost engine.
-const RESERVE_USD = '0.001';
+// Conservative token estimate for the intent-routing call. The reservation USD is
+// computed BY SW23 from the real catalog price (get_active_price inside
+// route_and_reserve) — never a hardcoded amount.
+const EST_INPUT_TOKENS = '3000';
+const EST_OUTPUT_TOKENS = '400';
 
 const PG = { postgres: { id: '2XmDD5ePn3toIJmF', name: 'Postgres account 2' } };
 
@@ -66,25 +68,25 @@ const claimed = ifElse({
   },
 });
 
-// SW23 — reserve budget for this request BEFORE the model call (set the SW23
-// session tenant + reserve in the SAME connection). request_id = the gateway
-// request_id, so the reservation is idempotent per request.
-const reserve = node({
+// SW23 canonical route + reserve BEFORE the model call (set the SW23 session
+// tenant + route_and_reserve in the SAME connection). request_id = the gateway
+// request_id → idempotent reservation; SW23 prices the real catalog model.
+const routeReserve = node({
   type: 'n8n-nodes-base.postgres',
   version: 2.7,
   config: {
-    name: 'SW23 Reserve',
+    name: 'SW23 Route+Reserve',
     parameters: {
       operation: 'executeQuery',
-      query: "select hermes_os.sw23_set_session_tenant($1); select hermes_os.sw23_reserve_budget($1,$2,'hermes.intent.resolve',$3::numeric,'day') as reserve",
-      options: { queryReplacement: expr("{{ [ $('Claim Resolve').item.json.claim.tenant_id, $('Claim Resolve').item.json.claim.request_id, " + JSON.stringify(RESERVE_USD) + " ] }}") },
+      query: "select hermes_os.sw23_set_session_tenant($1); select hermes_os.sw23_route_and_reserve($1,$2,'hermes.intent.resolve','intent_routing','simple','normal','[]'::jsonb,'[\"text\"]'::jsonb,$3::numeric,$4::numeric,'openai','gpt-5.4-nano','[]'::jsonb,'day',now(),true) as route",
+      options: { queryReplacement: expr("{{ [ $('Claim Resolve').item.json.claim.tenant_id, $('Claim Resolve').item.json.claim.request_id, " + JSON.stringify(EST_INPUT_TOKENS) + ", " + JSON.stringify(EST_OUTPUT_TOKENS) + " ] }}") },
     },
     credentials: PG,
   },
 });
 
-// Proceed to the model only if the reservation was accepted (ok/replayed). A
-// hard-stop budget rejection routes to a FAILED completion with no model spend.
+// Proceed to the model only if SW23 routed+reserved successfully. A no-eligible-
+// model / budget rejection routes to a FAILED completion with no model spend.
 const reserved = ifElse({
   version: 2.2,
   config: {
@@ -92,7 +94,7 @@ const reserved = ifElse({
     parameters: {
       conditions: {
         options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
-        conditions: [{ leftValue: expr("{{ ['ok','replayed'].includes($json.reserve.status) }}"), rightValue: true, operator: { type: 'boolean', operation: 'true' } }],
+        conditions: [{ leftValue: expr("{{ $json.route.success === true || $json.route.success === 'true' }}"), rightValue: true, operator: { type: 'boolean', operation: 'true' } }],
         combinator: 'and',
       },
     },
@@ -154,7 +156,9 @@ const mapResult = node({
   },
 });
 
-// SW23 — commit the (estimated) actual cost on success, in the same connection.
+// SW23 — commit the reserved (real-priced) cost on success, same connection.
+// FOLLOW-UP: replace route.estimated_cost with price × actual provider tokens
+// once the exact usage field is confirmed during the controlled run.
 const commit = node({
   type: 'n8n-nodes-base.postgres',
   version: 2.7,
@@ -163,7 +167,7 @@ const commit = node({
     parameters: {
       operation: 'executeQuery',
       query: "select hermes_os.sw23_set_session_tenant($1); select hermes_os.sw23_commit_budget($1,$2,'day',$3::numeric) as commit",
-      options: { queryReplacement: expr("{{ [ $('Claim Resolve').item.json.claim.tenant_id, $('Claim Resolve').item.json.claim.request_id, " + JSON.stringify(RESERVE_USD) + " ] }}") },
+      options: { queryReplacement: expr("{{ [ $('Claim Resolve').item.json.claim.tenant_id, $('Claim Resolve').item.json.claim.request_id, $('SW23 Route+Reserve').item.json.route.estimated_cost ] }}") },
     },
     credentials: PG,
   },
@@ -220,7 +224,7 @@ export default workflow('hermes-semantic-resolver', 'GW Consumer — Hermes Sema
   .add(manual)
   .to(claim)
   .to(claimed
-    .onTrue(reserve.to(reserved
+    .onTrue(routeReserve.to(reserved
       .onTrue(agent.to(mapResult.to(commit.to(completeSuccess))))
       .onFalse(completeFailed)))
     .onFalse(noWork))
