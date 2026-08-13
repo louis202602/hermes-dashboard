@@ -47,6 +47,21 @@ export type TenantResolutionStatus =
   | "ACCESS_DENIED"
   | "AMBIGUOUS_TENANT_REQUIRE_SELECTION";
 
+/**
+ * Active tenant identity (company branding) from
+ * `public.get_active_tenant_identity()`. Resolved SERVER-SIDE via
+ * `resolve_active_tenant` — never a client-supplied tenant id. `logoUrl` is null
+ * until branding is configured (the UI then falls back to initials). This is the
+ * CLIENT/tenant brand; Hermès OS remains the product brand.
+ */
+export type TenantIdentity = {
+  resolutionStatus: TenantResolutionStatus;
+  tenantId: string | null;
+  name: string | null;
+  displayName: string | null;
+  logoUrl: string | null;
+};
+
 export type DashboardProjects = {
   resolutionStatus: TenantResolutionStatus;
   tenantId: string | null;

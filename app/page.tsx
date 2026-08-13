@@ -13,6 +13,7 @@ import {
   getObservabilitySnapshot,
   getOperationalPriorities,
 } from "@/services/hermes/panels";
+import { getActiveTenantIdentity } from "@/services/hermes/tenantIdentity";
 
 export default async function HomePage() {
   // Server-side auth boundary: unauthenticated users never reach the dashboard.
@@ -27,6 +28,7 @@ export default async function HomePage() {
 
   // Real backend reads. Tenant authorization is enforced inside the RPCs.
   const [
+    tenant,
     kpis,
     projects,
     conversations,
@@ -35,6 +37,7 @@ export default async function HomePage() {
     observability,
     cost,
   ] = await Promise.all([
+    getActiveTenantIdentity(),
     getPublicKpis(),
     getDashboardProjects(),
     getRecentConversations(),
@@ -47,6 +50,7 @@ export default async function HomePage() {
   return (
     <DashboardShell
       userEmail={user.email ?? ""}
+      tenant={tenant}
       kpis={kpis}
       projects={projects}
       conversations={conversations}

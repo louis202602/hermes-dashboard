@@ -1,4 +1,4 @@
-import { Bot, Boxes, GitBranch, Workflow } from "lucide-react";
+import { Bot, Boxes, CircleSlash, GitBranch, Workflow } from "lucide-react";
 
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
 import type { PublicKpis, ServiceResult } from "@/types/hermes";
@@ -11,14 +11,24 @@ const numberFormat = new Intl.NumberFormat("fr-FR");
 
 export default function KpiGrid({ kpis }: KpiGridProps) {
   if (!kpis.ok) {
+    // Compact, full-width UNAVAILABLE state — never an isolated tall card that
+    // breaks the grid composition.
     return (
-      <section className="kpi-grid">
+      <section className="kpi-grid" aria-label="Indicateurs plateforme (indisponibles)">
         <article className="kpi-card kpi-card-unavailable">
-          <span className="kpi-title">Indicateurs plateforme</span>
-          <strong className="kpi-value">Indisponible</strong>
-          <span className="kpi-subtle">
-            Les indicateurs ne peuvent pas être chargés pour le moment.
-          </span>
+          <div className="kpi-unavailable-inner">
+            <span className="kpi-unavailable-icon">
+              <CircleSlash size={18} strokeWidth={1.9} />
+            </span>
+            <div>
+              <span className="kpi-title">Indicateurs plateforme</span>
+              <strong>Indisponible</strong>
+              <span className="kpi-subtle">
+                Les indicateurs ne peuvent pas être chargés pour le moment.
+              </span>
+            </div>
+            <ProvenanceBadge provenance="UNAVAILABLE" />
+          </div>
         </article>
       </section>
     );

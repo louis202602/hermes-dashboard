@@ -60,7 +60,10 @@ export function buildContentSecurityPolicy(
       isDev ? " 'unsafe-eval'" : ""
     }`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    // `https:` permits externally-hosted, operator-configured TENANT LOGOS
+    // (images only — scripts stay strictly nonce-based). Same-origin, data: and
+    // blob: are also allowed.
+    "img-src 'self' data: blob: https:",
     "font-src 'self'",
     "connect-src 'self'",
     "worker-src 'self' blob:",

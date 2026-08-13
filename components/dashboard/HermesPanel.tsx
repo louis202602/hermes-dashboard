@@ -1,13 +1,18 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import {
   ArrowUp,
+  File as FileIcon,
+  FileText,
+  Film,
+  Image as ImageIcon,
   Mic,
+  Music,
+  Plus,
   ShieldCheck,
-  Sparkles,
   Square,
   Volume2,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -16,45 +21,25 @@ import {
   applyHermesResolutionAction,
   submitHermesMessageAction,
 } from "@/app/actions/hermes-orchestration";
+import {
+  FILE_INPUT_ACCEPT,
+  formatBytes,
+  isPreviewable,
+  kindFor,
+  validateFiles,
+  type AttachmentKind,
+  type FileMeta,
+} from "@/lib/attachments/attachments";
 import { useVoice } from "@/lib/voice/useVoice";
 import {
   isVoiceInputMode,
   isVoiceOutputMode,
   normalizeTranscript,
   sanitizeForSpeech,
-  VOICE_MODE_LABEL,
   type VoiceMode,
   type VoicePhase,
 } from "@/lib/voice/speech";
 import { TERMINAL_RESULT_STATUSES } from "@/types/agent-actions";
-
-const VOICE_MODES: VoiceMode[] = [
-  "TEXT_ONLY",
-  "VOICE_INPUT_TEXT_OUTPUT",
-  "VOICE_INPUT_VOICE_OUTPUT",
-];
-
-type HoloState =
-  | "idle"
-  | "listening"
-  | "thinking"
-  | "success"
-  | "warning"
-  | "error"
-  | "offline";
-
-const HermesHologram = dynamic(
-  () => import("@/components/hermes/HermesHologram"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="hermes-hologram-loading">
-        <Sparkles size={28} strokeWidth={1.7} />
-        <span>Initialisation d’Hermès…</span>
-      </div>
-    ),
-  },
-);
 
 type Turn = {
   id: string;
@@ -69,6 +54,51 @@ type Turn = {
   userText?: string; // the user message that produced this turn (for retry)
 };
 
+// A LOCAL-only composer attachment (Phase A). It is never uploaded or sent to
+// Hermès — there is no storage/upload/multimodal backend yet (see PR audit).
+// `url` is a browser object URL used solely for an image/video thumbnail and is
+// revoked on remove/unmount.
+type LocalAttachment = {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  kind: AttachmentKind;
+  url?: string;
+};
+
+// Honest, user-facing wording — files are not transmitted in Phase A.
+const ATTACH_SEND_BLOCKED_MSG =
+  "L’envoi de fichiers à Hermès arrive prochainement. Retirez la pièce jointe pour envoyer votre message texte maintenant.";
+const ATTACH_LOCAL_ONLY_MSG =
+  "Aperçu local — les pièces jointes ne sont pas encore transmises à Hermès.";
+
+function attachmentKindLabel(kind: AttachmentKind): string {
+  switch (kind) {
+    case "image":
+      return "Image";
+    case "video":
+      return "Vidéo";
+    case "audio":
+      return "Audio";
+    case "pdf":
+      return "PDF";
+    case "document":
+      return "Document";
+    default:
+      return "Fichier";
+  }
+}
+
+function AttachmentGlyph({ kind }: { kind: AttachmentKind }) {
+  if (kind === "image") return <ImageIcon size={18} strokeWidth={1.8} />;
+  if (kind === "video") return <Film size={18} strokeWidth={1.8} />;
+  if (kind === "audio") return <Music size={18} strokeWidth={1.8} />;
+  if (kind === "pdf" || kind === "document")
+    return <FileText size={18} strokeWidth={1.8} />;
+  return <FileIcon size={18} strokeWidth={1.8} />;
+}
+
 const STATE_LABEL: Record<string, string> = {
   IDLE: "Au repos",
   SUBMITTING: "Envoi…",
@@ -80,7 +110,7 @@ const STATE_LABEL: Record<string, string> = {
   PENDING_APPROVAL: "Approbation requise",
   SUCCEEDED: "Succès",
   FAILED: "Échec",
-  POLICY_DENIED: "Refusée (SW15)",
+  POLICY_DENIED: "Refusée (sécurité)",
   REJECTED: "Refusée",
   TIMEOUT: "Délai dépassé",
   RPC_ERROR: "Service indisponible",
@@ -90,33 +120,6 @@ const STATE_LABEL: Record<string, string> = {
   NO_TENANT: "Aucun tenant",
   ERROR: "Erreur",
 };
-
-function holoFor(state: string): HoloState {
-  switch (state) {
-    case "IDLE":
-    case "ANSWER_ONLY":
-      return "idle";
-    case "SUBMITTING":
-      return "listening";
-    case "RESOLVING":
-    case "QUEUED":
-    case "RUNNING":
-      return "thinking";
-    case "PENDING_APPROVAL":
-    case "TIMEOUT":
-    case "NEEDS_CLARIFICATION":
-    case "VALIDATION_FAILED":
-      return "warning";
-    case "SUCCEEDED":
-      return "success";
-    case "RPC_ERROR":
-      return "offline";
-    case "IDLE_DEFAULT":
-      return "idle";
-    default:
-      return "error";
-  }
-}
 
 function toneFor(state: string): "ok" | "bad" | "warn" | "pending" {
   if (state === "SUCCEEDED") return "ok";
@@ -170,13 +173,81 @@ export default function HermesPanel() {
   >(null);
   const threadRef = useRef<HTMLDivElement>(null);
 
+  // --- LOCAL attachments (Phase A — browser-only, never transmitted) --------
+  // The composer's "+" lets the user pick files for a LOCAL preview only. There
+  // is no upload/storage/multimodal backend yet, so files are never sent; the
+  // send is blocked while any attachment is present and the UI says so plainly.
+  const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
+  const [attachNote, setAttachNote] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachmentsRef = useRef<LocalAttachment[]>([]);
+  useEffect(() => {
+    attachmentsRef.current = attachments;
+  }, [attachments]);
+  // Revoke any object URLs when the panel unmounts (previews are local only).
+  useEffect(() => {
+    return () => {
+      for (const a of attachmentsRef.current) {
+        if (a.url) URL.revokeObjectURL(a.url);
+      }
+    };
+  }, []);
+
+  function openFilePicker() {
+    fileInputRef.current?.click();
+  }
+
+  function onFilesPicked(event: React.ChangeEvent<HTMLInputElement>) {
+    const list = event.target.files;
+    if (!list || list.length === 0) return;
+    const added: LocalAttachment[] = [];
+    const ignored: string[] = [];
+    let current = attachments.length;
+    for (const file of Array.from(list)) {
+      const meta: FileMeta = { name: file.name, size: file.size, type: file.type };
+      const { accepted, errors } = validateFiles([meta], current);
+      if (accepted.length === 1) {
+        const kind = kindFor(meta);
+        const url = isPreviewable(kind) ? URL.createObjectURL(file) : undefined;
+        added.push({ id: newRequestId(), name: file.name, size: file.size, type: file.type, kind, url });
+        current += 1;
+      } else if (errors.length > 0) {
+        ignored.push(`${errors[0].name} (${errors[0].reason})`);
+      }
+    }
+    if (added.length > 0) setAttachments((prev) => [...prev, ...added]);
+    setAttachNote(
+      ignored.length > 0 ? `Fichier(s) ignoré(s) : ${ignored.join(" ; ")}` : null,
+    );
+    // Reset so re-picking the same file fires onChange again.
+    event.target.value = "";
+  }
+
+  function removeAttachment(id: string) {
+    setAttachments((prev) => {
+      const target = prev.find((a) => a.id === id);
+      if (target?.url) URL.revokeObjectURL(target.url);
+      return prev.filter((a) => a.id !== id);
+    });
+    setAttachNote(null);
+  }
+
   // --- Voice I/O (browser-native; no provider secret) ---------------------
   // Voice is purely an input/output layer over the SAME orchestrator pipeline.
   // The transcript is submitted exactly like typed text; TTS only reads the
   // final reply and never approves, never bypasses SW15.
-  const [voiceMode, setVoiceMode] = useState<VoiceMode>("TEXT_ONLY");
+  // Voice output ("lire les réponses à voix haute") is a discreet persistent
+  // toggle; voice input (mic) is press-to-talk. The three technical VoiceModes
+  // still drive the pipeline exactly as before, but are DERIVED from these —
+  // never exposed to the user as a mode selector.
+  const [readAloud, setReadAloud] = useState(false);
   const [micRequested, setMicRequested] = useState(false);
   const voice = useVoice();
+  const voiceMode: VoiceMode = !voice.support.stt
+    ? "TEXT_ONLY"
+    : readAloud && voice.support.tts
+      ? "VOICE_INPUT_VOICE_OUTPUT"
+      : "VOICE_INPUT_TEXT_OUTPUT";
   // Refs so async flows (send / resolve effect) read the latest mode + voice
   // handles without widening effect dependencies.
   const voiceModeRef = useRef(voiceMode);
@@ -274,11 +345,26 @@ export default function HermesPanel() {
         setTurns((prev) =>
           prev.map((t) =>
             t.id === turnId
-              ? { ...t, text: "Délai d’analyse dépassé. Réessayez.", outcome: "ERROR" }
+              ? {
+                  ...t,
+                  // Honest: the request was accepted and queued, but no result
+                  // came back in time. Never presented as a failure of intent or
+                  // as a (fake) success.
+                  text:
+                    "Votre demande a bien été reçue et mise en file, mais n’a pas encore été traitée (délai d’attente dépassé). Réessayez plus tard.",
+                  outcome: "TIMEOUT",
+                  lifecycle: undefined,
+                }
               : t,
           ),
         );
         setActiveResolve(null);
+      } else {
+        // Reflect the real, honest queue status while waiting (QUEUED / RUNNING)
+        // instead of a static "analyse en cours".
+        setTurns((prev) =>
+          prev.map((t) => (t.id === turnId ? { ...t, lifecycle: r.status } : t)),
+        );
       }
     }, 1500);
     return () => clearInterval(timer);
@@ -294,12 +380,22 @@ export default function HermesPanel() {
     event.preventDefault();
     const text = input.trim();
     if (text.length === 0 || sending) return;
+    if (attachments.length > 0) {
+      setAttachNote(ATTACH_SEND_BLOCKED_MSG);
+      return;
+    }
     setInput("");
     await send(text);
   }
 
   async function send(text: string) {
     if (text.length === 0 || sending) return;
+    // Phase A: files are local-only. Never send a message while an attachment
+    // is present (avoids any impression the file was transmitted to Hermès).
+    if (attachmentsRef.current.length > 0) {
+      setAttachNote(ATTACH_SEND_BLOCKED_MSG);
+      return;
+    }
 
     setMicRequested(false);
     const rid = newRequestId();
@@ -350,7 +446,6 @@ export default function HermesPanel() {
     state = lastAssistant.lifecycle ?? lastAssistant.outcome ?? "IDLE";
   }
 
-  const holo = holoFor(turns.length === 0 && !sending ? "IDLE" : state);
   const tone = toneFor(state);
   const label = STATE_LABEL[state] ?? state;
   const inFlight =
@@ -362,18 +457,15 @@ export default function HermesPanel() {
 
   // --- Voice controls ------------------------------------------------------
   const voiceInputActive = isVoiceInputMode(voiceMode);
-  const canListen = voiceInputActive && voice.support.stt;
+  const canListen = voice.support.stt;
 
-  function handleModeChange(mode: VoiceMode) {
-    if (isVoiceInputMode(mode) && !voice.support.stt) {
-      // Fail-closed: this browser (e.g. iOS Safari) has no speech recognition —
-      // do not offer a voice-input mode that cannot work; text stays available.
-      return;
-    }
-    voice.cancelSpeech();
-    voice.stopListening();
-    setMicRequested(false);
-    setVoiceMode(mode);
+  function toggleReadAloud() {
+    setReadAloud((on) => {
+      const next = !on;
+      // Disabling stops any in-progress speech immediately.
+      if (!next) voice.cancelSpeech();
+      return next;
+    });
   }
 
   async function handleFinalTranscript(raw: string) {
@@ -404,43 +496,224 @@ export default function HermesPanel() {
   else if (micRequested) micPhase = "REQUESTING_PERMISSION";
 
   return (
-    <section className="hermes-panel">
-      <div className="hermes-panel-glow" />
-
+    <section className="hermes-panel hermes-panel-exec">
       <div className="hermes-panel-header">
-        <div>
+        <div className="hermes-head-titles">
           <span className="panel-eyebrow">DIRECTEUR GÉNÉRAL IA</span>
           <h2>Hermès</h2>
           <p>
-            Parlez à Hermès en langage naturel : il comprend votre intention,
-            sélectionne une capacité autorisée et l’exécute via la passerelle
-            sécurisée (permissions, SW15, audit).
+            Décrivez votre intention en langage naturel : Hermès sélectionne une
+            action autorisée et l’exécute en toute sécurité — vos permissions et
+            un journal d’audit s’appliquent toujours.
           </p>
         </div>
 
-        <div className={`hermes-status-badge is-${tone}`} data-testid="hermes-state">
-          <span className="status-pulse" />
-          <span>{label}</span>
+        <div className="hermes-head-meta">
+          <div className={`hermes-status-badge is-${tone}`} data-testid="hermes-state">
+            <span className="status-pulse" />
+            <span>{label}</span>
+          </div>
+          <span
+            className="hermes-conn"
+            title="Connecté au backend Hermès — données réelles"
+          >
+            <ShieldCheck size={12} strokeWidth={2} />
+            <span>Connecté à hermes_os</span>
+          </span>
         </div>
       </div>
 
-      <div className="hermes-panel-content">
-        <div className="hermes-visual-zone">
-          <div className="hermes-orbit hermes-orbit-one" />
-          <div className="hermes-orbit hermes-orbit-two" />
-          <div className="hermes-orbit hermes-orbit-three" />
+      <div className="hermes-exec-grid">
+        {/* PRIMARY — interact with Hermès (the real centre of this block). */}
+        <form onSubmit={handleSubmit} className="hermes-command-zone">
+          <span className="panel-eyebrow hermes-composer-eyebrow">
+            Demander à Hermès
+          </span>
 
-          <div className="hermes-hologram-frame">
-            <HermesHologram state={holo} />
+          <textarea
+            name="command"
+            aria-label="Message pour Hermès"
+            className="hermes-composer-input"
+            placeholder="Demandez à Hermès — ex. « qualifie le chantier Toiture Atelier Nord »"
+            rows={2}
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+          />
+
+          {/* LOCAL attachment previews (Phase A) — thumbnails for image/video,
+              icon + name + type + size otherwise; each removable. Never sent. */}
+          {attachments.length > 0 ? (
+            <div className="hermes-attachments" data-testid="hermes-attachments">
+              <ul className="hermes-attachment-list">
+                {attachments.map((a) => (
+                  <li key={a.id} className={`hermes-attachment is-${a.kind}`}>
+                    <span className="hermes-attachment-thumb">
+                      {a.url && a.kind === "image" ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={a.url} alt="" />
+                      ) : a.url && a.kind === "video" ? (
+                        <video src={a.url} muted playsInline preload="metadata" />
+                      ) : (
+                        <AttachmentGlyph kind={a.kind} />
+                      )}
+                    </span>
+                    <span className="hermes-attachment-meta">
+                      <strong title={a.name}>{a.name}</strong>
+                      <span>
+                        {attachmentKindLabel(a.kind)} · {formatBytes(a.size)}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      className="hermes-attachment-remove"
+                      onClick={() => removeAttachment(a.id)}
+                      aria-label={`Retirer ${a.name}`}
+                      title="Retirer"
+                    >
+                      <X size={13} strokeWidth={2} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <p className="hermes-attachment-note">{ATTACH_LOCAL_ONLY_MSG}</p>
+            </div>
+          ) : null}
+          {attachNote ? (
+            <p className="hermes-attachment-alert" role="status">
+              {attachNote}
+            </p>
+          ) : null}
+
+          {/* Voice feedback is contextual — only while the mic or speech is
+              actually active, never a permanent panel. */}
+          {micPhase !== "IDLE" ? (
+            <div
+              className={`hermes-voice-status is-${micPhase.toLowerCase()}`}
+              data-testid="hermes-voice-status"
+              data-phase={micPhase}
+              aria-live="polite"
+            >
+              <span className="hermes-voice-dot" />
+              <span className="hermes-voice-text">
+                {voice.error
+                  ? voice.error
+                  : voice.listening
+                    ? voice.interim
+                      ? `« ${voice.interim} »`
+                      : "Écoute… parlez maintenant."
+                    : voice.speaking
+                      ? "Hermès parle…"
+                      : micRequested
+                        ? "Autorisation micro…"
+                        : "Analyse en cours…"}
+              </span>
+              {voice.speaking ? (
+                <button
+                  type="button"
+                  className="hermes-voice-stop"
+                  onClick={() => voice.cancelSpeech()}
+                  data-testid="hermes-voice-stop"
+                >
+                  <Square size={13} strokeWidth={2} />
+                  <span>Stop</span>
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="hermes-command-actions">
+            {/* Read-aloud is a discreet, secondary toggle. */}
+            <div className="hermes-command-left">
+              {/* "+" — pick files for a LOCAL preview (Phase A, never sent). */}
+              <button
+                type="button"
+                className="hermes-plus-button"
+                onClick={openFilePicker}
+                aria-label="Ajouter une pièce jointe"
+                title="Ajouter une pièce jointe — image, vidéo, audio, PDF, document (aperçu local)"
+                data-testid="hermes-plus-button"
+              >
+                <Plus size={17} strokeWidth={2.2} />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={FILE_INPUT_ACCEPT}
+                multiple
+                onChange={onFilesPicked}
+                className="hermes-file-input"
+                tabIndex={-1}
+                aria-hidden="true"
+                data-testid="hermes-file-input"
+              />
+              {voice.support.tts ? (
+                <button
+                  type="button"
+                  className={`hermes-io-toggle${readAloud ? " is-on" : ""}`}
+                  onClick={toggleReadAloud}
+                  aria-pressed={readAloud}
+                  title={
+                    readAloud
+                      ? "Réponses lues à voix haute — désactiver"
+                      : "Lire les réponses à voix haute"
+                  }
+                  data-testid="hermes-readaloud-toggle"
+                >
+                  <Volume2 size={15} strokeWidth={1.9} />
+                </button>
+              ) : null}
+              <span className="hermes-command-hint">
+                Vos permissions et un journal d’audit s’appliquent à chaque action.
+              </span>
+            </div>
+
+            {/* Mic = "parler à Hermès" (press-to-talk); send stays clear. */}
+            <div className="hermes-command-buttons">
+              {voice.support.stt ? (
+                <button
+                  type="button"
+                  className={`hermes-mic-button${
+                    voice.listening ? " is-listening" : ""
+                  }`}
+                  onClick={handleMicClick}
+                  disabled={inFlight}
+                  aria-pressed={voice.listening}
+                  title={voice.listening ? "Arrêter l’écoute" : "Parler à Hermès"}
+                  aria-label={
+                    voice.listening ? "Arrêter l’écoute" : "Parler à Hermès"
+                  }
+                  data-testid="hermes-mic-button"
+                >
+                  {voice.listening ? (
+                    <Square size={16} strokeWidth={2} />
+                  ) : (
+                    <Mic size={16} strokeWidth={2} />
+                  )}
+                </button>
+              ) : null}
+
+              <button
+                type="submit"
+                className="hermes-send-button"
+                disabled={
+                  inFlight || input.trim().length === 0 || attachments.length > 0
+                }
+                title={attachments.length > 0 ? ATTACH_SEND_BLOCKED_MSG : undefined}
+              >
+                <span>{sending ? "Envoi…" : "Envoyer"}</span>
+                <ArrowUp size={16} strokeWidth={2} />
+              </button>
+            </div>
           </div>
+        </form>
 
-          <div className="hermes-core-label">
-            <Sparkles size={14} strokeWidth={1.8} />
-            <span>HERMÈS CORE</span>
-          </div>
-        </div>
-
-        <div className="hermes-insight-panel">
+        {/* SECONDARY — live state + recent turns (compact, never the centre). */}
+        <aside className="hermes-insight-panel">
           <div className="hermes-insight-top">
             <div className={`hermes-insight-icon is-${tone}`}>
               <ShieldCheck size={18} strokeWidth={1.8} />
@@ -474,7 +747,7 @@ export default function HermesPanel() {
                   ) : null}
                   {t.role === "assistant" && t.lifecycle === "PENDING_APPROVAL" ? (
                     <span className="hermes-lifecycle-hint">
-                      Approbation humaine requise (SW15) — traitez la demande dans «
+                      Approbation humaine requise — traitez la demande dans «
                       Approbations en attente » ci-dessous ; la conversation
                       reprendra automatiquement après décision.
                     </span>
@@ -496,152 +769,8 @@ export default function HermesPanel() {
               ))
             )}
           </div>
-        </div>
+        </aside>
       </div>
-
-      <form onSubmit={handleSubmit} className="hermes-command-zone">
-        <div className="hermes-command-header">
-          <div>
-            <span className="panel-eyebrow">COMMANDE</span>
-            <strong>Demandez à Hermès ou lancez une action…</strong>
-          </div>
-
-          <div
-            className="hermes-mode-switch"
-            role="group"
-            aria-label="Mode d’interaction"
-            data-testid="hermes-mode-switch"
-          >
-            {VOICE_MODES.map((mode) => {
-              const disabled = isVoiceInputMode(mode) && !voice.support.stt;
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  className={`hermes-mode-chip${
-                    voiceMode === mode ? " is-active" : ""
-                  }`}
-                  aria-pressed={voiceMode === mode}
-                  disabled={disabled}
-                  title={
-                    disabled
-                      ? "Reconnaissance vocale non disponible sur ce navigateur"
-                      : undefined
-                  }
-                  onClick={() => handleModeChange(mode)}
-                >
-                  {VOICE_MODE_LABEL[mode]}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {voiceInputActive && !voice.support.stt ? (
-          <p className="hermes-voice-note" role="note">
-            La reconnaissance vocale n’est pas disponible sur ce navigateur (par
-            ex. Safari iOS). Le mode texte reste pleinement utilisable.
-          </p>
-        ) : null}
-
-        <div className="hermes-command-box">
-          <textarea
-            name="command"
-            aria-label="Message pour Hermès"
-            placeholder="Exemple : qualifie le chantier Toiture Atelier Nord"
-            rows={3}
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                event.currentTarget.form?.requestSubmit();
-              }
-            }}
-          />
-
-          {voiceInputActive ? (
-            <div
-              className={`hermes-voice-status is-${micPhase.toLowerCase()}`}
-              data-testid="hermes-voice-status"
-              data-phase={micPhase}
-              aria-live="polite"
-            >
-              <span className="hermes-voice-dot" />
-              <span className="hermes-voice-text">
-                {voice.error
-                  ? voice.error
-                  : voice.listening
-                    ? voice.interim
-                      ? `« ${voice.interim} »`
-                      : "Écoute… parlez maintenant."
-                    : voice.speaking
-                      ? "Hermès parle…"
-                      : micRequested
-                        ? "Autorisation micro…"
-                        : "Micro prêt. Touchez pour parler."}
-              </span>
-              {voice.speaking ? (
-                <button
-                  type="button"
-                  className="hermes-voice-stop"
-                  onClick={() => voice.cancelSpeech()}
-                  data-testid="hermes-voice-stop"
-                >
-                  <Square size={13} strokeWidth={2} />
-                  <span>Stop</span>
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-
-          <div className="hermes-command-actions">
-            <span className="hermes-command-hint">
-              Actions réelles : qualification de chantier, diagnostic. Hermès ne
-              contourne jamais permissions ni SW15.
-            </span>
-
-            <div className="hermes-command-buttons">
-              {voiceInputActive ? (
-                <button
-                  type="button"
-                  className={`hermes-mic-button${
-                    voice.listening ? " is-listening" : ""
-                  }`}
-                  onClick={handleMicClick}
-                  disabled={!canListen || inFlight}
-                  aria-pressed={voice.listening}
-                  aria-label={
-                    voice.listening ? "Arrêter l’écoute" : "Parler à Hermès"
-                  }
-                  data-testid="hermes-mic-button"
-                >
-                  {voice.listening ? (
-                    <Square size={16} strokeWidth={2} />
-                  ) : (
-                    <Mic size={16} strokeWidth={2} />
-                  )}
-                  <span>{voice.listening ? "Arrêter" : "Parler"}</span>
-                </button>
-              ) : null}
-
-              {isVoiceOutputMode(voiceMode) && voice.support.tts ? (
-                <span className="hermes-voice-badge" title="Réponse vocale active">
-                  <Volume2 size={14} strokeWidth={1.9} />
-                </span>
-              ) : null}
-
-              <button
-                type="submit"
-                className="hermes-send-button"
-                disabled={inFlight || input.trim().length === 0}
-              >
-                <span>{sending ? "Envoi…" : "Envoyer à Hermès"}</span>
-                <ArrowUp size={17} strokeWidth={2} />
-              </button>
-            </div>
-          </div>
-        </div>
-      </form>
     </section>
   );
 }
