@@ -97,6 +97,38 @@ consumers INACTIVE (zero live traffic through claim/complete):
   actual provider token usage × price once the exact n8n usage field is confirmed
   during the controlled OpenAI run.
 
+## 0quater. Controlled real E2E of the resolver (2026-08-13, pass 4)
+
+Authorized controlled run on the isolated test request only (a test-only
+by-request claim; the 4 real QUEUED rows were provably never touched).
+
+- **Bug caught + fixed by the run:** the SW23 nodes ran two statements
+  (`set_session_tenant; sw23_*`), returning two items and breaking n8n item
+  pairing (empty agent prompt; invalid release params → the first run errored).
+  Fixed to a **single result set** — set the SW23 tenant via `set_config` in a
+  `FROM` subquery — in both the deployed workflow and this source.
+- **Second run = SUCCESS, real end-to-end:**
+  claim → real `lease_token` → `SW23 Route+Reserve` (real catalog price, selected
+  `openai/gpt-5.4-nano`, reserved 0.0011 USD) → **real OpenAI call** (gpt-5.4-nano,
+  ~2.9 s) → real structured proposal `{outcome: ACTION, action_key:
+  btp.qualification.create, confidence: 0.78, parameters:{chantier_name:"Toiture
+  Atelier Nord"}}` → `SW23 Commit` (`committed`, 0.0011 USD) → **fenced 6-arg**
+  `complete_agent_action(..., lease_token)` → row **SUCCEEDED**; SW12 audit
+  `CLAIMED:1, SUCCEEDED:1`.
+- **Cost:** the reservation/commit used the routed real-priced estimate (0.0011
+  USD). The n8n agent node exposes only a prompt-token estimate
+  (`tokenUsageEstimate.promptTokens≈553`, completion not captured) for this
+  structured/tool-calling flow, so a precise provider-actual commit is an n8n
+  limitation (follow-up). Total OpenAI test cost: **< $0.01** (one nano call).
+- **Cleanup:** test request, SW23 ledger/audit/idempotency, and the by-request
+  test function all removed; the workflow's claim reverted to the global
+  action-scoped claim; **workflow INACTIVE**. The 4 real QUEUED rows: intact.
+- **NOT covered (needs a real authenticated session — no bypass):** the
+  authenticated UI path `orchestrate_hermes_message` (enqueue) and
+  `apply_hermes_resolution → gateway → SW15`. Those require a confirmed test auth
+  user + GoTrue session; the resolver-execution core is proven real, that leg is
+  the remaining item.
+
 ---
 
 

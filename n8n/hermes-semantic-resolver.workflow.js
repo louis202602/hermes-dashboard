@@ -78,7 +78,10 @@ const routeReserve = node({
     name: 'SW23 Route+Reserve',
     parameters: {
       operation: 'executeQuery',
-      query: "select hermes_os.sw23_set_session_tenant($1); select hermes_os.sw23_route_and_reserve($1,$2,'hermes.intent.resolve','intent_routing','simple','normal','[]'::jsonb,'[\"text\"]'::jsonb,$3::numeric,$4::numeric,'openai','gpt-5.4-nano','[]'::jsonb,'day',now(),true) as route",
+      // Single result set: set the SW23 session tenant via set_config in a FROM
+      // subquery so route_and_reserve sees the GUC. (A two-statement query returns
+      // two items and breaks n8n item pairing — caught by the controlled E2E run.)
+      query: "select hermes_os.sw23_route_and_reserve($1,$2,'hermes.intent.resolve','intent_routing','simple','normal','[]'::jsonb,'[\"text\"]'::jsonb,$3::numeric,$4::numeric,'openai','gpt-5.4-nano','[]'::jsonb,'day',now(),true) as route from (select set_config('app.sw23_tenant_id',$1,true)) _t",
       options: { queryReplacement: expr("{{ [ $('Claim Resolve').item.json.claim.tenant_id, $('Claim Resolve').item.json.claim.request_id, " + JSON.stringify(EST_INPUT_TOKENS) + ", " + JSON.stringify(EST_OUTPUT_TOKENS) + " ] }}") },
     },
     credentials: PG,
@@ -166,7 +169,7 @@ const commit = node({
     name: 'SW23 Commit',
     parameters: {
       operation: 'executeQuery',
-      query: "select hermes_os.sw23_set_session_tenant($1); select hermes_os.sw23_commit_budget($1,$2,'day',$3::numeric) as commit",
+      query: "select hermes_os.sw23_commit_budget($1,$2,'day',$3::numeric) as commit from (select set_config('app.sw23_tenant_id',$1,true)) _t",
       options: { queryReplacement: expr("{{ [ $('Claim Resolve').item.json.claim.tenant_id, $('Claim Resolve').item.json.claim.request_id, $('SW23 Route+Reserve').item.json.route.estimated_cost ] }}") },
     },
     credentials: PG,
@@ -181,7 +184,7 @@ const release = node({
     name: 'SW23 Release',
     parameters: {
       operation: 'executeQuery',
-      query: "select hermes_os.sw23_set_session_tenant($1); select hermes_os.sw23_release_budget($1,$2,'day') as release",
+      query: "select hermes_os.sw23_release_budget($1,$2,'day') as release from (select set_config('app.sw23_tenant_id',$1,true)) _t",
       options: { queryReplacement: expr("{{ [ $('Claim Resolve').item.json.claim.tenant_id, $('Claim Resolve').item.json.claim.request_id ] }}") },
     },
     credentials: PG,
