@@ -366,3 +366,48 @@ commit → over-budget reserve rejected (HARD_LIMIT) → idempotent replay (no d
 counting) → release frees budget (WARNING→NORMAL)**, snapshot tracking each step;
 **cross-tenant** → `SW23_TENANT_MISMATCH` on the engine and caller-tenant-only in
 the reader.
+
+## Chat attachments — private, tenant-isolated transmission (2026-08-13)
+
+**Migration:** `20260813_hermes_chat_attachments_1.sql` (rollback `…_9_rollback.sql`).
+
+Phase B of the Hermès composer: the `+` button really uploads files. Transport
+only — there is **no** content understanding (no LLM / OCR / transcription; that
+is the forbidden Phase C). Video is recognised but **NOT_SUPPORTED_YET** in V1.
+
+**What it creates**
+
+- A **PRIVATE** Storage bucket `hermes-chat-attachments` (`public=false`; reads
+  only via short-TTL signed URLs — never `getPublicUrl`). 25 MiB hard ceiling +
+  a declared-mime allowlist as coarse secondary guards.
+- `storage.objects` RLS scoped to this bucket only. Object key is
+  `<tenant_id>/<user_id>/<attachment_id>/<safe_filename>`; the policies
+  re-derive `foldername[1]=tenant` (must be a `tenant.member`, via SECURITY
+  DEFINER `hermes_os.is_active_tenant_member`) and `foldername[2]=auth.uid()`.
+  A client can never widen its scope by supplying a different path.
+- `hermes_os.hermes_message_attachments` — one row per object; `message_id` is
+  filled by the post-message link step (nullable → `UPLOADED_PENDING_LINK`).
+  RLS enabled with **no policy** ⇒ deny-all; reached only via the facades.
+- Facades (SECURITY DEFINER, `search_path` locked, `authenticated` only,
+  fail-closed): `finalize_hermes_attachment` (records after upload; re-checks
+  path prefix / category / size cap / checksum), `link_hermes_attachments`
+  (attaches to a message the caller **owns**; honest linked/requested counts),
+  `get_hermes_message_attachments` (owner-scoped read → storage_path for signing),
+  plus bounded, callable orphan helpers `list_orphan_hermes_attachments` /
+  `mark_hermes_attachment_deleted` (TTL-based, **no** auto worker / no schedule).
+
+**Untouched:** the orchestrator (`orchestrate_hermes_message`) is NOT modified —
+linking is a separate step. No n8n / business workflow / branding change.
+
+**Per-category caps:** image 10 MiB · document 20 MiB · audio 25 MiB; max 10
+files & 50 MiB per message (enforced client-side + server-side). Fail-closed
+validation (magic-byte sniff + allowlist + filename sanitisation + checksum)
+lives in `lib/attachments/serverValidate.ts` (unit-tested).
+
+**Real security assertions (SQL impersonation, all rolled back — zero fixtures
+persisted; see `db/tests/hermes_chat_attachments_rls.test.sql`):** member happy
+path OK; out-of-scope path → `PATH_OUT_OF_SCOPE`; bad checksum → `BAD_CHECKSUM`;
+link to owned message OK, read-back = 1; **non-member** finalize/link/read →
+`TENANT_NO_TENANT` / empty; **unauthenticated** → `UNAUTHENTICATED`. Storage RLS
+(as the `authenticated` role): insert-own **ALLOWED**; cross-tenant, cross-user
+and unauthenticated inserts **DENIED**; cross-user read filtered to 0.

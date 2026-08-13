@@ -18,11 +18,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { pollAgentActionResultAction } from "@/app/actions/agent-actions";
 import {
+  linkHermesAttachmentsAction,
+  uploadHermesAttachmentAction,
+} from "@/app/actions/hermes-attachments";
+import {
   applyHermesResolutionAction,
   submitHermesMessageAction,
 } from "@/app/actions/hermes-orchestration";
 import {
-  FILE_INPUT_ACCEPT,
   formatBytes,
   isPreviewable,
   kindFor,
@@ -30,6 +33,8 @@ import {
   type AttachmentKind,
   type FileMeta,
 } from "@/lib/attachments/attachments";
+import { ATTACHMENT_ACCEPT_V1 } from "@/lib/attachments/serverValidate";
+import type { AttachmentUploadState } from "@/types/hermes-attachments";
 import { useVoice } from "@/lib/voice/useVoice";
 import {
   isVoiceInputMode,
@@ -52,26 +57,51 @@ type Turn = {
   lifecycle?: string; // live gateway status for ACTION turns
   chantierId?: string | null;
   userText?: string; // the user message that produced this turn (for retry)
+  attachmentNames?: string[]; // filenames attached to this user turn
+  attachmentNote?: string; // honest note if linking failed after send
 };
 
-// A LOCAL-only composer attachment (Phase A). It is never uploaded or sent to
-// Hermès — there is no storage/upload/multimodal backend yet (see PR audit).
-// `url` is a browser object URL used solely for an image/video thumbnail and is
-// revoked on remove/unmount.
-type LocalAttachment = {
+// A composer attachment (Phase B — really uploaded). `state` is the TRANSPORT
+// lifecycle only: LOCAL → UPLOADING → UPLOADED (stored privately, not yet
+// linked) → FAILED. It is never "sent"/"analysed"/"understood" (that is the
+// forbidden Phase C). `url` is a browser object URL for an image/video
+// thumbnail, revoked on remove/unmount. `file` is retained so a FAILED upload
+// can be retried. `attachmentId` is the server id once UPLOADED.
+type ComposerAttachment = {
   id: string;
   name: string;
   size: number;
   type: string;
   kind: AttachmentKind;
   url?: string;
+  state: AttachmentUploadState;
+  attachmentId?: string;
+  error?: string;
+  file?: File;
 };
 
-// Honest, user-facing wording — files are not transmitted in Phase A.
-const ATTACH_SEND_BLOCKED_MSG =
-  "L’envoi de fichiers à Hermès arrive prochainement. Retirez la pièce jointe pour envoyer votre message texte maintenant.";
-const ATTACH_LOCAL_ONLY_MSG =
-  "Aperçu local — les pièces jointes ne sont pas encore transmises à Hermès.";
+// Honest, user-facing wording.
+const ATTACH_UPLOADING_MSG =
+  "Téléversement en cours — patientez avant d’envoyer votre message.";
+const ATTACH_FAILED_MSG =
+  "Une pièce jointe n’a pas pu être téléversée. Retirez-la ou réessayez avant d’envoyer.";
+// The files ARE transmitted (private, per-organisation isolated storage) but are
+// NOT analysed by Hermès yet — that stays honest about the current capability.
+const ATTACH_UPLOADED_NOTE =
+  "Pièces jointes téléversées en privé (stockage isolé par organisation). Elles ne sont pas encore analysées par Hermès.";
+
+function attachmentStateLabel(a: ComposerAttachment): string {
+  switch (a.state) {
+    case "UPLOADING":
+      return "Téléversement…";
+    case "UPLOADED":
+      return "Prête";
+    case "FAILED":
+      return a.error ? `Échec — ${a.error}` : "Échec";
+    default:
+      return "En attente";
+  }
+}
 
 function attachmentKindLabel(kind: AttachmentKind): string {
   switch (kind) {
@@ -173,18 +203,19 @@ export default function HermesPanel() {
   >(null);
   const threadRef = useRef<HTMLDivElement>(null);
 
-  // --- LOCAL attachments (Phase A — browser-only, never transmitted) --------
-  // The composer's "+" lets the user pick files for a LOCAL preview only. There
-  // is no upload/storage/multimodal backend yet, so files are never sent; the
-  // send is blocked while any attachment is present and the UI says so plainly.
-  const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
+  // --- Composer attachments (Phase B — really uploaded) ---------------------
+  // The "+" picks files that are validated + uploaded SERVER-SIDE to a private,
+  // per-organisation isolated bucket. The UI reflects the honest TRANSPORT state
+  // (UPLOADING / UPLOADED / FAILED) — never "analysed". Send is allowed once all
+  // attachments are UPLOADED; blocked while any is uploading or failed.
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [attachNote, setAttachNote] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const attachmentsRef = useRef<LocalAttachment[]>([]);
+  const attachmentsRef = useRef<ComposerAttachment[]>([]);
   useEffect(() => {
     attachmentsRef.current = attachments;
   }, [attachments]);
-  // Revoke any object URLs when the panel unmounts (previews are local only).
+  // Revoke any object URLs when the panel unmounts (thumbnails are local).
   useEffect(() => {
     return () => {
       for (const a of attachmentsRef.current) {
@@ -197,10 +228,32 @@ export default function HermesPanel() {
     fileInputRef.current?.click();
   }
 
+  // Upload one file and reflect its transport state on the matching entry.
+  const uploadOne = useCallback(async (id: string, file: File) => {
+    const others = attachmentsRef.current.filter((a) => a.id !== id);
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("existingCount", String(others.length));
+    fd.append(
+      "existingTotalBytes",
+      String(others.reduce((sum, a) => sum + a.size, 0)),
+    );
+    const res = await uploadHermesAttachmentAction(fd);
+    setAttachments((prev) =>
+      prev.map((a) =>
+        a.id === id
+          ? res.ok
+            ? { ...a, state: "UPLOADED", attachmentId: res.attachmentId, error: undefined }
+            : { ...a, state: "FAILED", error: res.reason }
+          : a,
+      ),
+    );
+  }, []);
+
   function onFilesPicked(event: React.ChangeEvent<HTMLInputElement>) {
     const list = event.target.files;
     if (!list || list.length === 0) return;
-    const added: LocalAttachment[] = [];
+    const added: ComposerAttachment[] = [];
     const ignored: string[] = [];
     let current = attachments.length;
     for (const file of Array.from(list)) {
@@ -209,13 +262,28 @@ export default function HermesPanel() {
       if (accepted.length === 1) {
         const kind = kindFor(meta);
         const url = isPreviewable(kind) ? URL.createObjectURL(file) : undefined;
-        added.push({ id: newRequestId(), name: file.name, size: file.size, type: file.type, kind, url });
+        added.push({
+          id: newRequestId(),
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          kind,
+          url,
+          state: "UPLOADING",
+          file,
+        });
         current += 1;
       } else if (errors.length > 0) {
         ignored.push(`${errors[0].name} (${errors[0].reason})`);
       }
     }
-    if (added.length > 0) setAttachments((prev) => [...prev, ...added]);
+    if (added.length > 0) {
+      setAttachments((prev) => [...prev, ...added]);
+      // Kick off the real uploads (state → UPLOADED / FAILED as each settles).
+      for (const a of added) {
+        if (a.file) void uploadOne(a.id, a.file);
+      }
+    }
     setAttachNote(
       ignored.length > 0 ? `Fichier(s) ignoré(s) : ${ignored.join(" ; ")}` : null,
     );
@@ -223,11 +291,28 @@ export default function HermesPanel() {
     event.target.value = "";
   }
 
+  function retryAttachment(id: string) {
+    const target = attachmentsRef.current.find((a) => a.id === id);
+    if (!target?.file) return;
+    setAttachments((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, state: "UPLOADING", error: undefined } : a)),
+    );
+    void uploadOne(id, target.file);
+  }
+
   function removeAttachment(id: string) {
     setAttachments((prev) => {
       const target = prev.find((a) => a.id === id);
       if (target?.url) URL.revokeObjectURL(target.url);
       return prev.filter((a) => a.id !== id);
+    });
+    setAttachNote(null);
+  }
+
+  function clearAttachments() {
+    setAttachments((prev) => {
+      for (const a of prev) if (a.url) URL.revokeObjectURL(a.url);
+      return [];
     });
     setAttachNote(null);
   }
@@ -380,8 +465,12 @@ export default function HermesPanel() {
     event.preventDefault();
     const text = input.trim();
     if (text.length === 0 || sending) return;
-    if (attachments.length > 0) {
-      setAttachNote(ATTACH_SEND_BLOCKED_MSG);
+    if (attachments.some((a) => a.state === "UPLOADING")) {
+      setAttachNote(ATTACH_UPLOADING_MSG);
+      return;
+    }
+    if (attachments.some((a) => a.state === "FAILED")) {
+      setAttachNote(ATTACH_FAILED_MSG);
       return;
     }
     setInput("");
@@ -390,16 +479,28 @@ export default function HermesPanel() {
 
   async function send(text: string) {
     if (text.length === 0 || sending) return;
-    // Phase A: files are local-only. Never send a message while an attachment
-    // is present (avoids any impression the file was transmitted to Hermès).
-    if (attachmentsRef.current.length > 0) {
-      setAttachNote(ATTACH_SEND_BLOCKED_MSG);
+    const current = attachmentsRef.current;
+    // Block only on in-flight or failed uploads. UPLOADED attachments are sent.
+    if (current.some((a) => a.state === "UPLOADING")) {
+      setAttachNote(ATTACH_UPLOADING_MSG);
       return;
     }
+    if (current.some((a) => a.state === "FAILED")) {
+      setAttachNote(ATTACH_FAILED_MSG);
+      return;
+    }
+    const uploaded = current.filter(
+      (a) => a.state === "UPLOADED" && a.attachmentId,
+    );
 
     setMicRequested(false);
     const rid = newRequestId();
-    const userTurn: Turn = { id: `${rid}-u`, role: "user", text };
+    const userTurn: Turn = {
+      id: `${rid}-u`,
+      role: "user",
+      text,
+      attachmentNames: uploaded.length > 0 ? uploaded.map((a) => a.name) : undefined,
+    };
     setTurns((prev) => [...prev, userTurn]);
     setSending(true);
 
@@ -407,6 +508,44 @@ export default function HermesPanel() {
     setSending(false);
 
     if (res.conversationId) setConversationId(res.conversationId);
+
+    // Link uploaded attachments to the now-persisted user message. Honest
+    // outcome: only clear + confirm when EVERY attachment was linked; otherwise
+    // annotate the turn without claiming a false success.
+    if (uploaded.length > 0) {
+      if (res.userMessageId && res.conversationId) {
+        const link = await linkHermesAttachmentsAction(
+          res.conversationId,
+          res.userMessageId,
+          uploaded.map((a) => a.attachmentId as string),
+        );
+        if (!link.ok) {
+          setTurns((prev) =>
+            prev.map((t) =>
+              t.id === userTurn.id
+                ? {
+                    ...t,
+                    attachmentNote: `Message envoyé. ${link.linked}/${link.requested} pièce(s) jointe(s) rattachée(s) — les autres n’ont pas pu l’être.`,
+                  }
+                : t,
+            ),
+          );
+        }
+      } else {
+        setTurns((prev) =>
+          prev.map((t) =>
+            t.id === userTurn.id
+              ? {
+                  ...t,
+                  attachmentNote:
+                    "Message envoyé, mais les pièces jointes n’ont pas pu être rattachées.",
+                }
+              : t,
+          ),
+        );
+      }
+      clearAttachments();
+    }
 
     const resolving = res.outcome === "RESOLVING";
     const assistantTurn: Turn = {
@@ -454,6 +593,10 @@ export default function HermesPanel() {
     (!!activeAction &&
       (lastAssistant?.lifecycle === "QUEUED" ||
         lastAssistant?.lifecycle === "RUNNING"));
+  // Send is blocked while any attachment is still uploading or has failed;
+  // UPLOADED attachments are transmitted with the message.
+  const attachmentsBusy = attachments.some((a) => a.state === "UPLOADING");
+  const attachmentsHaveError = attachments.some((a) => a.state === "FAILED");
 
   // --- Voice controls ------------------------------------------------------
   const voiceInputActive = isVoiceInputMode(voiceMode);
@@ -545,13 +688,18 @@ export default function HermesPanel() {
             }}
           />
 
-          {/* LOCAL attachment previews (Phase A) — thumbnails for image/video,
-              icon + name + type + size otherwise; each removable. Never sent. */}
+          {/* Attachment previews (Phase B) — thumbnails for image/video, icon +
+              name + size otherwise, plus the honest TRANSPORT state; each is
+              removable and a failed upload can be retried. */}
           {attachments.length > 0 ? (
             <div className="hermes-attachments" data-testid="hermes-attachments">
               <ul className="hermes-attachment-list">
                 {attachments.map((a) => (
-                  <li key={a.id} className={`hermes-attachment is-${a.kind}`}>
+                  <li
+                    key={a.id}
+                    className={`hermes-attachment is-${a.kind} is-${a.state.toLowerCase()}`}
+                    data-state={a.state}
+                  >
                     <span className="hermes-attachment-thumb">
                       {a.url && a.kind === "image" ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -567,7 +715,22 @@ export default function HermesPanel() {
                       <span>
                         {attachmentKindLabel(a.kind)} · {formatBytes(a.size)}
                       </span>
+                      <span
+                        className={`hermes-attachment-state is-${a.state.toLowerCase()}`}
+                      >
+                        {attachmentStateLabel(a)}
+                      </span>
                     </span>
+                    {a.state === "FAILED" ? (
+                      <button
+                        type="button"
+                        className="hermes-attachment-retry"
+                        onClick={() => retryAttachment(a.id)}
+                        title="Réessayer le téléversement"
+                      >
+                        Réessayer
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className="hermes-attachment-remove"
@@ -580,7 +743,7 @@ export default function HermesPanel() {
                   </li>
                 ))}
               </ul>
-              <p className="hermes-attachment-note">{ATTACH_LOCAL_ONLY_MSG}</p>
+              <p className="hermes-attachment-note">{ATTACH_UPLOADED_NOTE}</p>
             </div>
           ) : null}
           {attachNote ? (
@@ -635,7 +798,7 @@ export default function HermesPanel() {
                 className="hermes-plus-button"
                 onClick={openFilePicker}
                 aria-label="Ajouter une pièce jointe"
-                title="Ajouter une pièce jointe — image, vidéo, audio, PDF, document (aperçu local)"
+                title="Ajouter une pièce jointe — image, PDF, document ou audio"
                 data-testid="hermes-plus-button"
               >
                 <Plus size={17} strokeWidth={2.2} />
@@ -643,7 +806,7 @@ export default function HermesPanel() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept={FILE_INPUT_ACCEPT}
+                accept={ATTACHMENT_ACCEPT_V1}
                 multiple
                 onChange={onFilesPicked}
                 className="hermes-file-input"
@@ -701,9 +864,18 @@ export default function HermesPanel() {
                 type="submit"
                 className="hermes-send-button"
                 disabled={
-                  inFlight || input.trim().length === 0 || attachments.length > 0
+                  inFlight ||
+                  input.trim().length === 0 ||
+                  attachmentsBusy ||
+                  attachmentsHaveError
                 }
-                title={attachments.length > 0 ? ATTACH_SEND_BLOCKED_MSG : undefined}
+                title={
+                  attachmentsBusy
+                    ? ATTACH_UPLOADING_MSG
+                    : attachmentsHaveError
+                      ? ATTACH_FAILED_MSG
+                      : undefined
+                }
               >
                 <span>{sending ? "Envoi…" : "Envoyer"}</span>
                 <ArrowUp size={16} strokeWidth={2} />
@@ -739,6 +911,19 @@ export default function HermesPanel() {
                   data-outcome={t.outcome ?? ""}
                 >
                   <p>{t.text}</p>
+                  {t.role === "user" && t.attachmentNames?.length ? (
+                    <span className="hermes-bubble-attachments">
+                      {t.attachmentNames.map((n, i) => (
+                        <span key={`${t.id}-att-${i}`} className="hermes-bubble-attachment">
+                          <FileIcon size={11} strokeWidth={2} />
+                          {n}
+                        </span>
+                      ))}
+                    </span>
+                  ) : null}
+                  {t.role === "user" && t.attachmentNote ? (
+                    <span className="hermes-bubble-attachment-note">{t.attachmentNote}</span>
+                  ) : null}
                   {t.role === "assistant" && t.lifecycle ? (
                     <span className={`hermes-lifecycle is-${toneFor(t.lifecycle)}`}>
                       {STATE_LABEL[t.lifecycle] ?? t.lifecycle}
