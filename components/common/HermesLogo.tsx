@@ -1,8 +1,17 @@
 /**
- * Official Hermès OS logo — a geometric "H" with a central star / core.
- * Single source of truth for the brand mark. Use `withWordmark` for the header /
- * sidebar lockup, and the symbol alone as an app icon. Keep to at most two strong
- * appearances per screen.
+ * Official Hermès OS logo — V3.
+ *
+ * A premium geometric "H": two pill-shaped uprights joined by a flowing cyan→blue
+ * ribbon, with a central 4-point spark. Single source of truth for the brand mark.
+ *
+ * Usage rules (per the validated V3 brand sheet):
+ *  - Symbol alone (`HermesLogoSymbol`) for the compact sidebar, favicon and app
+ *    icon, and small placements.
+ *  - `HermesLogo withWordmark` for wide placements (H + "HERMÈS OS").
+ *  - The marketing baseline "INTELLIGENCE · AUTOMATION · IMPACT" is NEVER shown in
+ *    the dashboard (reserved for web / marketing surfaces).
+ *  - Legible at 16 / 32 / 64 px; theme-aware (gradient uses the design tokens).
+ *  - Keep to at most two strong brand appearances per screen.
  */
 
 type HermesLogoProps = {
@@ -12,6 +21,8 @@ type HermesLogoProps = {
 };
 
 export function HermesLogoSymbol({ size = 28 }: { size?: number }) {
+  // A per-instance gradient id keeps multiple marks on one page independent.
+  const gid = `hLogoV3-${size}`;
   return (
     <svg
       className="hermes-logo-symbol"
@@ -24,20 +35,32 @@ export function HermesLogoSymbol({ size = 28 }: { size?: number }) {
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
-        <linearGradient id="hermesLogoGrad" x1="6" y1="4" x2="42" y2="44" gradientUnits="userSpaceOnUse">
+        <linearGradient id={gid} x1="8" y1="6" x2="40" y2="42" gradientUnits="userSpaceOnUse">
           <stop offset="0" stopColor="var(--hermes-cyan)" />
-          <stop offset="1" stopColor="var(--hermes-blue)" />
+          <stop offset="0.55" stopColor="var(--hermes-blue)" />
+          <stop offset="1" stopColor="var(--accent-strong)" />
         </linearGradient>
       </defs>
-      {/* Geometric H — two symmetric uprights + a balanced crossbar */}
+
+      {/* Two pill uprights */}
+      <rect x="9" y="6.5" width="7" height="35" rx="3.5" fill={`url(#${gid})`} />
+      <rect x="32" y="6.5" width="7" height="35" rx="3.5" fill={`url(#${gid})`} />
+
+      {/* Flowing ribbon crossbar — the V3 signature: a HORIZONTAL wave joining the
+          two uprights (kept horizontal so the H silhouette reads at every size). */}
       <path
-        d="M10 8h5v13h18V8h5v32h-5V27H15v13h-5V8Z"
-        fill="url(#hermesLogoGrad)"
+        d="M16 24 C19 20, 22 20, 24 24 S29 28, 32 24"
+        stroke={`url(#${gid})`}
+        strokeWidth="5.6"
+        strokeLinecap="round"
+        fill="none"
       />
-      {/* Central core — a compact 4-point sparkle, legible at small sizes */}
+
+      {/* Central 4-point spark — consistently light so it reads on the blue mark in
+          both themes */}
       <path
-        d="M24 18.5 L25.6 22.4 L29.5 24 L25.6 25.6 L24 29.5 L22.4 25.6 L18.5 24 L22.4 22.4 Z"
-        fill="var(--text-primary)"
+        d="M24 15.6 l1.5 3.7 l3.7 1.5 l-3.7 1.5 l-1.5 3.7 l-1.5 -3.7 l-3.7 -1.5 l3.7 -1.5 z"
+        fill="#f2f9ff"
       />
     </svg>
   );
