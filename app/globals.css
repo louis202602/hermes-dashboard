@@ -1965,11 +1965,14 @@ html[data-theme="light"] .dashboard-sidebar {
   }
 }
 
-/* Tablet landscape (Galaxy Tab S7+ ≈ 1280px CSS): never leave a card stranded
-   in a mini-column beside a big void. The height-variable executive pairs
-   (alerts, métier) stack full-width, and the actions go 2-up with wide, legible
+/* Tablet landscape (Galaxy Tab S7+ reports ≈ 1400px CSS at DPR 2). Breakpoint set
+   to 1460px so this real device is covered. The height-variable executive pairs
+   (alerts, métier) STACK full-width — this is what makes an empty "Approbations"
+   truly compact: side-by-side, a short card leaves empty grid space beside the
+   tall Priorités (the perceived void); stacked, each card is exactly its own
+   height. The actions go 2-up (2×2 for the four capabilities) with wide, legible
    cards — a tablet is not a shrunken desktop. */
-@media (max-width: 1300px) {
+@media (max-width: 1460px) {
   .exec-grid-2,
   .exec-grid-metier {
     grid-template-columns: 1fr;
