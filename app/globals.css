@@ -74,33 +74,36 @@
 
 html[data-theme="light"] {
   /* --- official LIGHT palette --- */
-  --bg-primary: #dce8f2;
-  --bg-secondary: #c9dae8;
-  --surface: rgba(250, 252, 255, 0.86);
-  --surface-strong: rgba(253, 254, 255, 0.94);
-  --surface-soft: rgba(31, 94, 160, 0.055);
-  --surface-hover: rgba(23, 127, 234, 0.09);
-  /* Subtle blue-grey edges (not white) so BG → card → inner card → input all
-     separate cleanly in light mode. */
-  --border: rgba(37, 84, 143, 0.16);
-  --border-strong: rgba(23, 127, 234, 0.30);
+  /* Deeper blue-grey workspace so near-white cards read as clearly raised planes
+     (premium SaaS depth, never a washed-out white sheet). */
+  --bg-primary: #d1dfec;
+  --bg-secondary: #bdd1e4;
+  /* Cards are crisp white; the soft/hover inner surfaces carry a touch more tint
+     so main card → inner card → input each separate legibly. */
+  --surface: rgba(255, 255, 255, 0.95);
+  --surface-strong: rgba(255, 255, 255, 1);
+  --surface-soft: rgba(31, 94, 160, 0.065);
+  --surface-hover: rgba(23, 127, 234, 0.11);
+  /* Blue-grey edges (not white), a touch more legible without becoming heavy. */
+  --border: rgba(37, 84, 143, 0.22);
+  --border-strong: rgba(23, 127, 234, 0.38);
   --text-primary: #102033;
-  --text-secondary: #53687c;
-  --text-muted: #7688a0;
+  --text-secondary: #4f6478;
+  --text-muted: #708298;
   --hermes-blue: #177fea;
   --hermes-cyan: #52c7ff;
   --purple: #7c5cfc;
   --success: #22a66f;
   --warning: #e49a26;
   --danger: #d94b55;
-  /* Two-layer shadow: a crisp contact edge + a soft ambient lift, so cards read
-     as raised planes on the light workspace rather than flat panes. */
-  --shadow: 0 1px 2px rgba(30, 58, 95, 0.07), 0 16px 40px rgba(37, 71, 110, 0.13);
+  /* Two-layer shadow: a crisp contact edge + a soft ambient lift, slightly
+     stronger so cards clearly detach from the workspace. */
+  --shadow: 0 1px 2px rgba(30, 58, 95, 0.11), 0 18px 42px rgba(37, 71, 110, 0.17);
   /* Command Center background — cool premium blue-grey gradient (no image, no
-     clouds, no photographic texture); subtle depth, never flat/washed white. */
+     clouds, no photographic texture); a touch deeper for card contrast. */
   --bg-gradient:
-    radial-gradient(1100px 700px at 82% -14%, rgba(23, 127, 234, 0.07), transparent 58%),
-    linear-gradient(180deg, #eef4fb 0%, #dce8f2 52%, #cfe0ee 100%);
+    radial-gradient(1100px 700px at 82% -14%, rgba(23, 127, 234, 0.08), transparent 58%),
+    linear-gradient(180deg, #e6eff8 0%, #d3e1ee 52%, #c3d8e9 100%);
 
   --accent-strong: #075ebd;
   --accent-soft: rgba(23, 127, 234, 0.12);
@@ -665,39 +668,26 @@ html[data-theme="light"] .dashboard-sidebar {
 /* Equal-height columns so an empty/short panel can never leave a big void with
    the sibling stranded in a narrow column — balanced in every state
    (REAL / DERIVED / UNAVAILABLE / EMPTY). */
+/* Content-driven heights: an empty/short panel must stay compact and NEVER be
+   stretched to match a taller sibling (that produced 400–500px of dead space).
+   Cards align to the top; each is as tall as its own content. */
 .exec-grid-2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
-  align-items: stretch;
+  align-items: start;
 }
 
-.exec-grid-2 > * {
-  height: 100%;
-}
-
-/* Stretched cards distribute their content so an empty state reads as centered
-   and intentional, never a card with a large blank bottom. */
 .exec-grid-2 > .dashboard-card {
   display: flex;
   flex-direction: column;
-}
-
-.exec-grid-2 .tasks-empty,
-.exec-grid-2 .projects-empty {
-  margin-top: auto;
-  margin-bottom: auto;
 }
 
 .exec-grid-metier {
   display: grid;
   grid-template-columns: minmax(0, 1.62fr) minmax(288px, 1fr);
   gap: 14px;
-  align-items: stretch;
-}
-
-.exec-grid-metier > * {
-  height: 100%;
+  align-items: start;
 }
 
 .kpi-card,
@@ -936,14 +926,26 @@ html[data-theme="light"] .dashboard-sidebar {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px 13px;
+  padding: 12px 14px;
   background: var(--surface-strong);
   border: 1px solid var(--border-strong);
-  border-radius: 14px;
+  border-radius: 16px;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
+/* Lights up like a modern assistant input when focused — reads as a premium
+   conversation zone, not a boxed form field. */
+.hermes-command-zone:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* A soft, discreet section hint (not a bright form label). */
 .hermes-composer-eyebrow {
-  color: var(--hermes-blue);
+  color: var(--text-muted);
+  font-size: 8.5px;
 }
 
 .hermes-composer-input {
@@ -1290,12 +1292,14 @@ html[data-theme="light"] .dashboard-sidebar {
 }
 
 .quick-actions-card {
-  min-height: 590px;
+  min-height: auto;
 }
 
+/* Wider cells so titles/descriptions read on 1–2 lines and the "Sensible" badge
+   never compresses. Content-driven height (no artificial min-height). */
 .quick-actions-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(288px, 1fr));
   gap: 10px;
   margin-top: 14px;
 }
@@ -1303,9 +1307,9 @@ html[data-theme="light"] .dashboard-sidebar {
 .quick-action-item {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   min-height: auto;
-  padding: 10px 11px;
+  padding: 12px 13px;
   text-align: left;
   background: var(--surface-soft);
   border: 1px solid var(--border);
@@ -1327,8 +1331,8 @@ html[data-theme="light"] .dashboard-sidebar {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   color: var(--accent);
   background: var(--accent-soft);
   border: 1px solid var(--border-strong);
@@ -1342,14 +1346,20 @@ html[data-theme="light"] .dashboard-sidebar {
 }
 
 .quick-action-copy strong {
-  font-size: 11px;
+  font-size: 12.5px;
+  line-height: 1.3;
 }
 
 .quick-action-copy span {
-  margin-top: 4px;
+  margin-top: 3px;
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: 10.5px;
   line-height: 1.45;
+  /* Keep descriptions to two tidy lines instead of an ultra-vertical stack. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .tasks-summary {
@@ -1955,13 +1965,22 @@ html[data-theme="light"] .dashboard-sidebar {
   }
 }
 
-/* Tablet: never leave a card stranded in a mini-column beside a big void.
-   The height-variable executive pairs (alerts, métier) go full-width and use
-   the whole available width — a tablet is not a shrunken desktop. */
-@media (max-width: 1200px) {
+/* Tablet landscape (Galaxy Tab S7+ ≈ 1280px CSS): never leave a card stranded
+   in a mini-column beside a big void. The height-variable executive pairs
+   (alerts, métier) stack full-width, and the actions go 2-up with wide, legible
+   cards — a tablet is not a shrunken desktop. */
+@media (max-width: 1300px) {
   .exec-grid-2,
   .exec-grid-metier {
     grid-template-columns: 1fr;
+  }
+
+  .quick-actions-card {
+    min-height: auto;
+  }
+
+  .quick-actions-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -3231,13 +3250,19 @@ html[data-theme="light"] .hos-nav-item.is-active {
 .hos-topbar {
   position: sticky;
   top: 0;
-  z-index: 30;
+  z-index: 40;
   display: flex;
   align-items: center;
   justify-content: space-between;
   height: var(--header-height);
   padding: 0 26px;
-  background: transparent;
+  /* Masked reserved zone: a faded, blurred bar so content scrolling underneath
+     is muted and never appears to overlap the theme/notifications/help/profile
+     controls. Works in both themes via --bg-primary + --border. */
+  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--border);
 }
 .hos-topbar-left { display: flex; align-items: center; gap: 12px; }
 .hos-topbar-brand { display: none; }
