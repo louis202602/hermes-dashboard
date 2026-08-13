@@ -656,6 +656,69 @@ html[data-theme="light"] .dashboard-sidebar {
   font-size: 9px;
 }
 
+/* Lead cluster: dynamic tenant identity chip + the Command Center title. */
+.dashboard-intro-lead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* Tenant (company) identity — dynamic, multi-tenant. Logo when configured, else
+   initials. Discreet, premium; distinct from the Hermès OS product brand. */
+.tenant-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 240px;
+  padding: 4px 11px 4px 4px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.tenant-badge-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+/* A tenant logo keeps its own ratio and transparency — never a forced white box. */
+.tenant-badge-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Initials fallback fills the mark box with a subtle accent tint (not white). */
+.tenant-badge-initials {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.tenant-badge-name {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

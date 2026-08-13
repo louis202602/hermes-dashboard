@@ -14,6 +14,7 @@ import RecentConversations from "@/components/dashboard/RecentConversations";
 import Sidebar from "@/components/dashboard/Sidebar";
 import SystemStatus from "@/components/dashboard/SystemStatus";
 import TasksPanel from "@/components/dashboard/TasksPanel";
+import TenantBadge from "@/components/dashboard/TenantBadge";
 import type {
   AvailableCapabilities,
   CostGovernanceSnapshot,
@@ -23,10 +24,12 @@ import type {
   PublicKpis,
   RecentConversations as RecentConversationsData,
   ServiceResult,
+  TenantIdentity,
 } from "@/types/hermes";
 
 type DashboardShellProps = {
   userEmail: string;
+  tenant: ServiceResult<TenantIdentity>;
   kpis: ServiceResult<PublicKpis>;
   projects: ServiceResult<DashboardProjects>;
   conversations: ServiceResult<RecentConversationsData>;
@@ -38,6 +41,7 @@ type DashboardShellProps = {
 
 export default function DashboardShell({
   userEmail,
+  tenant,
   kpis,
   projects,
   conversations,
@@ -77,11 +81,16 @@ export default function DashboardShell({
         />
 
         <div className="dashboard-content">
-          {/* Compact executive header — the workspace, not a hero banner. */}
+          {/* Compact executive header — the workspace, not a hero banner. The
+              tenant (company) identity is DYNAMIC; Hermès OS stays the product
+              brand in the sidebar. */}
           <section className="dashboard-intro dashboard-intro-compact">
-            <div>
-              <span className="panel-eyebrow">HELIOSOLAR OS · COMMAND CENTER</span>
-              <h2>Poste de commande</h2>
+            <div className="dashboard-intro-lead">
+              <TenantBadge identity={tenant} />
+              <div>
+                <span className="panel-eyebrow">COMMAND CENTER</span>
+                <h2>Poste de commande</h2>
+              </div>
             </div>
 
             <div className="dashboard-intro-status">

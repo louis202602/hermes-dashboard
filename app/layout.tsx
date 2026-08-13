@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Hermès OS — Centre de commande",
   description:
-    "Dashboard Hermès OS de HelioSolar : vue d’ensemble et pilotage en temps réel.",
+    "Hermès OS — centre de commande : vue d’ensemble et pilotage en temps réel.",
 };
 
 export default async function RootLayout({
