@@ -11,9 +11,36 @@
 // permissions/tenant/SW15. The backend `apply_hermes_resolution()` re-validates
 // the proposal against the registry and executes via the gateway (fail-closed).
 //
+// Execution-safety hardening (PR #21):
+//  - LEASE-TOKEN FENCING: the claim returns a per-claim `lease_token`; it is
+//    carried through the run and passed to `complete_agent_action(...,lease_token)`
+//    (6-arg fenced form). A worker whose lease was stolen (reclaimed after lease
+//    expiry) can no longer overwrite the fresh result. This consumer no longer
+//    uses the legacy 5-arg form.
+//  - SW23 COST GOVERNANCE (canonical path): before the model call the run calls
+//    `sw23_route_and_reserve` (set_session_tenant first) — SW23 selects the
+//    catalogued model (openai/gpt-5.4-nano, cost_status='real') and RESERVES the
+//    budget computed from the REAL catalog price and the token estimate (no
+//    arbitrary fixed amount). On success it COMMITS the routed cost via
+//    `sw23_commit_budget`; on model failure it RELEASES via `sw23_release_budget`.
+//    No second ledger, no parallel budget math. FOLLOW-UP (controlled run): the
+//    commit currently uses the routed estimate; switch to actual provider token
+//    usage × price once the exact n8n usage field is confirmed at run time.
+//  - BOUNDED RECLAIM / DEAD-LETTER is enforced DB-side (claim stops past
+//    max_attempts; a driver calls `reap_dead_letter_agent_actions()` before
+//    claim). See db/migrations/20260813_hermes_resolver_execution_safety_1.sql.
+//
 // On agent error/timeout the request is marked FAILED (Complete Failed branch),
 // which apply() turns into a fail-closed ERROR — no execution.
 import { workflow, trigger, node, languageModel, outputParser, ifElse, expr } from '@n8n/workflow-sdk';
+
+// Conservative token estimate for the intent-routing call. The reservation USD is
+// computed BY SW23 from the real catalog price (get_active_price inside
+// route_and_reserve) — never a hardcoded amount.
+const EST_INPUT_TOKENS = '3000';
+const EST_OUTPUT_TOKENS = '400';
+
+const PG = { postgres: { id: '2XmDD5ePn3toIJmF', name: 'Postgres account 2' } };
 
 const manual = trigger({ type: 'n8n-nodes-base.manualTrigger', version: 1, config: { name: 'Manual Run' } });
 
@@ -23,7 +50,7 @@ const claim = node({
   config: {
     name: 'Claim Resolve',
     parameters: { operation: 'executeQuery', query: "select hermes_os.claim_agent_action('hermes.intent.resolve', 300) as claim" },
-    credentials: { postgres: { id: '2XmDD5ePn3toIJmF', name: 'Postgres account 2' } },
+    credentials: PG,
   },
 });
 
@@ -35,6 +62,42 @@ const claimed = ifElse({
       conditions: {
         options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
         conditions: [{ leftValue: expr('{{ $json.claim.claimed }}'), rightValue: true, operator: { type: 'boolean', operation: 'true' } }],
+        combinator: 'and',
+      },
+    },
+  },
+});
+
+// SW23 canonical route + reserve BEFORE the model call (set the SW23 session
+// tenant + route_and_reserve in the SAME connection). request_id = the gateway
+// request_id → idempotent reservation; SW23 prices the real catalog model.
+const routeReserve = node({
+  type: 'n8n-nodes-base.postgres',
+  version: 2.7,
+  config: {
+    name: 'SW23 Route+Reserve',
+    parameters: {
+      operation: 'executeQuery',
+      // Single result set: set the SW23 session tenant via set_config in a FROM
+      // subquery so route_and_reserve sees the GUC. (A two-statement query returns
+      // two items and breaks n8n item pairing — caught by the controlled E2E run.)
+      query: "select hermes_os.sw23_route_and_reserve($1,$2,'hermes.intent.resolve','intent_routing','simple','normal','[]'::jsonb,'[\"text\"]'::jsonb,$3::numeric,$4::numeric,'openai','gpt-5.4-nano','[]'::jsonb,'day',now(),true) as route from (select set_config('app.sw23_tenant_id',$1,true)) _t",
+      options: { queryReplacement: expr("{{ [ $('Claim Resolve').item.json.claim.tenant_id, $('Claim Resolve').item.json.claim.request_id, " + JSON.stringify(EST_INPUT_TOKENS) + ", " + JSON.stringify(EST_OUTPUT_TOKENS) + " ] }}") },
+    },
+    credentials: PG,
+  },
+});
+
+// Proceed to the model only if SW23 routed+reserved successfully. A no-eligible-
+// model / budget rejection routes to a FAILED completion with no model spend.
+const reserved = ifElse({
+  version: 2.2,
+  config: {
+    name: 'Reserved?',
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+        conditions: [{ leftValue: expr("{{ $json.route.success === true || $json.route.success === 'true' }}"), rightValue: true, operator: { type: 'boolean', operation: 'true' } }],
         combinator: 'and',
       },
     },
@@ -56,9 +119,6 @@ const parser = outputParser({
   version: 1.3,
   config: {
     name: 'Proposal Parser',
-    // Manual schema with an OPEN `parameters` object (additionalProperties:true)
-    // so the model can fill ALL of a capability's required_payload_keys — a
-    // narrow schema previously dropped multi-param keys (e.g. phase_name).
     parameters: {
       schemaType: 'manual',
       inputSchema: '{"type":"object","properties":{"outcome":{"type":"string"},"action_key":{"type":["string","null"]},"confidence":{"type":"number"},"parameters":{"type":"object","additionalProperties":true},"reason":{"type":"string"}},"required":["outcome","action_key","confidence","parameters","reason"]}',
@@ -99,6 +159,40 @@ const mapResult = node({
   },
 });
 
+// SW23 — commit the reserved (real-priced) cost on success, same connection.
+// FOLLOW-UP: replace route.estimated_cost with price × actual provider tokens
+// once the exact usage field is confirmed during the controlled run.
+const commit = node({
+  type: 'n8n-nodes-base.postgres',
+  version: 2.7,
+  config: {
+    name: 'SW23 Commit',
+    parameters: {
+      operation: 'executeQuery',
+      query: "select hermes_os.sw23_commit_budget($1,$2,'day',$3::numeric) as commit from (select set_config('app.sw23_tenant_id',$1,true)) _t",
+      options: { queryReplacement: expr("{{ [ $('Claim Resolve').item.json.claim.tenant_id, $('Claim Resolve').item.json.claim.request_id, $('SW23 Route+Reserve').item.json.route.estimated_cost ] }}") },
+    },
+    credentials: PG,
+  },
+});
+
+// SW23 — release the reservation on model failure (no billable spend committed).
+const release = node({
+  type: 'n8n-nodes-base.postgres',
+  version: 2.7,
+  config: {
+    name: 'SW23 Release',
+    parameters: {
+      operation: 'executeQuery',
+      query: "select hermes_os.sw23_release_budget($1,$2,'day') as release from (select set_config('app.sw23_tenant_id',$1,true)) _t",
+      options: { queryReplacement: expr("{{ [ $('Claim Resolve').item.json.claim.tenant_id, $('Claim Resolve').item.json.claim.request_id ] }}") },
+    },
+    credentials: PG,
+  },
+});
+
+// Fenced completion: pass the claim's lease_token (6-arg). A stale worker cannot
+// overwrite a reclaimed request.
 const completeSuccess = node({
   type: 'n8n-nodes-base.postgres',
   version: 2.7,
@@ -106,10 +200,10 @@ const completeSuccess = node({
     name: 'Complete Success',
     parameters: {
       operation: 'executeQuery',
-      query: "select hermes_os.complete_agent_action($1::uuid,'SUCCEEDED',$2::jsonb,null,$3) as done",
-      options: { queryReplacement: expr("{{ [ $('Claim Resolve').item.json.claim.id, JSON.stringify($json.result), $execution.id ] }}") },
+      query: "select hermes_os.complete_agent_action($1::uuid,'SUCCEEDED',$2::jsonb,null,$3,$4::uuid) as done",
+      options: { queryReplacement: expr("{{ [ $('Claim Resolve').item.json.claim.id, JSON.stringify($('Map Result').item.json.result), $execution.id, $('Claim Resolve').item.json.claim.lease_token ] }}") },
     },
-    credentials: { postgres: { id: '2XmDD5ePn3toIJmF', name: 'Postgres account 2' } },
+    credentials: PG,
   },
 });
 
@@ -120,10 +214,10 @@ const completeFailed = node({
     name: 'Complete Failed',
     parameters: {
       operation: 'executeQuery',
-      query: "select hermes_os.complete_agent_action($1::uuid,'FAILED',null,$2::jsonb,$3) as done",
-      options: { queryReplacement: expr("{{ [ $('Claim Resolve').item.json.claim.id, JSON.stringify({ code: 'RESOLVER_ERROR', message: 'semantic resolver failed' }), $execution.id ] }}") },
+      query: "select hermes_os.complete_agent_action($1::uuid,'FAILED',null,$2::jsonb,$3,$4::uuid) as done",
+      options: { queryReplacement: expr("{{ [ $('Claim Resolve').item.json.claim.id, JSON.stringify({ code: 'RESOLVER_ERROR', message: 'semantic resolver failed' }), $execution.id, $('Claim Resolve').item.json.claim.lease_token ] }}") },
     },
-    credentials: { postgres: { id: '2XmDD5ePn3toIJmF', name: 'Postgres account 2' } },
+    credentials: PG,
   },
 });
 
@@ -132,5 +226,10 @@ const noWork = node({ type: 'n8n-nodes-base.noOp', version: 1, config: { name: '
 export default workflow('hermes-semantic-resolver', 'GW Consumer — Hermes Semantic Resolver')
   .add(manual)
   .to(claim)
-  .to(claimed.onTrue(agent.to(mapResult.to(completeSuccess))).onFalse(noWork))
-  .add(agent.onError(completeFailed));
+  .to(claimed
+    .onTrue(routeReserve.to(reserved
+      .onTrue(agent.to(mapResult.to(commit.to(completeSuccess))))
+      .onFalse(completeFailed)))
+    .onFalse(noWork))
+  // Model error → release the reservation, then fail-closed completion.
+  .add(agent.onError(release.to(completeFailed)));
