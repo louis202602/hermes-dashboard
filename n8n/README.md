@@ -28,10 +28,25 @@ Source for **GW Consumer — Hermes Semantic Resolver** (n8n id `IS1I8g0K8VXbm4o
   a narrower schema previously dropped the extra keys.
 - **Failure:** agent error/timeout → the request is completed `FAILED` → apply()
   returns a fail-closed `ERROR` with no execution.
+- **Execution-safety hardening (PR #21):** the claim now returns a per-claim
+  `lease_token`; the run carries it and passes it to the **fenced 6-arg**
+  `complete_agent_action(...,lease_token)`, so a lease-stolen worker can no longer
+  overwrite a reclaimed request (this consumer no longer uses the legacy 5-arg
+  form). Cost is governed through the canonical **SW23** engine —
+  `sw23_set_session_tenant` → `sw23_reserve_budget` before the model, then
+  `sw23_commit_budget` on success / `sw23_release_budget` on model failure (no
+  second ledger). Bounded reclaim / dead-letter is enforced DB-side
+  (`claim` stops past `max_attempts`; a driver calls
+  `reap_dead_letter_agent_actions()` before `claim`). See
+  `db/migrations/20260813_hermes_resolver_execution_safety_1.sql`.
+  **Catalog follow-up:** the resolver model (`openai/gpt-5.4-nano`) is not yet in
+  `sw23_model_catalog` with real pricing, so the workflow reserves/commits a
+  conservative fixed estimate (`RESERVE_USD`) — precise per-request pricing (or a
+  switch to `sw23_route_and_reserve` model selection) needs a catalog decision.
 
-To redeploy from source, validate + create via the n8n Workflow SDK MCP tools
-(`validate_workflow`, `create_workflow_from_code`) and keep the workflow
-inactive.
+To redeploy from source, validate + update the existing workflow
+(`IS1I8g0K8VXbm4oH`) via the n8n Workflow SDK MCP tools (`validate_workflow`,
+`update_workflow`) and keep the workflow **inactive** (manual trigger only).
 
 ## `hermes-diag-echo.workflow.js`
 

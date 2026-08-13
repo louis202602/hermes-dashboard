@@ -37,6 +37,40 @@ consumers INACTIVE (zero live traffic through claim/complete):
 - **OpenAI cost this run: €0.00** (the resolver workflow was not executed).
 - **Consumer/Schedule: still INACTIVE.**
 
+## 0bis. Consumer hardening + SW23 wiring (2026-08-13, pass 2)
+
+- **Resolver workflow source hardened** (`n8n/hermes-semantic-resolver.workflow.js`):
+  carries the claim's `lease_token` and completes via the **fenced 6-arg**
+  `complete_agent_action(...,lease_token)` (no more legacy 5-arg for this
+  consumer); wires SW23 `set_session_tenant → reserve_budget` before the model
+  and `commit_budget`/`release_budget` after (canonical engine, no second
+  ledger). **Deployment to n8n + the real OpenAI run are the remaining
+  controlled step** (gated — see below); the deployed workflow stays INACTIVE
+  and on the legacy 5-arg form until then.
+- **Caller census** of `complete_agent_action`: 5-arg legacy today =
+  btp-planning, btp-suivi, diag-echo (kept backward-compatible); the resolver
+  source is now 6-arg + token.
+- **Validated by real isolated tests** (service_role, test tenant/action, no
+  OpenAI, no real row touched), all ✅:
+  - **by-request isolation claim** (`_test_claim_agent_action_by_request`,
+    test-only, dropped after) claims exactly the target test request — it can
+    never touch the real `hermes.intent.resolve` rows.
+  - **real-contract token fencing**: claim→token→reclaim(token B)→stale
+    complete(token A) **ignored** (row stayed RUNNING, not overwritten)→
+    complete(token B) SUCCEEDED.
+  - **SW23 lifecycle**: `reserve=ok`, `commit=ok`, `commit` idempotent replay,
+    `release` of a committed reservation rejected
+    (`CANNOT_RELEASE_COMMITTED_RESERVATION`), reserve/release of a second request
+    ok, cross-tenant call raises `SW23_TENANT_MISMATCH`.
+  - Cleanup verified; the **4 real QUEUED rows remain untouched**.
+- **SW23 pricing prerequisite:** `openai/gpt-5.4-nano` is **absent from
+  `sw23_model_catalog`** (only Anthropic `claude-*` are `cost_status='real'`), so
+  `sw23_route_and_reserve` cannot select/price the resolver model as-is. The
+  workflow therefore reserves/commits a fixed `RESERVE_USD` estimate (governed by
+  the real ledger). **USER DECISION needed** for precise per-request pricing:
+  add gpt-5.4-nano to the catalog with real pricing, or switch the resolver to a
+  catalogued model (e.g. `claude-haiku-4-5`) via `route_and_reserve`.
+
 ---
 
 
