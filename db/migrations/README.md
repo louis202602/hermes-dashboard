@@ -475,3 +475,24 @@ default; DISABLED ⇒ claim denied on the real action_key (0 claims); ENABLED on
 synthetic fixtures ⇒ max_batch and max_concurrency respected, lease_token +
 attempts preserved, tenant carried; budget under → ok, over-daily $2 > $1 →
 **rejected**; the real `hermes.intent.resolve` queue **untouched**.
+
+### Concurrency hardening (`20260814_hermes_resolver_concurrency_lock_1.sql`)
+
+Follow-up to E2.1: `claim_semantic_resolver_batch` read the RUNNING count and then
+claimed, so two **concurrent** calls could each observe free capacity before their
+claims and transiently exceed the concurrency ceiling (no double-claim — the
+underlying `claim_agent_action` uses `FOR UPDATE SKIP LOCKED` — but the ceiling
+could be momentarily exceeded). The fix takes a **per-action, transaction-scoped
+advisory lock** (`pg_advisory_xact_lock(hashtext('hermes_os.resolver_claim'),
+hashtext(action_key))`) around the *count RUNNING → compute capacity → claim*
+section, **after** the kill-switch check (a disabled resolver never contends).
+Auto-released at commit/rollback; single lock ⇒ no deadlock; per action_key ⇒
+distinct actions don't block each other. Paired rollback restores the pre-lock body.
+
+**Proof:** the ceiling section is verified deterministically — with one claim
+RUNNING under lease, a further `claim_semantic_resolver_batch` returns
+`CONCURRENCY_SATURATED` / 0 (max_running stays 1). Two truly-parallel backends
+could not be forced through the tooling (dblink self-connect needs a DB password;
+the SQL tool serializes calls), so the cross-call guarantee rests on the standard
+`pg_advisory_xact_lock` mutual-exclusion semantics + the deterministic ceiling
+test. All fixtures synthetic + isolated; the 5 real QUEUED rows never touched.

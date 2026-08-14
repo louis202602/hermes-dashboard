@@ -54,6 +54,14 @@ begin
   r:=hermes_os.claim_semantic_resolver_batch('e2e.conc', 300);
   out:=out||jsonb_build_object('D_claimed', r->>'claimed_count');                             -- expect 1
 
+  -- D2) CONCURRENCY CEILING (the section the advisory lock makes atomic): with 1
+  -- now RUNNING under lease, a further claim must be CONCURRENCY_SATURATED / 0.
+  -- The transaction-scoped advisory lock (pg_advisory_xact_lock on the resolver
+  -- namespace + action_key) guarantees this decision is mutually exclusive across
+  -- concurrent calls, so max_running can never exceed max_concurrency.
+  r:=hermes_os.claim_semantic_resolver_batch('e2e.conc', 300);
+  out:=out||jsonb_build_object('D2_ceiling_reason', r->>'reason', 'D2_ceiling_claimed', r->>'claimed_count');  -- expect CONCURRENCY_SATURATED / 0
+
   -- F) BUDGET hard-stop (heliosolar day budget = $1.00, hard_stop). The daily
   --    period cap is the enforced runaway guard; per_request_budget_usd is
   --    advisory (NOT enforced by the canonical SW23 reserve).
