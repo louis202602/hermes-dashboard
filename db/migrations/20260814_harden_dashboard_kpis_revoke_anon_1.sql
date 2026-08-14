@@ -1,0 +1,13 @@
+-- Migration: harden_dashboard_kpis_revoke_anon (project smubxqorirlfldatzmym)
+-- Security hardening (defense in depth). `public.get_dashboard_public_kpis` is a
+-- SECURITY DEFINER aggregate over the component registry — read-only, no side
+-- effects, NO tenant data / NO PII (platform-wide active-component counts). It was
+-- executable by `anon`, but the dashboard is auth-gated and there is NO anonymous
+-- caller in the app. Least-privilege: remove the unneeded anon grant. The real
+-- caller (`authenticated`, via getPublicKpis) keeps EXECUTE, so no regression.
+--
+-- Audit of the other previously-flagged SECURITY DEFINER functions found them
+-- already correctly scoped (NOT anon): the sw7/sw9/sw11/sw12 idempotency +
+-- webhook functions are granted to their dedicated app roles (sw7_app_role,
+-- sw9_app_role, sw11_app_role, sw12_app_role); _log_youtube_audit is postgres-only.
+revoke execute on function public.get_dashboard_public_kpis() from anon;
