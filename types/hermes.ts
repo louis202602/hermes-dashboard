@@ -287,6 +287,65 @@ export type ActionAuditTrail = {
   unavailable: string[];
 };
 
+// --- Resolver observability (E2.2 — operational safety, still INACTIVE) -----
+
+export type ResolverProvenance = "REAL" | "DERIVED" | "UNAVAILABLE" | "NOT_CONFIGURED";
+
+/** The derived, display-only lifecycle state of the semantic resolver. */
+export type ResolverState = "READY" | "DISABLED" | "CIRCUIT_OPEN" | "NOT_CONFIGURED";
+
+/**
+ * Tenant-scoped resolver observability from `public.get_resolver_observability`.
+ * Read-only; queue/outcomes/cost are the caller's tenant only. The control block
+ * (kill-switch + circuit) is platform config, shown read-only. Latency /
+ * error-rate are UNAVAILABLE (not fabricated) when there is no completed data.
+ */
+export type ResolverObservability = {
+  resolutionStatus: TenantResolutionStatus;
+  tenantId: string | null;
+  asOf: string | null;
+  resolverState: ResolverState;
+  control: {
+    enabled: boolean;
+    circuitState: "CLOSED" | "OPEN";
+    circuitOpenedAt: string | null;
+    circuitReason: string | null;
+    maxBatch: number | null;
+    maxConcurrency: number | null;
+    cadenceSeconds: number | null;
+  };
+  queue: {
+    queueDepth: number;
+    oldestQueuedAgeSeconds: number | null;
+    runningCount: number;
+  };
+  outcomes: {
+    windowHours: number;
+    successCount: number;
+    failedCount: number;
+    deadLetterCount: number;
+    completedCount: number;
+    errorRate: number | null;
+    provenance: ResolverProvenance;
+  };
+  latency: {
+    queueLatencySMedian: number | null;
+    executionLatencySMedian: number | null;
+    e2eLatencySMedian: number | null;
+    provenance: ResolverProvenance;
+  };
+  cost: {
+    daySpendUsd: number;
+    monthSpendUsd: number;
+    dailyBudgetUsd: number | null;
+    monthlyBudgetUsd: number | null;
+    dailyRemainingUsd: number | null;
+    monthlyRemainingUsd: number | null;
+    hardStop: boolean | null;
+    provenance: ResolverProvenance;
+  };
+};
+
 /** A recent platform execution (non-identifying telemetry — no tenant/user/payload). */
 export type ObsExecution = {
   domain: string | null;
