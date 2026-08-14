@@ -128,3 +128,36 @@ Source for **GW Consumer — BTP Suivi** (n8n id `1xCiexp3oVj0R8Tk`).
 - All auth/tenant/permission/idempotency are enforced upstream by
   `request_agent_action`. It claims **only** its own `action_key`, so it cannot
   steal another consumer's queued request.
+
+## GW Consumer — Agent Action Poller (`fLIJqW0itZU75ZOu`) — TEST_ONLY / OBSOLETE
+
+**Status: `TEST_ONLY` · `OBSOLETE_5_ARGS` · `MUST_MIGRATE_TO_6_ARGS_BEFORE_ACTIVATION`**
+
+Live-only demo workflow (no repo source artifact). AI-builder-assisted proof of
+the gateway→SW15→agent pattern for `btp.qualification.create` (claims a queued
+request, records the SW15 policy, runs the SW4/BTP-Qualification sub-workflow
+`Gnn63tM3uTZOvWDq`, writes the result back). **Manual trigger, INACTIVE,
+`triggerCount:0` — never run in production.**
+
+**Do NOT activate as-is.** Its `Complete Success` / `Complete Failed` nodes call
+`hermes_os.complete_agent_action($1,$2,…,$3)` with the **old 5-argument
+signature**. That overload no longer exists — the canonical function now requires
+**6 arguments**, with `p_lease_token uuid` as the mandatory last argument:
+
+```
+complete_agent_action(p_id uuid, p_status text, p_result jsonb,
+                      p_error jsonb, p_execution_id text, p_lease_token uuid)
+```
+
+Against the current schema the poller would fail at completion
+(`function ... does not exist`). The required `lease_token` **is** available —
+`claim_agent_action(action_key, lease_seconds)` returns it in its JSONB
+(`'lease_token', …`) — but this workflow never plumbs `claim.lease_token` into
+the two Complete nodes.
+
+**Debt (must be closed BEFORE any activation): `MUST_MIGRATE_TO_6_ARGS_BEFORE_ACTIVATION`.**
+Port both Complete nodes to the 6-arg signature and pass
+`$("Claim Request").item.json.claim.lease_token` as the 6th argument. Until then
+the workflow stays **INACTIVE** and is kept only as a reference for the gateway
+pattern (canonical BTP-Qualification consumer to be built separately). Do not
+delete; do not activate; do not rewrite before that migration is scheduled.
