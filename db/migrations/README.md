@@ -595,3 +595,25 @@ never touched): prereq-OK enable (fixture), and DENIED on circuit-open /
 budget-missing / budget-exceeded / running-present / exclusions-missing; circuit
 reset keeps enabled=false; disable; bounded reaper; unauthenticated + no-permission
 denied; protected fingerprints unchanged; real resolver stays enabled=false.
+
+## DASH-1 — Command Center context bar (2026-08-14)
+
+Adds the per-tenant **international context** the compact dashboard bar reads
+(city · date · local time · timezone · weather · alerts · today's AI cost).
+
+| File | Purpose |
+|------|---------|
+| `20260814_hermes_dashboard_context_settings_1.sql` | `hermes_os.dashboard_context_settings` (tenant_id PK) — the **five i18n axes kept separate**: `iana_timezone`, `locale`, `country`, `currency`, plus optional `city`/`latitude`/`longitude`. Seeds France-consistent defaults (Europe/Paris · fr-FR · FR · EUR) for existing tenants; city/coords left NULL. `public.get_dashboard_context_settings()` — SECURITY DEFINER read facade, caller's tenant only (`resolve_active_tenant`), REVOKE PUBLIC / GRANT authenticated. |
+| `20260814_hermes_dashboard_context_settings_9_rollback.sql` | Drops the facade + table. No business data touched. |
+
+### Invariants
+
+- **COST-FIRST / no LLM.** Time, date and timezone are computed client-side from
+  `iana_timezone` via `Intl` (0 external call, DST-safe). Weather is fetched by the
+  app from **Open-Meteo** (free, no API key, no browser secret — the call is
+  server-side) **only when `latitude`/`longitude` are configured**, and cached
+  server-side for 15 min. `city`/coords are never fabricated: with no location the
+  bar honestly shows "à configurer" / UNAVAILABLE.
+- **Fail-closed read.** Unauthenticated ⇒ `UNAUTHENTICATED`; no tenant ⇒ neutral
+  defaults, never cross-tenant data. Additive, read-only-by-app configuration —
+  no business logic, no go-live.
