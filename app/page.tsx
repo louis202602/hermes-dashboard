@@ -13,6 +13,7 @@ import {
   getCostGovernanceSnapshot,
   getObservabilitySnapshot,
   getOperationalPriorities,
+  getResolverControl,
   getResolverObservability,
 } from "@/services/hermes/panels";
 import { getActiveTenantIdentity } from "@/services/hermes/tenantIdentity";
@@ -40,6 +41,7 @@ export default async function HomePage() {
     cost,
     audit,
     resolver,
+    resolverControl,
   ] = await Promise.all([
     getActiveTenantIdentity(),
     getPublicKpis(),
@@ -51,6 +53,7 @@ export default async function HomePage() {
     getCostGovernanceSnapshot(),
     getActionAuditTrail(),
     getResolverObservability(),
+    getResolverControl(),
   ]);
 
   return (
@@ -66,6 +69,7 @@ export default async function HomePage() {
       cost={cost}
       audit={audit}
       resolver={resolver}
+      resolverControl={resolverControl}
     />
   );
 }

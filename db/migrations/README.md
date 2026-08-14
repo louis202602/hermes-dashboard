@@ -564,3 +564,29 @@ permanent exclusions, so the real GW Consumer — Semantic Resolver can claim a 
 (verified end-to-end: real gpt-5.4-nano call, SW23 route/reserve/commit, 6-arg
 `complete_agent_action` with propagated lease_token) while the 4 protected rows stay
 bit-for-bit unchanged. Tests: `db/tests/agent_action_claim_exclusions.test.sql` (A–G).
+
+## Resolver operator control plane (E2.3)
+
+`20260814_hermes_resolver_control_plane_1.sql` (+ rollback) adds the fail-closed
+operator control plane for the semantic resolver. **DORMANT**: activates nothing;
+resolver stays `enabled=false`, circuit `CLOSED`.
+
+- **`resolver_enable_preflight(action_key)`** — FAIL-CLOSED readiness gate.
+  `ready=true` only when ALL hold: config present, circuit CLOSED, sane
+  batch/concurrency/cadence, no parasite RUNNING lease, every QUEUED row is
+  claim-excluded (protected rows quarantined), and a hard-stop budget exists and
+  is not exceeded today. Otherwise `ready=false` + `denied_reasons[]`.
+- **`resolver_apply_set_enabled / _circuit_reset / _reap`** (service_role) — enable
+  runs the preflight and REFUSES (`ACTIVATION_DENIED`) if not ready; circuit reset
+  sets CLOSED but leaves `enabled=false` (reset ≠ activation); reap is bounded,
+  action-scoped, never touches protected rows.
+- **`public.resolver_operator_{get_control,enable,disable,reset_circuit,reap}`** —
+  authenticated + `resolver.operate` permission (fail-closed: no permission ⇒
+  UNAUTHORIZED). REVOKE PUBLIC; GRANT authenticated. Every action audited in
+  `resolver_operator_audit`.
+
+Tested (real, isolated fixtures, rolled-back/self-restoring; the 4 protected rows
+never touched): prereq-OK enable (fixture), and DENIED on circuit-open /
+budget-missing / budget-exceeded / running-present / exclusions-missing; circuit
+reset keeps enabled=false; disable; bounded reaper; unauthenticated + no-permission
+denied; protected fingerprints unchanged; real resolver stays enabled=false.
