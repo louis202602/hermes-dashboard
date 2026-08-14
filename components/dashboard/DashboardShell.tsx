@@ -5,6 +5,7 @@ import { useState } from "react";
 import ActionAuditTrail from "@/components/dashboard/ActionAuditTrail";
 import AgentActionPanel from "@/components/dashboard/AgentActionPanel";
 import ApprovalsPanel from "@/components/dashboard/ApprovalsPanel";
+import ContextBar from "@/components/dashboard/ContextBar";
 import CostGovernance from "@/components/dashboard/CostGovernance";
 import Header from "@/components/dashboard/Header";
 import HermesPanel from "@/components/dashboard/HermesPanel";
@@ -31,6 +32,7 @@ import type {
   ServiceResult,
   TenantIdentity,
 } from "@/types/hermes";
+import type { ContextBarModel } from "@/lib/dashboard/contextBar";
 import type { ResolverControl } from "@/lib/resolver/controlState";
 
 type DashboardShellProps = {
@@ -46,6 +48,8 @@ type DashboardShellProps = {
   audit: ServiceResult<ActionAuditTrailData>;
   resolver: ServiceResult<ResolverObservability>;
   resolverControl: ServiceResult<ResolverControl>;
+  contextBar: ContextBarModel;
+  initialClock: { time: string; date: string; offset: string };
 };
 
 export default function DashboardShell({
@@ -61,6 +65,8 @@ export default function DashboardShell({
   audit,
   resolver,
   resolverControl,
+  contextBar,
+  initialClock,
 }: DashboardShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -93,6 +99,11 @@ export default function DashboardShell({
         />
 
         <div className="dashboard-content">
+          {/* 0 — Barre de contexte compacte (ville · date · heure locale · météo
+              · alertes · coût IA). Horloge live déterministe (Intl, 0 appel) ;
+              météo Open-Meteo cachée ; données réelles ou UNAVAILABLE honnête. */}
+          <ContextBar model={contextBar} initialClock={initialClock} />
+
           {/* Compact executive header — the workspace, not a hero banner. The
               tenant (company) identity is DYNAMIC; Hermès OS stays the product
               brand in the sidebar. */}
