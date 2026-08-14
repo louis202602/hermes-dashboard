@@ -12,6 +12,7 @@ import KpiGrid from "@/components/dashboard/KpiGrid";
 import ProjectsTable from "@/components/dashboard/ProjectsTable";
 import QuickActions from "@/components/dashboard/QuickActions";
 import RecentConversations from "@/components/dashboard/RecentConversations";
+import ResolverStatus from "@/components/dashboard/ResolverStatus";
 import Sidebar from "@/components/dashboard/Sidebar";
 import SystemStatus from "@/components/dashboard/SystemStatus";
 import TasksPanel from "@/components/dashboard/TasksPanel";
@@ -25,6 +26,7 @@ import type {
   OperationalPriorities,
   PublicKpis,
   RecentConversations as RecentConversationsData,
+  ResolverObservability,
   ServiceResult,
   TenantIdentity,
 } from "@/types/hermes";
@@ -40,6 +42,7 @@ type DashboardShellProps = {
   observability: ServiceResult<ObservabilitySnapshot>;
   cost: ServiceResult<CostGovernanceSnapshot>;
   audit: ServiceResult<ActionAuditTrailData>;
+  resolver: ServiceResult<ResolverObservability>;
 };
 
 export default function DashboardShell({
@@ -53,6 +56,7 @@ export default function DashboardShell({
   observability,
   cost,
   audit,
+  resolver,
 }: DashboardShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -138,7 +142,10 @@ export default function DashboardShell({
           {/* 7 — Journal d'audit actions & approbations (redevabilité SW15). */}
           <ActionAuditTrail audit={audit} />
 
-          {/* 8 — Coûts / informations techniques secondaires. */}
+          {/* 8 — État opérationnel du résolveur (dormant : lecture seule). */}
+          <ResolverStatus resolver={resolver} />
+
+          {/* 9 — Coûts / informations techniques secondaires. */}
           <CostGovernance cost={cost} />
         </div>
       </div>

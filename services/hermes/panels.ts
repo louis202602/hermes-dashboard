@@ -23,6 +23,9 @@ import type {
   OperationalPriorities,
   OperationalPriority,
   PlatformHealth,
+  ResolverObservability,
+  ResolverProvenance,
+  ResolverState,
   ServiceResult,
   TenantResolutionStatus,
 } from "@/types/hermes";
@@ -497,6 +500,93 @@ export async function getActionAuditTrail(
       ok: false,
       provenance: "UNAVAILABLE",
       error: "Audit trail service unavailable.",
+    };
+  }
+}
+
+/**
+ * Tenant-scoped resolver observability (`public.get_resolver_observability`).
+ * Read-only operational metrics + platform control (kill-switch / circuit) state.
+ * Honest provenance: latency / error-rate arrive as UNAVAILABLE when there is no
+ * completed data. The resolver remains INACTIVE — this only reports.
+ */
+export async function getResolverObservability(): Promise<
+  ServiceResult<ResolverObservability>
+> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase.rpc("get_resolver_observability");
+    if (error) {
+      logEvent("error", "resolver_obs.rpc_error", { code: error.code });
+      return { ok: false, provenance: "UNAVAILABLE", error: error.message };
+    }
+    const p = (data ?? {}) as Record<string, unknown>;
+    const ctl = (p.control ?? {}) as Record<string, unknown>;
+    const q = (p.queue ?? {}) as Record<string, unknown>;
+    const o = (p.outcomes ?? {}) as Record<string, unknown>;
+    const l = (p.latency ?? {}) as Record<string, unknown>;
+    const c = (p.cost ?? {}) as Record<string, unknown>;
+    const prov = (v: unknown): ResolverProvenance =>
+      (v as ResolverProvenance) ?? "UNAVAILABLE";
+    return {
+      ok: true,
+      provenance: "REAL",
+      data: {
+        resolutionStatus: (p.resolution_status ??
+          "UNAUTHENTICATED") as TenantResolutionStatus,
+        tenantId: (p.tenant_id as string) ?? null,
+        asOf: (p.as_of as string) ?? null,
+        resolverState: (p.resolver_state as ResolverState) ?? "NOT_CONFIGURED",
+        control: {
+          enabled: Boolean(ctl.enabled),
+          circuitState: (ctl.circuit_state as "CLOSED" | "OPEN") ?? "CLOSED",
+          circuitOpenedAt: (ctl.circuit_opened_at as string) ?? null,
+          circuitReason: (ctl.circuit_reason as string) ?? null,
+          maxBatch: toNumOrNull(ctl.max_batch),
+          maxConcurrency: toNumOrNull(ctl.max_concurrency),
+          cadenceSeconds: toNumOrNull(ctl.cadence_seconds),
+        },
+        queue: {
+          queueDepth: toNumber(q.queue_depth),
+          oldestQueuedAgeSeconds: toNumOrNull(q.oldest_queued_age_seconds),
+          runningCount: toNumber(q.running_count),
+        },
+        outcomes: {
+          windowHours: toNumber(o.window_hours),
+          successCount: toNumber(o.success_count),
+          failedCount: toNumber(o.failed_count),
+          deadLetterCount: toNumber(o.dead_letter_count),
+          completedCount: toNumber(o.completed_count),
+          errorRate: toNumOrNull(o.error_rate),
+          provenance: prov(o.provenance),
+        },
+        latency: {
+          queueLatencySMedian: toNumOrNull(l.queue_latency_s_median),
+          executionLatencySMedian: toNumOrNull(l.execution_latency_s_median),
+          e2eLatencySMedian: toNumOrNull(l.e2e_latency_s_median),
+          provenance: prov(l.provenance),
+        },
+        cost: {
+          daySpendUsd: toNumber(c.day_spend_usd),
+          monthSpendUsd: toNumber(c.month_spend_usd),
+          dailyBudgetUsd: toNumOrNull(c.daily_budget_usd),
+          monthlyBudgetUsd: toNumOrNull(c.monthly_budget_usd),
+          dailyRemainingUsd: toNumOrNull(c.daily_remaining_usd),
+          monthlyRemainingUsd: toNumOrNull(c.monthly_remaining_usd),
+          hardStop:
+            c.hard_stop === null || c.hard_stop === undefined
+              ? null
+              : Boolean(c.hard_stop),
+          provenance: prov(c.provenance),
+        },
+      },
+    };
+  } catch (err) {
+    logEvent("error", "resolver_obs.exception", { message: (err as Error).message });
+    return {
+      ok: false,
+      provenance: "UNAVAILABLE",
+      error: "Resolver observability service unavailable.",
     };
   }
 }

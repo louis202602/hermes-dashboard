@@ -496,3 +496,45 @@ could not be forced through the tooling (dblink self-connect needs a DB password
 the SQL tool serializes calls), so the cross-call guarantee rests on the standard
 `pg_advisory_xact_lock` mutual-exclusion semantics + the deterministic ceiling
 test. All fixtures synthetic + isolated; the 5 real QUEUED rows never touched.
+
+## Resolver observability + recovery + circuit breaker (E2.2)
+
+`20260814_hermes_resolver_observability_1.sql` (+ rollback) adds operational
+safety for the still-INACTIVE Semantic Resolver. **Dormant**: no activation, no
+Schedule, kill-switch stays OFF, circuit stays CLOSED, no real QUEUED row touched.
+
+- **`public.get_resolver_observability()`** — SECURITY DEFINER, `search_path`
+  locked, `authenticated`, TENANT-SCOPED (via `resolve_active_tenant`). Read-only
+  metrics: queue depth / oldest age / running; 24h outcomes (success / failed /
+  dead-letter / error-rate); median queue / execution / e2e latency; SW23 cost
+  (day/month spend + budget remaining); plus the platform control block
+  (kill-switch + circuit). Honest provenance — latency & error-rate are
+  **UNAVAILABLE** (not fabricated) when there is no completed data.
+- **`hermes_os.resolver_circuit_evaluate(action_key)`** — PLATFORM-level breaker,
+  `service_role`. When recent FAILED (`circuit_error_threshold`, default 5) or
+  DEAD_LETTER (`circuit_deadletter_threshold`, default 3) counts within
+  `circuit_window_minutes` (default 15) are crossed, it **trips the canonical
+  kill-switch** (`enabled=false`, `circuit_state='OPEN'`, reason recorded) — the
+  same control as the kill-switch, never a contradictory second switch. So a
+  subsequent `claim_semantic_resolver_batch` returns `DISABLED` / 0 (cut BEFORE
+  any model call).
+- **`hermes_os.resolver_circuit_reset(action_key)`** — MANUAL re-arm,
+  `service_role`. Sets `CLOSED` but **leaves `enabled=false`** — re-arming ≠
+  re-activating (activation stays an explicit, separate operator step).
+- **`hermes_os.reap_resolver_dead_letters(limit)`** — thin, action-scoped wrapper
+  over the existing bounded/skip-locked/idempotent `reap_dead_letter_agent_actions`
+  (no second dead-letter system). `service_role`.
+- New `resolver_runtime_config` circuit columns (state + thresholds + window).
+
+**Dashboard:** a discreet, tenant-scoped `ResolverStatus` panel (state pill +
+queue / oldest / running / failed / dead-letter / error-rate / cost today /
+budget remaining), placed between the audit trail and cost governance.
+
+**n8n:** `n8n/hermes-resolver-reaper.workflow.js` — repo-only reaper + circuit
+driver, `active:false`; real Schedule wired in E2.3.
+
+**Real assertions (impersonation, rolled back; synthetic fixtures; 5 real QUEUED
+untouched — see `db/tests/hermes_resolver_observability.test.sql`):** tenant
+metrics correct with **cross-tenant rows excluded**; reaper batch limit +
+dead-letter + idempotent; circuit closed→no trip, over-threshold→OPEN + enabled
+false, OPEN→claim `DISABLED`/0, manual reset→CLOSED with enabled still false.
