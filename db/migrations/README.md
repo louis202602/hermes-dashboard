@@ -538,3 +538,29 @@ untouched — see `db/tests/hermes_resolver_observability.test.sql`):** tenant
 metrics correct with **cross-tenant rows excluded**; reaper batch limit +
 dead-letter + idempotent; circuit closed→no trip, over-threshold→OPEN + enabled
 false, OPEN→claim `DISABLED`/0, manual reset→CLOSED with enabled still false.
+
+## Agent-action claim exclusions — head-of-line quarantine (final validation)
+
+`20260814_agent_action_claim_exclusions_1.sql` (+ rollback) fixes **HEAD_OF_LINE_BLOCKING**
+in the agent-action queue. `claim_agent_action` is FIFO (oldest `created_at`, `FOR UPDATE
+SKIP LOCKED`); some protected legacy `hermes.intent.resolve` QUEUED rows are the oldest
+and must never be drained/processed/mutated, so the canonical consumer could not claim a
+newer request without first attempting to claim a protected head-of-line row.
+
+- **`hermes_os.agent_action_claim_exclusions`** — canonical, EXPLICIT quarantine list keyed
+  on `agent_action_requests.id`. A row here makes that action NON-CLAIMABLE **without
+  modifying the original request row** (no status/created_at/lease/attempts change, no
+  delete). `expires_at NULL` = permanent. RLS enabled (no policy), internal.
+- **`claim_agent_action`** (both the 2-arg action-scoped and 1-arg legacy variants) now
+  selects the **OLDEST ELIGIBLE NON-EXCLUDED** action — only an `and not exists (...)`
+  clause was added; with zero exclusions the behaviour is byte-identical to before.
+- **`hermes_os.exclude_agent_action_from_claim(id, reason, expires_at)`** /
+  **`release_agent_action_claim_exclusion(id)`** — service_role helpers to register/lift
+  exclusions (idempotent). Explicit only — never an age-based silent skip, never auto-delete,
+  never an auto FAILED/CANCELLED.
+
+**Live use:** the 4 protected `hermes.intent.resolve` QUEUED rows are registered as
+permanent exclusions, so the real GW Consumer — Semantic Resolver can claim a fresh request
+(verified end-to-end: real gpt-5.4-nano call, SW23 route/reserve/commit, 6-arg
+`complete_agent_action` with propagated lease_token) while the 4 protected rows stay
+bit-for-bit unchanged. Tests: `db/tests/agent_action_claim_exclusions.test.sql` (A–G).
