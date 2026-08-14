@@ -28,6 +28,22 @@
 
 begin;
 
+-- 0. Canonical "expected protected quarantine size" on the runtime config. Derived
+--    from the current claim-exclusion registry (NOT hardcoded ids). The preflight
+--    requires the intact excluded-QUEUED count to stay >= this; fresh non-excluded
+--    requests never reduce it, so legitimate new work does not block activation.
+alter table hermes_os.resolver_runtime_config
+  add column if not exists protected_exclusions_expected integer not null default 0;
+
+update hermes_os.resolver_runtime_config c
+set protected_exclusions_expected = (
+  select count(*) from hermes_os.agent_action_requests r
+  where r.action_key = c.action_key and r.status = 'QUEUED'
+    and exists (select 1 from hermes_os.agent_action_claim_exclusions x
+                where x.action_request_id = r.id and (x.expires_at is null or x.expires_at > now()))
+)
+where c.action_key = 'hermes.intent.resolve';
+
 -- 1. Operator audit trail (append-only; hermes_os internal; RLS on, no policy).
 create table if not exists hermes_os.resolver_operator_audit (
   id          bigint generated always as identity primary key,
@@ -66,6 +82,7 @@ declare
   v_running  integer := 0;
   v_excl     integer := 0;
   v_prot     integer := 0;
+  v_expected integer := 0;
   v_budget_ok boolean := false;
   v_day_key  text := to_char(now(),'YYYY-MM-DD');
   c_config boolean := false; c_circuit boolean := false; c_batch boolean := false;
@@ -95,16 +112,21 @@ begin
   c_running := v_running = 0;
   if not c_running then v_reasons := array_append(v_reasons,'RUNNING_PRESENT'); end if;
 
-  -- protected claim-exclusions present: every currently-QUEUED row for this action
-  -- must be claim-excluded (fail-closed: if there are QUEUED rows and any is not
-  -- excluded, activation could process a protected row).
+  -- Protected quarantine integrity (canonical, no hardcoded ids). Count the QUEUED
+  -- rows that ARE claim-excluded and intact (attempts=0) — the protected/stale
+  -- quarantine — and require it to still be at least the EXPECTED size stored on the
+  -- config (`protected_exclusions_expected`, initialized from the exclusion registry).
+  -- FRESH, non-excluded QUEUED requests are legitimate work: they do NOT reduce this
+  -- count, so they stay eligible and never block activation. A MISSING protected
+  -- exclusion drops the count below expected => PROTECTED_EXCLUSIONS_MISSING (DENIED).
+  v_expected := coalesce(v_cfg.protected_exclusions_expected,0);
   select count(*) into v_prot from hermes_os.agent_action_requests
    where action_key = p_action_key and status = 'QUEUED';
   select count(*) into v_excl from hermes_os.agent_action_requests r
-   where r.action_key = p_action_key and r.status = 'QUEUED'
+   where r.action_key = p_action_key and r.status = 'QUEUED' and r.attempts = 0
      and exists (select 1 from hermes_os.agent_action_claim_exclusions x
                  where x.action_request_id = r.id and (x.expires_at is null or x.expires_at > now()));
-  c_excl := (v_prot = v_excl);   -- all queued rows excluded (or none queued)
+  c_excl := (v_excl >= v_expected);
   if not c_excl then v_reasons := array_append(v_reasons,'PROTECTED_EXCLUSIONS_MISSING'); end if;
 
   -- a hard-stop budget must exist and not be exceeded today
@@ -131,6 +153,7 @@ begin
       'no_parasite_running', c_running, 'protected_exclusions_present', c_excl,
       'budget_ready', c_budget),
     'protected_exclusions_count', v_excl,
+    'protected_exclusions_expected', v_expected,
     'queued_count', v_prot,
     'running_count', v_running);
 end $fn$;

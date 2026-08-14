@@ -19,4 +19,7 @@ drop function if exists hermes_os._resolver_operator_audit(text,uuid,text,jsonb)
 
 drop table if exists hermes_os.resolver_operator_audit;
 
+alter table hermes_os.resolver_runtime_config
+  drop column if exists protected_exclusions_expected;
+
 commit;

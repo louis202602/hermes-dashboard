@@ -573,9 +573,14 @@ resolver stays `enabled=false`, circuit `CLOSED`.
 
 - **`resolver_enable_preflight(action_key)`** — FAIL-CLOSED readiness gate.
   `ready=true` only when ALL hold: config present, circuit CLOSED, sane
-  batch/concurrency/cadence, no parasite RUNNING lease, every QUEUED row is
-  claim-excluded (protected rows quarantined), and a hard-stop budget exists and
-  is not exceeded today. Otherwise `ready=false` + `denied_reasons[]`.
+  batch/concurrency/cadence, no parasite RUNNING lease, the **protected quarantine
+  is intact** (the count of intact claim-excluded QUEUED rows is still ≥ the
+  `protected_exclusions_expected` size stored on the config, derived canonically
+  from the exclusion registry — **not** hardcoded ids), and a hard-stop budget
+  exists and is not exceeded today. Otherwise `ready=false` + `denied_reasons[]`.
+  **Fresh, non-excluded QUEUED requests are legitimate work and never block
+  activation** — only a *missing protected exclusion* (count dropping below
+  expected) trips `PROTECTED_EXCLUSIONS_MISSING`.
 - **`resolver_apply_set_enabled / _circuit_reset / _reap`** (service_role) — enable
   runs the preflight and REFUSES (`ACTIVATION_DENIED`) if not ready; circuit reset
   sets CLOSED but leaves `enabled=false` (reset ≠ activation); reap is bounded,
