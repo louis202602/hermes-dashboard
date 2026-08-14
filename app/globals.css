@@ -3845,3 +3845,43 @@ html[data-theme="light"] .hos-nav-item.is-active {
   line-height: 1.45;
   color: var(--text-muted);
 }
+
+/* ---- Resolver operator control plane (E2.3) ----------------------------- */
+.resolver-control-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+.resolver-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 640;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, opacity 0.15s ease;
+}
+.resolver-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text-primary) 30%, transparent);
+}
+.resolver-btn.is-primary {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 45%, transparent);
+}
+.resolver-btn.is-ghost {
+  padding: 7px 9px;
+  color: var(--text-muted);
+}
+.resolver-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.resolver-metric.is-muted strong {
+  color: var(--text-muted);
+}

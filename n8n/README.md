@@ -167,3 +167,24 @@ Port both Complete nodes to the 6-arg signature and pass
 the workflow stays **INACTIVE** and is kept only as a reference for the gateway
 pattern (canonical BTP-Qualification consumer to be built separately). Do not
 delete; do not activate; do not rewrite before that migration is scheduled.
+
+## E2.3 — Resolver control-plane drivers (DEPLOYED, DORMANT)
+
+Deployed as real n8n workflows, **`active:false`, manual trigger only (no active
+Schedule), `triggerCount:0`** — nothing runs autonomously.
+
+- **GW Driver — Hermes Semantic Resolver (bounded, DORMANT)** (`WTv3UCBM4OMhOj5I`):
+  Tick (manual) → **Runtime Guard** `hermes_os.claim_semantic_resolver_batch('hermes.intent.resolve')`
+  → `Enabled & claimed?` → per-item (go-live subgraph) / No Work. Fail-closed: the
+  DB kill-switch (`resolver_runtime_config.enabled`) must be TRUE or the guard
+  returns zero claims. The per-item resolution subgraph (SW23 route+reserve →
+  gpt-5.4-nano proposal → `complete_agent_action` w/ lease_token) and a real
+  Schedule are wired only under explicit operator go-live.
+- **GW Reaper — Hermes Semantic Resolver (bounded, DORMANT)** (`rzFrtYpQ5nl8jYyO`):
+  Tick (manual) → `reap_resolver_dead_letters(200)` → `resolver_circuit_evaluate`.
+  Bounded/idempotent; never touches the protected head-of-line rows (QUEUED +
+  claim-excluded, not RUNNING).
+
+Activation stays a separate, explicit operator action gated by the DB
+control-plane preflight (`hermes_os.resolver_enable_preflight`) — see
+`db/migrations/20260814_hermes_resolver_control_plane_1.sql`.

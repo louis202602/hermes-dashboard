@@ -590,3 +590,38 @@ export async function getResolverObservability(): Promise<
     };
   }
 }
+
+/**
+ * Operator control-plane read for the semantic resolver
+ * (`public.resolver_operator_get_control`). Returns the parsed control model:
+ * authorization, kill-switch/circuit state, queue/running counts, protected
+ * exclusion count and the fail-closed enable preflight. Read-only — enabling is a
+ * separate, permission-gated, audited action. Non-operators get `authorized:false`.
+ */
+export async function getResolverControl(): Promise<
+  ServiceResult<import("@/lib/resolver/controlState").ResolverControl>
+> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase.rpc("resolver_operator_get_control");
+    if (error) {
+      logEvent("error", "resolver_control.rpc_error", { code: error.code });
+      return { ok: false, provenance: "UNAVAILABLE", error: error.message };
+    }
+    const { parseResolverControl } = await import("@/lib/resolver/controlState");
+    return {
+      ok: true,
+      provenance: "REAL",
+      data: parseResolverControl(data as Record<string, unknown>),
+    };
+  } catch (err) {
+    logEvent("error", "resolver_control.exception", {
+      message: (err as Error).message,
+    });
+    return {
+      ok: false,
+      provenance: "UNAVAILABLE",
+      error: "Resolver control service unavailable.",
+    };
+  }
+}

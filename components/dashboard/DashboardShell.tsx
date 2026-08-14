@@ -12,6 +12,7 @@ import KpiGrid from "@/components/dashboard/KpiGrid";
 import ProjectsTable from "@/components/dashboard/ProjectsTable";
 import QuickActions from "@/components/dashboard/QuickActions";
 import RecentConversations from "@/components/dashboard/RecentConversations";
+import ResolverControlPanel from "@/components/dashboard/ResolverControlPanel";
 import ResolverStatus from "@/components/dashboard/ResolverStatus";
 import Sidebar from "@/components/dashboard/Sidebar";
 import SystemStatus from "@/components/dashboard/SystemStatus";
@@ -30,6 +31,7 @@ import type {
   ServiceResult,
   TenantIdentity,
 } from "@/types/hermes";
+import type { ResolverControl } from "@/lib/resolver/controlState";
 
 type DashboardShellProps = {
   userEmail: string;
@@ -43,6 +45,7 @@ type DashboardShellProps = {
   cost: ServiceResult<CostGovernanceSnapshot>;
   audit: ServiceResult<ActionAuditTrailData>;
   resolver: ServiceResult<ResolverObservability>;
+  resolverControl: ServiceResult<ResolverControl>;
 };
 
 export default function DashboardShell({
@@ -57,6 +60,7 @@ export default function DashboardShell({
   cost,
   audit,
   resolver,
+  resolverControl,
 }: DashboardShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -144,6 +148,10 @@ export default function DashboardShell({
 
           {/* 8 — État opérationnel du résolveur (dormant : lecture seule). */}
           <ResolverStatus resolver={resolver} />
+
+          {/* 8b — Plan de contrôle opérateur (visible uniquement pour un opérateur
+              autorisé ; chaque action appelle une vraie RPC fail-closed). */}
+          <ResolverControlPanel control={resolverControl} />
 
           {/* 9 — Coûts / informations techniques secondaires. */}
           <CostGovernance cost={cost} />
