@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import ActionAuditTrail from "@/components/dashboard/ActionAuditTrail";
 import AgentActionPanel from "@/components/dashboard/AgentActionPanel";
 import ApprovalsPanel from "@/components/dashboard/ApprovalsPanel";
 import CostGovernance from "@/components/dashboard/CostGovernance";
@@ -16,6 +17,7 @@ import SystemStatus from "@/components/dashboard/SystemStatus";
 import TasksPanel from "@/components/dashboard/TasksPanel";
 import TenantBadge from "@/components/dashboard/TenantBadge";
 import type {
+  ActionAuditTrail as ActionAuditTrailData,
   AvailableCapabilities,
   CostGovernanceSnapshot,
   DashboardProjects,
@@ -37,6 +39,7 @@ type DashboardShellProps = {
   priorities: ServiceResult<OperationalPriorities>;
   observability: ServiceResult<ObservabilitySnapshot>;
   cost: ServiceResult<CostGovernanceSnapshot>;
+  audit: ServiceResult<ActionAuditTrailData>;
 };
 
 export default function DashboardShell({
@@ -49,6 +52,7 @@ export default function DashboardShell({
   priorities,
   observability,
   cost,
+  audit,
 }: DashboardShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -131,7 +135,10 @@ export default function DashboardShell({
           {/* 6 — Observabilité (synthèse). */}
           <SystemStatus observability={observability} />
 
-          {/* 7 — Coûts / informations techniques secondaires. */}
+          {/* 7 — Journal d'audit actions & approbations (redevabilité SW15). */}
+          <ActionAuditTrail audit={audit} />
+
+          {/* 8 — Coûts / informations techniques secondaires. */}
           <CostGovernance cost={cost} />
         </div>
       </div>
