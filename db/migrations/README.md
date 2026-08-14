@@ -438,3 +438,40 @@ it only reads the real gateway table `agent_action_requests`.
 `UNAUTHENTICATED`; heliosolar → real trail (actions still `QUEUED` because the
 runner is intentionally **INACTIVE**, shown honestly) + real counts + no PII;
 non-member uid → `NO_TENANT` with **no actions leaked**; helper outcomes verified.
+
+## Resolver runtime safety — kill-switch, bounded driver, budget guard (E2.1)
+
+`20260814_hermes_resolver_runtime_safety_1.sql` provisions the **dormant** safety
+primitives for a future controlled go-live of the Semantic Resolver. It
+**activates nothing** — the n8n consumer stays INACTIVE, no Schedule is created,
+no row is claimed, no model is called.
+
+- **`hermes_os.resolver_runtime_config`** — per-action runtime registry with a
+  first-class **DB kill-switch** (`enabled`), bounded `max_batch`,
+  `max_concurrency`, `cadence_seconds`. RLS deny-all (facade-only). Seeded for
+  `hermes.intent.resolve` with SAFE defaults: **enabled = false**, max_batch 3,
+  max_concurrency 1, cadence 60s. The n8n workflow-active toggle remains a second,
+  independent stop.
+- **`hermes_os.claim_semantic_resolver_batch(action_key, lease)`** — SECURITY
+  DEFINER, `search_path` locked, `service_role` only, **fail-closed**: no config
+  or `enabled=false` ⇒ zero claims. Otherwise claims at most `max_batch`, bounded
+  by `max_concurrency` against the currently-leased RUNNING set, by **reusing the
+  canonical `claim_agent_action`** (lease token + attempts preserved) — no second
+  queue engine.
+- **SW23 budget for `heliosolar`** (canonical `sw23_tenant_budget_config`): daily
+  **$1.00** / monthly **$10.00**, `hard_stop = true` (idempotent — never
+  overwrites an operator budget). At ≈$0.0011/resolve the daily cap bounds any
+  runaway loop. Note: `per_request_budget_usd` is stored but **advisory** — the
+  canonical SW23 reserve enforces the **period (daily/monthly) hard-stop**, which
+  is the effective guard.
+
+**n8n driver source** `n8n/hermes-semantic-resolver-driver.workflow.js` — a
+repo-only control-plane spec (Schedule tick → Runtime Guard → bounded fan-out),
+`active:false`, per-item resolution + real Schedule wired in **E2.3**.
+
+**Real assertions (SQL impersonation, rolled back — zero fixtures persisted; see
+`db/tests/hermes_resolver_runtime_safety.test.sql`):** kill-switch off by
+default; DISABLED ⇒ claim denied on the real action_key (0 claims); ENABLED on
+synthetic fixtures ⇒ max_batch and max_concurrency respected, lease_token +
+attempts preserved, tenant carried; budget under → ok, over-daily $2 > $1 →
+**rejected**; the real `hermes.intent.resolve` queue **untouched**.
