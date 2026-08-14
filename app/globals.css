@@ -3744,3 +3744,28 @@ html[data-theme="light"] .hos-nav-item.is-active {
     animation: none;
   }
 }
+
+/* ---- Action audit trail panel ------------------------------------------ */
+.audit-outcome {
+  display: inline-block;
+  margin-top: 0.2rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.audit-outcome.is-normal {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 45%, transparent);
+}
+.audit-outcome.is-urgent {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+}
+.audit-outcome.is-critical {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}

@@ -3,6 +3,9 @@ import "server-only";
 import { logEvent } from "@/lib/observability/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
+  ActionAuditSummary,
+  ActionAuditTrail,
+  AuditAction,
   AvailableCapabilities,
   AvailableCapability,
   CostBudget,
@@ -417,6 +420,83 @@ export async function getCostGovernanceSnapshot(
       ok: false,
       provenance: "UNAVAILABLE",
       error: "Cost governance service unavailable.",
+    };
+  }
+}
+
+/**
+ * Action & approval audit trail (`public.get_action_audit_trail`). Read-only,
+ * tenant-scoped, non-identifying (no payloads / user ids). Surfaces the decided
+ * accountability history the ApprovalsPanel (pending-only) does not show.
+ */
+export async function getActionAuditTrail(
+  limit = 12,
+): Promise<ServiceResult<ActionAuditTrail>> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase.rpc("get_action_audit_trail", {
+      p_limit: limit,
+    });
+    if (error) {
+      logEvent("error", "audit_trail.rpc_error", { code: error.code });
+      return { ok: false, provenance: "UNAVAILABLE", error: error.message };
+    }
+    const payload = (data ?? {}) as Record<string, unknown>;
+    const rawActions = Array.isArray(payload.actions)
+      ? (payload.actions as Record<string, unknown>[])
+      : [];
+    const actions: AuditAction[] = rawActions.map((a) => ({
+      actionKey: String(a.action_key ?? ""),
+      isSensitive: Boolean(a.is_sensitive),
+      status: (a.status as string) ?? null,
+      policyDecision: (a.policy_decision as string) ?? null,
+      policyReason: (a.policy_reason as string) ?? null,
+      requiredApproval: Boolean(a.required_approval),
+      approvalOutcome:
+        (a.approval_outcome as AuditAction["approvalOutcome"]) ?? "NOT_REQUIRED",
+      decidedAt: (a.decided_at as string) ?? null,
+      attempts: toNumber(a.attempts),
+      errorCode: (a.error_code as string) ?? null,
+      createdAt: (a.created_at as string) ?? null,
+      startedAt: (a.started_at as string) ?? null,
+      finishedAt: (a.finished_at as string) ?? null,
+    }));
+    const s = (payload.summary ?? {}) as Record<string, unknown>;
+    const summary: ActionAuditSummary = {
+      total: toNumber(s.total),
+      sensitive: toNumber(s.sensitive),
+      policyDenied: toNumber(s.policy_denied),
+      approved: toNumber(s.approved),
+      rejected: toNumber(s.rejected),
+      pendingApproval: toNumber(s.pending_approval),
+      failed: toNumber(s.failed),
+      queued: toNumber(s.queued),
+      succeeded: toNumber(s.succeeded),
+    };
+    const unavailable = Array.isArray(payload.unavailable)
+      ? (payload.unavailable as string[])
+      : [];
+    return {
+      ok: true,
+      provenance: "REAL",
+      data: {
+        resolutionStatus: (payload.resolution_status ??
+          "UNAUTHENTICATED") as TenantResolutionStatus,
+        tenantId: (payload.tenant_id as string) ?? null,
+        asOf: (payload.as_of as string) ?? null,
+        summary,
+        actions,
+        unavailable,
+      },
+    };
+  } catch (err) {
+    logEvent("error", "audit_trail.exception", {
+      message: (err as Error).message,
+    });
+    return {
+      ok: false,
+      provenance: "UNAVAILABLE",
+      error: "Audit trail service unavailable.",
     };
   }
 }

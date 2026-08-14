@@ -237,6 +237,56 @@ export type CostGovernanceSnapshot = {
   unavailable: string[];
 };
 
+// --- Action & approval audit trail (safety-critical accountability) --------
+
+export type ActionApprovalOutcome =
+  | "APPROVED"
+  | "REJECTED"
+  | "PENDING_APPROVAL"
+  | "NOT_REQUIRED";
+
+/**
+ * One accountability record for an agent action, from
+ * `public.get_action_audit_trail`. Non-identifying: no payload, no requester /
+ * approver user id, error CODE only.
+ */
+export type AuditAction = {
+  actionKey: string;
+  isSensitive: boolean;
+  status: string | null;
+  policyDecision: string | null;
+  policyReason: string | null;
+  requiredApproval: boolean;
+  approvalOutcome: ActionApprovalOutcome;
+  decidedAt: string | null;
+  attempts: number;
+  errorCode: string | null;
+  createdAt: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+export type ActionAuditSummary = {
+  total: number;
+  sensitive: number;
+  policyDenied: number;
+  approved: number;
+  rejected: number;
+  pendingApproval: number;
+  failed: number;
+  queued: number;
+  succeeded: number;
+};
+
+export type ActionAuditTrail = {
+  resolutionStatus: TenantResolutionStatus;
+  tenantId: string | null;
+  asOf: string | null;
+  summary: ActionAuditSummary;
+  actions: AuditAction[];
+  unavailable: string[];
+};
+
 /** A recent platform execution (non-identifying telemetry — no tenant/user/payload). */
 export type ObsExecution = {
   domain: string | null;
