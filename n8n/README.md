@@ -129,9 +129,15 @@ Source for **GW Consumer — BTP Suivi** (n8n id `1xCiexp3oVj0R8Tk`).
   `request_agent_action`. It claims **only** its own `action_key`, so it cannot
   steal another consumer's queued request.
 
-## GW Consumer — Agent Action Poller (`fLIJqW0itZU75ZOu`) — TEST_ONLY / OBSOLETE
+## GW Consumer — Agent Action Poller (`fLIJqW0itZU75ZOu`) — TEST_ONLY / OBSOLETE / ARCHIVED
 
-**Status: `TEST_ONLY` · `OBSOLETE_5_ARGS` · `MUST_MIGRATE_TO_6_ARGS_BEFORE_ACTIVATION`**
+**Status: `TEST_ONLY` · `OBSOLETE_5_ARGS` · `MUST_MIGRATE_TO_6_ARGS_BEFORE_ACTIVATION` · `ARCHIVED` (accidental-activation guard, reversible)**
+
+Archived in n8n on 2026-08-14 so it cannot be activated by mistake (an archived
+workflow must be explicitly unarchived first). It is kept, not deleted, as a
+reference for the gateway→SW15→agent pattern. A future canonical
+BTP-Qualification consumer should be built fresh on the 6-arg contract (or this
+one migrated + tested) under explicit go-live authorization — not revived as-is.
 
 Live-only demo workflow (no repo source artifact). AI-builder-assisted proof of
 the gateway→SW15→agent pattern for `btp.qualification.create` (claims a queued
