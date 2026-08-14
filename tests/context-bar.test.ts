@@ -7,15 +7,22 @@ import {
   DEFAULT_CONTEXT_SETTINGS,
   buildContextBarModel,
   formatClock,
+  formatTemperature,
+  formatWind,
   isCacheFresh,
   isValidTimeZone,
   offsetLabel,
   parseWeather,
   resolveTimezone,
+  resolveUnitPreferences,
   timezoneOffsetMinutes,
   weatherCodeInfo,
   WEATHER_TTL_MS,
 } from "../lib/dashboard/contextBar.ts";
+
+// Metric/24h units for the model-assembly tests (the values under test there are
+// provenance + amounts, not formatting).
+const FR_UNITS = resolveUnitPreferences("fr-FR", "FR");
 
 // Fixed instants — summer (DST on) and winter (DST off) — so every clock/offset
 // assertion is deterministic and never depends on "now".
@@ -124,6 +131,7 @@ test("NO_LOCATION: no weather ⇒ UNAVAILABLE segment, clock still works on UTC"
     settings: DEFAULT_CONTEXT_SETTINGS,
     timezone: "UTC",
     timezoneSource: "fallback",
+    units: FR_UNITS,
     weather: null,
     costTodayUsd: 0,
     alertCount: 0,
@@ -140,18 +148,43 @@ test("COST_AVAILABLE: real day exposure surfaces with SOURCE currency (USD)", ()
     settings: DEFAULT_CONTEXT_SETTINGS,
     timezone: "Europe/Paris",
     timezoneSource: "tenant",
+    units: FR_UNITS,
     weather: null,
     costTodayUsd: 0.02,
+    costMonthUsd: 1.27,
+    budgetRemainingUsd: 98.73,
     alertCount: 1,
     nextEvent: null,
   });
   assert.equal(model.cost.provenance, "REAL");
   if (model.cost.provenance === "REAL") {
     assert.equal(model.cost.todayAmount, 0.02);
+    assert.equal(model.cost.monthAmount, 1.27);
+    assert.equal(model.cost.remainingAmount, 98.73);
     assert.equal(model.cost.currency, "USD");
   }
   assert.equal(model.alerts.provenance, "REAL");
   if (model.alerts.provenance === "REAL") assert.equal(model.alerts.count, 1);
+});
+
+test("COST month/remaining are optional — null when the budget is not configured", () => {
+  const model = buildContextBarModel({
+    settings: DEFAULT_CONTEXT_SETTINGS,
+    timezone: "UTC",
+    timezoneSource: "fallback",
+    units: FR_UNITS,
+    weather: null,
+    costTodayUsd: 0.01,
+    costMonthUsd: null,
+    budgetRemainingUsd: null,
+    alertCount: 0,
+    nextEvent: null,
+  });
+  assert.equal(model.cost.provenance, "REAL");
+  if (model.cost.provenance === "REAL") {
+    assert.equal(model.cost.monthAmount, null);
+    assert.equal(model.cost.remainingAmount, null);
+  }
 });
 
 // --- COST_UNAVAILABLE -------------------------------------------------------
@@ -160,14 +193,67 @@ test("COST_UNAVAILABLE: null cost ⇒ UNAVAILABLE, no fabricated amount", () => 
     settings: DEFAULT_CONTEXT_SETTINGS,
     timezone: "UTC",
     timezoneSource: "fallback",
+    units: FR_UNITS,
     weather: null,
     costTodayUsd: null,
+    costMonthUsd: null,
+    budgetRemainingUsd: null,
     alertCount: null,
     nextEvent: null,
   });
   assert.equal(model.cost.provenance, "UNAVAILABLE");
   assert.equal(model.alerts.provenance, "UNAVAILABLE");
   assert.equal(model.nextEvent.provenance, "UNAVAILABLE");
+});
+
+// --- LOCALE_FR --------------------------------------------------------------
+test("LOCALE_FR: metric units, 24h clock, French date wording", () => {
+  const u = resolveUnitPreferences("fr-FR", "FR");
+  assert.deepEqual(u, { temperature: "C", wind: "kmh", hourCycle: "24h" });
+  assert.equal(formatTemperature(24.3, u.temperature), "24°C");
+  assert.equal(formatWind(30, u.wind), "30 km/h");
+  const c = formatClock(SUMMER, "Europe/Paris", "fr-FR", {
+    hour12: u.hourCycle === "12h",
+  });
+  assert.equal(c.time, "14:00");
+  // French month abbreviation (e.g. "juil.") — locale drives the wording.
+  assert.match(c.date.toLowerCase(), /juil/);
+});
+
+// --- LOCALE_EN --------------------------------------------------------------
+test("LOCALE_EN: en-US ⇒ imperial + 12h; en-GB ⇒ metric-ish, mph, 24h", () => {
+  const us = resolveUnitPreferences("en-US", "US");
+  assert.deepEqual(us, { temperature: "F", wind: "mph", hourCycle: "12h" });
+  assert.equal(formatTemperature(0, us.temperature), "32°F");
+  assert.equal(formatTemperature(100, us.temperature), "212°F");
+  assert.equal(formatWind(100, us.wind), "62 mph");
+  const c = formatClock(SUMMER, "America/New_York", "en-US", {
+    hour12: us.hourCycle === "12h",
+  });
+  assert.match(c.time, /8[:.]00\s?[AP]M/i); // 12h with AM/PM
+  assert.match(c.date, /Jul/);
+
+  const gb = resolveUnitPreferences("en-GB", "GB");
+  assert.deepEqual(gb, { temperature: "C", wind: "mph", hourCycle: "24h" });
+});
+
+// --- Units architecture: other locales resolve without hardcoding France -----
+test("units: architecture generalises (ES/JP/CA), overrides win", () => {
+  assert.equal(resolveUnitPreferences("es-ES", "ES").temperature, "C");
+  assert.equal(resolveUnitPreferences("ja-JP", "JP").hourCycle, "24h");
+  // Canada: Celsius + km/h but 12h civil clock.
+  assert.deepEqual(resolveUnitPreferences("fr-CA", "CA"), {
+    temperature: "C",
+    wind: "kmh",
+    hourCycle: "12h",
+  });
+  // A user/tenant override always wins (DASH-4 seam).
+  assert.equal(
+    resolveUnitPreferences("fr-FR", "FR", { temperature: "F" }).temperature,
+    "F",
+  );
+  // Region falls back to the locale subtag when country is null.
+  assert.equal(resolveUnitPreferences("en-US", null).temperature, "F");
 });
 
 // --- LIGHT / DARK / TABLET (design-system contract, deterministic proxy) -----

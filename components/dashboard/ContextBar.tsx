@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 
 import {
   formatClock,
+  formatTemperature,
+  formatWind,
   isValidTimeZone,
   type ContextBarModel,
 } from "@/lib/dashboard/contextBar";
@@ -32,8 +34,10 @@ function fmtCurrency(amount: number, currency: string, locale: string): string {
 }
 
 export default function ContextBar({ model, initialClock }: Props) {
-  const { settings, timezone, timezoneSource, weather, cost, alerts } = model;
+  const { settings, timezone, timezoneSource, units, weather, cost, alerts } =
+    model;
   const locale = settings.locale || "fr-FR";
+  const hour12 = units.hourCycle === "12h";
 
   // Live clock island — the only timer on the dashboard. Null until mounted so
   // the first client render reuses the server strings (hydration-safe), then we
@@ -55,11 +59,12 @@ export default function ContextBar({ model, initialClock }: Props) {
         /* keep the resolved (UTC) fallback */
       }
     }
-    const tick = () => setLiveClock(formatClock(new Date(), tz, locale));
+    const tick = () =>
+      setLiveClock(formatClock(new Date(), tz, locale, { hour12 }));
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [timezone, timezoneSource, locale]);
+  }, [timezone, timezoneSource, locale, hour12]);
 
   const clock = liveClock ?? initialClock;
 
@@ -102,7 +107,10 @@ export default function ContextBar({ model, initialClock }: Props) {
               {weather.snapshot.icon}
             </span>
             <span className="context-strong">
-              {Math.round(weather.snapshot.temperatureC)}°C
+              {formatTemperature(
+                weather.snapshot.temperatureC,
+                units.temperature,
+              )}
             </span>
             <span className="context-muted context-hide-mobile">
               {weather.snapshot.condition}
@@ -115,7 +123,7 @@ export default function ContextBar({ model, initialClock }: Props) {
             ) : null}
             {weather.snapshot.windKph !== null ? (
               <span className="context-muted context-hide-tablet">
-                · {Math.round(weather.snapshot.windKph)} km/h
+                · {formatWind(weather.snapshot.windKph, units.wind)}
               </span>
             ) : null}
           </>
@@ -155,14 +163,38 @@ export default function ContextBar({ model, initialClock }: Props) {
         )}
       </span>
 
-      {/* Coût Hermès aujourd'hui (devise source réelle — SW23/USD) */}
+      {/* Coût Hermès (devise source réelle — SW23/USD). Aujourd'hui = principal ;
+          mois + budget restant = secondaires (masqués sur petits écrans). */}
       <span className="context-seg context-seg-cost">
         <Sparkles className="context-ico" aria-hidden />
-        <span className="context-muted">IA</span>
+        <span className="context-muted">Hermès</span>
         {cost.provenance === "REAL" ? (
-          <span className="context-strong" title="Coût IA aujourd'hui (source SW23)">
-            {fmtCurrency(cost.todayAmount, cost.currency, locale)}
-          </span>
+          <>
+            <span
+              className="context-strong"
+              title="Coût IA aujourd'hui (source SW23)"
+            >
+              {fmtCurrency(cost.todayAmount, cost.currency, locale)}
+            </span>
+            <span className="context-muted context-hide-mobile">aujourd’hui</span>
+            {cost.monthAmount !== null ? (
+              <span
+                className="context-muted context-hide-tablet"
+                title="Coût IA ce mois-ci (source SW23)"
+              >
+                · {fmtCurrency(cost.monthAmount, cost.currency, locale)} ce mois
+              </span>
+            ) : null}
+            {cost.remainingAmount !== null ? (
+              <span
+                className="context-muted context-hide-tablet"
+                title="Budget mensuel restant"
+              >
+                · {fmtCurrency(cost.remainingAmount, cost.currency, locale)}{" "}
+                restant
+              </span>
+            ) : null}
+          </>
         ) : (
           <span className="context-muted" title="Coût non disponible">
             indisponible

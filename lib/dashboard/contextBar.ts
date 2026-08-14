@@ -116,21 +116,24 @@ export function offsetLabel(instant: Date, timezone: string): string {
 }
 
 /**
- * Deterministic 24h clock + short date for an IANA zone + locale. DST-safe:
- * `Intl` applies the offset in effect at `instant`. Never touches "now" itself,
- * so it is fully testable with a fixed instant.
+ * Deterministic clock + short date for an IANA zone + locale. DST-safe: `Intl`
+ * applies the offset in effect at `instant`. Never touches "now" itself, so it is
+ * fully testable with a fixed instant. `opts.hour12` selects the 12h/24h cycle
+ * (default 24h); the DATE wording follows the locale (fr-FR ≠ en-US).
  */
 export function formatClock(
   instant: Date,
   timezone: string,
   locale = "fr-FR",
+  opts: { hour12?: boolean } = {},
 ): { time: string; date: string; offset: string } {
   const tz = isValidTimeZone(timezone) ? timezone : "UTC";
+  const hour12 = opts.hour12 === true;
   const time = new Intl.DateTimeFormat(locale, {
     timeZone: tz,
-    hour: "2-digit",
+    hour: hour12 ? "numeric" : "2-digit",
     minute: "2-digit",
-    hour12: false,
+    hour12,
   }).format(instant);
   const date = new Intl.DateTimeFormat(locale, {
     timeZone: tz,
@@ -139,6 +142,60 @@ export function formatClock(
     month: "short",
   }).format(instant);
   return { time, date, offset: offsetLabel(instant, tz) };
+}
+
+// --- Units (i18n-ready: derived from locale/country, override-ready) --------
+
+export type TemperatureUnit = "C" | "F";
+export type WindUnit = "kmh" | "mph";
+export type HourCyclePref = "24h" | "12h";
+
+export type UnitPreferences = {
+  temperature: TemperatureUnit;
+  wind: WindUnit;
+  hourCycle: HourCyclePref;
+};
+
+/**
+ * Sensible per-region unit defaults, **never hardcoded to France**. Derived from
+ * the COUNTRY (falling back to the locale's region subtag). `overrides` is the
+ * seam a future user-preference layer (DASH-4) fills in — pass a partial and it
+ * wins, so nothing here has to be rewritten later.
+ */
+export function resolveUnitPreferences(
+  locale: string,
+  country: string | null,
+  overrides?: Partial<UnitPreferences>,
+): UnitPreferences {
+  const cc = (country || locale.split("-")[1] || "").toUpperCase();
+  // Fahrenheit is the everyday unit essentially only in the US (+ a few small
+  // territories); everywhere else is Celsius.
+  const fahrenheit = new Set(["US", "BS", "BZ", "KY", "PW", "FM", "MH", "LR"]);
+  // mph is the norm in the US and UK (and a handful more); km/h elsewhere.
+  const mph = new Set(["US", "GB", "MM", "LR"]);
+  // Regions where a 12h clock is the common civil convention.
+  const twelveHour = new Set(["US", "CA", "AU", "NZ", "PH", "IN", "PK", "EG"]);
+  const base: UnitPreferences = {
+    temperature: fahrenheit.has(cc) ? "F" : "C",
+    wind: mph.has(cc) ? "mph" : "kmh",
+    hourCycle: twelveHour.has(cc) ? "12h" : "24h",
+  };
+  return { ...base, ...(overrides ?? {}) };
+}
+
+/** Format a Celsius reading in the preferred unit (rounded). */
+export function formatTemperature(
+  celsius: number,
+  unit: TemperatureUnit,
+): string {
+  const v = unit === "F" ? (celsius * 9) / 5 + 32 : celsius;
+  return `${Math.round(v)}°${unit}`;
+}
+
+/** Format a km/h wind speed in the preferred unit (rounded). */
+export function formatWind(kmh: number, unit: WindUnit): string {
+  const v = unit === "mph" ? kmh * 0.621371 : kmh;
+  return `${Math.round(v)} ${unit === "mph" ? "mph" : "km/h"}`;
 }
 
 // --- Weather (Open-Meteo, no key, no secret) --------------------------------
@@ -237,12 +294,18 @@ export type Provenanced<T> =
 
 export type ContextCost = {
   todayAmount: number;
+  monthAmount: number | null;
+  remainingAmount: number | null;
   currency: string; // SOURCE currency of the measured spend (SW23 → USD)
 };
 
 export type ContextAlerts = { count: number };
 
 export type ContextNextEvent = { label: string; whenLabel: string | null };
+
+function numOrNull(v: number | null | undefined): number | null {
+  return v !== null && v !== undefined && Number.isFinite(v) ? v : null;
+}
 
 /**
  * Assemble the bar view model from already-fetched, real signals. Nothing here
@@ -254,14 +317,18 @@ export function buildContextBarModel(input: {
   settings: ContextSettings;
   timezone: string;
   timezoneSource: TimezoneSource;
+  units: UnitPreferences;
   weather: WeatherSnapshot | null;
   costTodayUsd: number | null;
+  costMonthUsd?: number | null;
+  budgetRemainingUsd?: number | null;
   alertCount: number | null;
   nextEvent: ContextNextEvent | null;
 }): {
   settings: ContextSettings;
   timezone: string;
   timezoneSource: TimezoneSource;
+  units: UnitPreferences;
   weather: Provenanced<{ snapshot: WeatherSnapshot }>;
   cost: Provenanced<ContextCost>;
   alerts: Provenanced<ContextAlerts>;
@@ -271,6 +338,7 @@ export function buildContextBarModel(input: {
     settings: input.settings,
     timezone: input.timezone,
     timezoneSource: input.timezoneSource,
+    units: input.units,
     weather: input.weather
       ? { provenance: "REAL", snapshot: input.weather }
       : { provenance: "UNAVAILABLE" },
@@ -279,6 +347,8 @@ export function buildContextBarModel(input: {
         ? {
             provenance: "REAL",
             todayAmount: input.costTodayUsd,
+            monthAmount: numOrNull(input.costMonthUsd),
+            remainingAmount: numOrNull(input.budgetRemainingUsd),
             currency: "USD",
           }
         : { provenance: "UNAVAILABLE" },

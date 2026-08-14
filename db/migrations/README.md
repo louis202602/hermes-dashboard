@@ -617,3 +617,8 @@ Adds the per-tenant **international context** the compact dashboard bar reads
 - **Fail-closed read.** Unauthenticated ⇒ `UNAUTHENTICATED`; no tenant ⇒ neutral
   defaults, never cross-tenant data. Additive, read-only-by-app configuration —
   no business logic, no go-live.
+- **Units follow locale/country, not hardcoded France.** The bar derives °C/°F,
+  km/h/mph and 12h/24h from `locale`/`country` (`resolveUnitPreferences`,
+  override-ready for a future per-user preference). Cost shows today + this month
+  + monthly budget remaining, all from the real SW23 read model in its SOURCE
+  currency (USD) — a display-currency conversion needs a real FX rate (later).

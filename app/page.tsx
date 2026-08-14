@@ -6,6 +6,7 @@ import {
   buildContextBarModel,
   formatClock,
   resolveTimezone,
+  resolveUnitPreferences,
 } from "@/lib/dashboard/contextBar";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getRecentConversations } from "@/services/hermes/conversations";
@@ -87,9 +88,20 @@ export default async function HomePage() {
           tz.timezone,
         )
       : null;
-  // Cost today: real SW23 day exposure (USD). Alerts: real operational counts.
+  // Units follow the tenant locale/country (override-ready), never hardcoded FR.
+  const units = resolveUnitPreferences(settings.locale, settings.country);
+  // Cost: real SW23 day/month exposure + monthly budget remaining (USD source).
   const costTodayUsd =
     cost.ok && cost.data.period?.day ? cost.data.period.day.exposureUsd : null;
+  const costMonthUsd =
+    cost.ok && cost.data.period?.month
+      ? cost.data.period.month.exposureUsd
+      : null;
+  const budgetRemainingUsd =
+    cost.ok && cost.data.period?.month
+      ? cost.data.period.month.remainingUsd
+      : null;
+  // Alerts: real operational counts.
   const alertCount = priorities.ok
     ? priorities.data.summary.pendingApprovals +
       priorities.data.summary.openIncidents +
@@ -100,13 +112,18 @@ export default async function HomePage() {
     settings,
     timezone: tz.timezone,
     timezoneSource: tz.source,
+    units,
     weather: weatherResult && weatherResult.ok ? weatherResult.data : null,
     costTodayUsd,
+    costMonthUsd,
+    budgetRemainingUsd,
     alertCount,
     // Agenda source lands in DASH-2 — slot prepared, no fabricated event.
     nextEvent: null,
   });
-  const initialClock = formatClock(new Date(), tz.timezone, settings.locale);
+  const initialClock = formatClock(new Date(), tz.timezone, settings.locale, {
+    hour12: units.hourCycle === "12h",
+  });
 
   return (
     <DashboardShell
