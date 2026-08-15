@@ -19,6 +19,7 @@ import {
   availableWidgetIds,
   clampLayout,
   contextVisibleSegments,
+  needsWeather,
   resolveContextConfig,
   resolveWidgetLayout,
 } from "@/lib/dashboard/widgets";
@@ -136,11 +137,12 @@ export default async function HomePage() {
   const { visible: visibleWidgets } = resolveWidgetLayout(layout, available);
   const contextConfig = resolveContextConfig(layout.context);
   const contextSegments = contextVisibleSegments(contextConfig);
-  // Weather only when a real location is configured AND the weather segment is
-  // shown — never fabricated, and skipping it when hidden strictly REDUCES the
-  // external Open-Meteo calls (COST-FIRST). Cached server-side when fetched.
+  // Weather only when a real location is configured AND at least one weather-
+  // dependent segment (weather/temperature/rain/wind) is shown — never fabricated,
+  // and skipping it when all are hidden strictly REDUCES the external Open-Meteo
+  // calls (COST-FIRST). Cached server-side when fetched.
   const weatherResult =
-    contextConfig.weather &&
+    needsWeather(contextConfig) &&
     settings.latitude !== null &&
     settings.longitude !== null
       ? await getCurrentWeather(

@@ -197,6 +197,23 @@ export function contextVisibleSegments(config: ContextConfig): string[] {
   return CONTEXT_SEGMENTS.filter((seg) => config[seg]);
 }
 
+/** Segments whose display needs the weather snapshot (weather is a peer of temperature). */
+export const WEATHER_DEPENDENT_SEGMENTS: ContextSegment[] = [
+  "weather",
+  "temperature",
+  "rain",
+  "wind",
+];
+
+/**
+ * Whether the upstream weather call is needed at all. The Open-Meteo fetch is
+ * skipped (COST-FIRST) only when EVERY weather-dependent segment is hidden — so a
+ * user who hides "weather" but keeps "temperature" still gets real data.
+ */
+export function needsWeather(config: ContextConfig): boolean {
+  return WEATHER_DEPENDENT_SEGMENTS.some((seg) => config[seg]);
+}
+
 // --- Pure mutators (used by the settings UI; no DOM) -------------------------
 
 /** Move a widget one step up (-1) or down (+1) within the given order. */

@@ -47,6 +47,13 @@ export default function ContextBar({ model, initialClock, visibleSegments }: Pro
   const showTime = show("time");
   const showClock = showDate || showTime;
   const showWeather = show("weather");
+  const showTemperature = show("temperature");
+  const showRain = show("rain");
+  const showWind = show("wind");
+  // The weather block renders if ANY weather-dependent segment is on (temperature
+  // is a peer of the weather condition, not a child) — must match the upstream
+  // fetch condition so the data is available whenever any part is shown.
+  const showWeatherSeg = showWeather || showTemperature || showRain || showWind;
   const showNextEvent = show("nextEvent");
   const showAlerts = show("alerts");
   const showCost = show("cost");
@@ -118,21 +125,24 @@ export default function ContextBar({ model, initialClock, visibleSegments }: Pro
         </span>
       ) : null}
 
-      {(showLocation || showClock) && showWeather ? (
+      {(showLocation || showClock) && showWeatherSeg ? (
         <span className="context-sep" aria-hidden>
           ·
         </span>
       ) : null}
 
-      {/* Météo */}
-      {showWeather ? (
+      {/* Météo — chaque sous-segment (condition, température, pluie, vent) est
+          gaté indépendamment ; le conteneur s'affiche si l'un d'eux est visible. */}
+      {showWeatherSeg ? (
       <span className="context-seg context-seg-weather">
         {weather.provenance === "REAL" ? (
           <>
-            <span className="context-wx-icon" aria-hidden>
-              {weather.snapshot.icon}
-            </span>
-            {show("temperature") ? (
+            {showWeather ? (
+              <span className="context-wx-icon" aria-hidden>
+                {weather.snapshot.icon}
+              </span>
+            ) : null}
+            {showTemperature ? (
               <span className="context-strong">
                 {formatTemperature(
                   weather.snapshot.temperatureC,
@@ -140,29 +150,31 @@ export default function ContextBar({ model, initialClock, visibleSegments }: Pro
                 )}
               </span>
             ) : null}
-            <span className="context-muted context-hide-mobile">
-              {weather.snapshot.condition}
-            </span>
-            {show("rain") &&
+            {showWeather ? (
+              <span className="context-muted context-hide-mobile">
+                {weather.snapshot.condition}
+              </span>
+            ) : null}
+            {showRain &&
             weather.snapshot.precipitationMm !== null &&
             weather.snapshot.precipitationMm > 0 ? (
               <span className="context-muted context-hide-tablet">
                 · {weather.snapshot.precipitationMm} mm
               </span>
             ) : null}
-            {show("wind") && weather.snapshot.windKph !== null ? (
+            {showWind && weather.snapshot.windKph !== null ? (
               <span className="context-muted context-hide-tablet">
                 · {formatWind(weather.snapshot.windKph, units.wind)}
               </span>
             ) : null}
           </>
-        ) : (
+        ) : showWeather ? (
           <span className="context-muted">
             {settings.locationConfigured
               ? "Météo indisponible"
               : "Météo à configurer"}
           </span>
-        )}
+        ) : null}
       </span>
       ) : null}
 

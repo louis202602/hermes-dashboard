@@ -415,6 +415,7 @@ export default function DashboardSettings({
                   <button
                     type="button"
                     className="widget-btn widget-btn-hide"
+                    aria-label={`Masquer ${it.label}`}
                     onClick={() => onHide(it.id, true)}
                   >
                     Masquer
@@ -452,6 +453,7 @@ export default function DashboardSettings({
                         <button
                           type="button"
                           className="widget-btn widget-btn-add"
+                          aria-label={`Ajouter ${it.label}`}
                           onClick={() => onHide(it.id, false)}
                         >
                           Ajouter

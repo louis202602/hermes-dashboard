@@ -11,6 +11,7 @@ import {
   clampLayout,
   contextVisibleSegments,
   moveWidget,
+  needsWeather,
   normalizeOrder,
   registryIds,
   resolveContextConfig,
@@ -120,6 +121,30 @@ test("CONTEXT show/hide: default all on; overrides drop segments", () => {
   assert.ok(!visible.includes("weather"));
   assert.ok(!visible.includes("cost"));
   assert.ok(visible.includes("date"));
+});
+
+// --- WEATHER fetch logic: ANY weather-dependent segment ---------------------
+test("needsWeather: fetch iff any of weather/temperature/rain/wind is shown", () => {
+  assert.equal(needsWeather(resolveContextConfig({})), true); // all on by default
+  // all four off ⇒ no upstream call
+  assert.equal(
+    needsWeather(
+      resolveContextConfig({ weather: false, temperature: false, rain: false, wind: false }),
+    ),
+    false,
+  );
+  // weather off but temperature on ⇒ STILL fetch (peer, not child)
+  assert.equal(
+    needsWeather(resolveContextConfig({ weather: false, rain: false, wind: false })),
+    true,
+  );
+  // only wind on ⇒ fetch
+  assert.equal(
+    needsWeather(
+      resolveContextConfig({ weather: false, temperature: false, rain: false }),
+    ),
+    true,
+  );
 });
 
 // --- RESET_WIDGETS_SCOPED ---------------------------------------------------
