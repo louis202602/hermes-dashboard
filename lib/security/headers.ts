@@ -54,6 +54,10 @@ export function buildContentSecurityPolicy(
   nonce: string,
   isDev: boolean,
 ): string {
+  // CARTE-1: the map's free OSM vector tiles (OpenFreeMap by default, overridable via
+  // NEXT_PUBLIC_MAP_STYLE_URL for self-hosted PMTiles/tileserver). Only the tile host
+  // is opened for browser fetch (style/tiles/glyphs/sprite) — no key, no paid API.
+  const mapOrigins = mapTileOrigins();
   const directives: string[] = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${
@@ -65,7 +69,7 @@ export function buildContentSecurityPolicy(
     // blob: are also allowed.
     "img-src 'self' data: blob: https:",
     "font-src 'self'",
-    "connect-src 'self'",
+    `connect-src 'self'${mapOrigins ? " " + mapOrigins : ""}`,
     "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
@@ -78,4 +82,22 @@ export function buildContentSecurityPolicy(
   }
 
   return directives.join("; ");
+}
+
+/**
+ * The map tile host(s) allowed in `connect-src`. Derived from the configured style
+ * URL (so a self-hosted PMTiles/tileserver just needs the env var — no code change),
+ * defaulting to OpenFreeMap. Empty string if the map is explicitly disabled.
+ */
+function mapTileOrigins(): string {
+  const raw = process.env.NEXT_PUBLIC_MAP_STYLE_URL;
+  if (raw) {
+    try {
+      const u = new URL(raw);
+      return u.origin; // e.g. https://tiles.example.com
+    } catch {
+      // fall through to the default
+    }
+  }
+  return "https://tiles.openfreemap.org https://*.openfreemap.org";
 }

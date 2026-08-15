@@ -42,6 +42,8 @@ export type WidgetDef = {
   requiredCapability?: string;
   /** Shared snapshots this widget reads (doc + no-extra-fetch contract). */
   snapshotKeys: string[];
+  /** Hidden by default (opt-in via the gallery) — e.g. heavy/self-fetching widgets. */
+  defaultHidden?: boolean;
 };
 
 /**
@@ -66,6 +68,9 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: "resolver-status", label: "État du résolveur", category: "system", supportedSizes: ["medium", "large"], defaultSize: "large", span: "full", snapshotKeys: ["resolver"] },
   { id: "resolver-control", label: "Contrôle opérateur du résolveur", category: "system", supportedSizes: ["large"], defaultSize: "large", span: "full", snapshotKeys: ["resolverControl"] },
   { id: "cost", label: "Coûts & gouvernance", category: "finance", supportedSizes: ["medium", "large"], defaultSize: "large", span: "full", snapshotKeys: ["cost"] },
+  // CARTE-1: opt-in (default hidden) — it lazy-loads MapLibre + self-fetches its data,
+  // so it costs nothing on the dashboard until a user adds it from the gallery.
+  { id: "chantiers-map", label: "Carte des chantiers", category: "chantiers", supportedSizes: ["medium", "large"], defaultSize: "large", span: "full", snapshotKeys: ["chantiersMap"], defaultHidden: true },
 ];
 
 export const LAYOUT_SCHEMA_VERSION = 1;
@@ -186,6 +191,11 @@ export function resolveWidgetLayout(
   const seen = new Set(userOrder);
   const order = [...userOrder, ...DEFAULT_WIDGET_ORDER.filter((id) => !seen.has(id))];
   const hidden = new Set(strArray(userLayout?.hidden).filter((id) => REGISTRY_IDS.has(id)));
+  // Opt-in widgets (defaultHidden) stay hidden until the user explicitly adds them
+  // (their id appears in the persisted order) — so heavy widgets never load by default.
+  for (const w of WIDGET_REGISTRY) {
+    if (w.defaultHidden && !seen.has(w.id)) hidden.add(w.id);
+  }
 
   const sizes = (userLayout?.sizes ?? {}) as Record<string, unknown>;
   const items: ResolvedWidgetItem[] = order.map((id) => {
