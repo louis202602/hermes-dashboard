@@ -647,3 +647,31 @@ and ALERT_COUNT.
   only actionable severities (WARNING/HIGH/CRITICAL), never neutral INFO.
 - **No fabrication.** Every entry carries a canonical `source`/`source_id` and
   `provenance:REAL`; absent data yields an empty list, never an invented event.
+
+## DASH-3 — État global Hermès + Activité + Commercial (2026-08-15)
+
+Two small read-only tenant-scoped facades; the "system health" panel is composed
+on the server from already-fetched snapshots (KPIs, observability, resolver, cost)
+plus the pre-existing `public.get_platform_health()` (now wired). No new business
+system, no LLM, no external API.
+
+| File | Purpose |
+|------|---------|
+| `20260815_hermes_dashboard_system_activity_1.sql` | `public.get_agent_action_stats()` — caller-tenant `agent_action_requests` counts by status (queued/running/succeeded/failed/dead_letter/pending_approval). `public.get_dashboard_commercial()` — real `btp_devis` aggregates (EUR): sent / to-follow-up / accepted + TTC amounts. |
+| `20260815_hermes_dashboard_system_activity_9_rollback.sql` | Drops the two DASH-3 facades. `get_platform_health` is PRE-EXISTING and intentionally kept. No business data touched. |
+
+### Invariants
+
+- **Tenant-scoped, fail-closed.** Caller's tenant only via `resolve_active_tenant`
+  (never a client id); unauthenticated ⇒ `UNAUTHENTICATED`. Bounded **aggregate**
+  results (counts/sums) — no row dumps, no PII (no user_id, token, or payload).
+- **`get_platform_health` is PARTIAL by nature** — it only measures the component
+  registry + last execution, so the UI shows coverage `PARTIAL` and status
+  OPERATIONAL / DEGRADED / UNAVAILABLE, never a bold "everything works".
+- **Recent activity** reuses `get_observability_snapshot` (already fetched) — the
+  feed is bounded (default 12) and non-identifying (action keys / domains only).
+- **Currencies kept honest.** AI cost stays USD (SW23); devis stay **EUR**
+  (`btp_devis`). No implicit FX conversion. Invoices / prospects / contracts are
+  absent and never fabricated.
+- **COST-FIRST.** Deterministic, no LLM, no external API, no polling; the three
+  reads join the existing `Promise.all`.

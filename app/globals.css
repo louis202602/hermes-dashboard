@@ -4139,3 +4139,138 @@ html[data-theme="light"] .hos-nav-item.is-active {
   font-size: 0.72rem;
   color: var(--text-muted);
 }
+
+/* --- DASH-3 · État global Hermès + Activité + Commercial ------------------- */
+.sysh-health {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+.sysh-health strong { display: block; color: var(--text-primary); font-size: 0.9rem; }
+.sysh-health span { color: var(--text-muted); font-size: 0.74rem; }
+.sysh-health svg { flex: none; color: var(--text-secondary); }
+.sysh-health.is-operational svg { color: var(--success); }
+.sysh-health.is-degraded svg { color: var(--warning); }
+.sysh-health.is-unavailable svg { color: var(--text-muted); }
+
+.sysh-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.sysh-grid-4 { grid-template-columns: repeat(4, 1fr); }
+.sysh-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.sysh-metric strong {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.sysh-metric span { font-size: 0.7rem; color: var(--text-muted); }
+.sysh-metric.is-danger strong { color: var(--danger); }
+.sysh-metric.is-warning strong { color: var(--warning); }
+.sysh-metric.is-muted strong { color: var(--text-muted); }
+.sysh-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: var(--space-2) 0 6px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.sysh-row { margin-top: 6px; }
+.sysh-row-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.sysh-row-item strong { color: var(--text-primary); }
+.sysh-note { color: var(--text-muted); font-size: 0.8rem; padding: 4px 0; }
+
+.activity-list { display: flex; flex-direction: column; gap: 4px; }
+.activity-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.activity-status-icon { display: inline-flex; flex: none; color: var(--text-secondary); }
+.activity-item.is-succeeded .activity-status-icon { color: var(--success); }
+.activity-item.is-running .activity-status-icon { color: var(--hermes-cyan, var(--accent)); }
+.activity-item.is-failed .activity-status-icon,
+.activity-item.is-dead_letter .activity-status-icon { color: var(--danger); }
+.activity-item.is-degraded .activity-status-icon { color: var(--warning); }
+.activity-copy { display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; min-width: 0; }
+.activity-copy strong {
+  font-size: 0.84rem; font-weight: 600; color: var(--text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.activity-copy span { font-size: 0.74rem; color: var(--text-muted); }
+.activity-time {
+  flex: none; font-size: 0.74rem; color: var(--text-muted);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.activity-empty, .commercial-empty {
+  color: var(--text-muted); font-size: 0.85rem; padding: var(--space-2) 0;
+}
+
+.commercial-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.commercial-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+.commercial-metric svg { color: var(--text-secondary); }
+.commercial-metric strong { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); }
+.commercial-metric span { font-size: 0.7rem; color: var(--text-muted); }
+.commercial-metric.is-warning strong { color: var(--warning); }
+.commercial-metric.is-success svg { color: var(--success); }
+.commercial-amounts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+}
+.commercial-amounts > div {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--space-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--surface);
+}
+.commercial-amounts span { font-size: 0.72rem; color: var(--text-muted); }
+.commercial-amounts strong { font-size: 0.95rem; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.commercial-note { margin-top: var(--space-2); font-size: 0.72rem; color: var(--text-muted); }
+
+@media (max-width: 560px) {
+  .sysh-grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .commercial-amounts { grid-template-columns: 1fr; }
+}
