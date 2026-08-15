@@ -25,6 +25,10 @@ import {
 } from "../lib/dashboard/widgets.ts";
 
 const ALL = new Set(registryIds());
+// Widgets visible in a fresh layout = everything except opt-in (defaultHidden) ones.
+const DEFAULT_VISIBLE = DEFAULT_WIDGET_ORDER.filter(
+  (id) => !widgetById(id)!.defaultHidden,
+);
 
 // --- REGISTRY_IDS_UNIQUE ----------------------------------------------------
 test("REGISTRY_IDS_UNIQUE: every widget id is unique + non-empty", () => {
@@ -40,11 +44,19 @@ test("REGISTRY_IDS_UNIQUE: every widget id is unique + non-empty", () => {
 });
 
 // --- DEFAULT_LAYOUT ---------------------------------------------------------
-test("DEFAULT_LAYOUT: no user prefs ⇒ full Hermès order, all visible", () => {
+test("DEFAULT_LAYOUT: no user prefs ⇒ default-visible widgets (opt-in ones hidden)", () => {
   const r = resolveWidgetLayout(null, ALL);
-  assert.deepEqual(r.visible, DEFAULT_WIDGET_ORDER);
+  assert.deepEqual(r.visible, DEFAULT_VISIBLE);
   const empty = resolveWidgetLayout(clampLayout({}), ALL);
-  assert.deepEqual(empty.visible, DEFAULT_WIDGET_ORDER);
+  assert.deepEqual(empty.visible, DEFAULT_VISIBLE);
+  // the opt-in map widget exists but is hidden by default
+  assert.ok(!r.visible.includes("chantiers-map"));
+  assert.ok(r.items.find((i) => i.id === "chantiers-map")?.hidden);
+});
+
+test("DEFAULT_HIDDEN: opt-in widget shows only once added to the order", () => {
+  const added = resolveWidgetLayout({ order: ["chantiers-map"] }, ALL);
+  assert.ok(added.visible.includes("chantiers-map"));
 });
 
 // --- USER_LAYOUT ------------------------------------------------------------
@@ -55,7 +67,7 @@ test("USER_LAYOUT: custom order honoured, new widgets appended", () => {
   assert.equal(r.visible[1], "kpis");
   // widgets absent from user order still appear (appended, canonical order).
   assert.ok(r.visible.includes("agenda"));
-  assert.equal(r.visible.length, DEFAULT_WIDGET_ORDER.length);
+  assert.equal(r.visible.length, DEFAULT_VISIBLE.length);
 });
 
 // --- SHOW_WIDGET / HIDE_WIDGET ----------------------------------------------
@@ -103,7 +115,7 @@ test("UNKNOWN_WIDGET_IGNORED: stale ids in prefs never crash", () => {
   const r = resolveWidgetLayout(layout, ALL);
   assert.ok(!r.visible.includes("ghost"));
   assert.equal(r.visible[0], "kpis");
-  assert.equal(r.visible.length, DEFAULT_WIDGET_ORDER.length);
+  assert.equal(r.visible.length, DEFAULT_VISIBLE.length);
   // normalizeOrder drops unknowns and completes with the rest.
   assert.deepEqual(
     new Set(normalizeOrder(["ghost", "kpis"])),
@@ -197,7 +209,7 @@ test("RESET_WIDGETS_SCOPED: cleared layout ⇒ default order + all segments", ()
   assert.deepEqual(cleared.order, []);
   assert.deepEqual(cleared.hidden, []);
   assert.deepEqual(cleared.sizes, {}); // sizes reset to default too
-  assert.deepEqual(resolveWidgetLayout(cleared, ALL).visible, DEFAULT_WIDGET_ORDER);
+  assert.deepEqual(resolveWidgetLayout(cleared, ALL).visible, DEFAULT_VISIBLE);
   // widgets fall back to their registry defaultSize after a reset
   const r = resolveWidgetLayout(cleared, ALL);
   for (const it of r.items) {

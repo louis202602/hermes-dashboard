@@ -4559,6 +4559,66 @@ html[data-reduce-transparency="1"] .context-bar { backdrop-filter: none; backgro
 .widget-edit-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .widget-edit-body { pointer-events: none; }
 
+/* ── CARTE-1 — worksite map ───────────────────────────────────────────────── */
+.chantier-map-panel { display: flex; flex-direction: column; gap: var(--space-2); }
+.chantier-map { display: flex; flex-direction: column; gap: var(--space-2); }
+.chantier-map-canvas {
+  width: 100%; height: 420px; border-radius: var(--radius-lg);
+  overflow: hidden; border: 1px solid var(--border); background: var(--surface-soft);
+}
+@media (max-width: 720px) { .chantier-map-canvas { height: 320px; } }
+
+.chantier-map-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.map-filter-btn {
+  padding: 5px 11px; border-radius: var(--radius-pill);
+  border: 1px solid var(--border); background: var(--surface-soft);
+  color: var(--text-primary); font-size: 0.78rem; cursor: pointer;
+}
+.map-filter-btn:hover { border-color: var(--border-strong); }
+.map-filter-btn.is-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.map-filter-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Markers — status colours are SEMANTIC (independent of the user accent). */
+.map-marker {
+  width: 18px; height: 18px; border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg); border: 2px solid #fff; cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.35); padding: 0;
+}
+.map-marker:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.map-marker.marker-upcoming { background: var(--text-muted); }
+.map-marker.marker-running  { background: var(--hermes-blue, #2f6fed); }
+.map-marker.marker-done     { background: var(--success); }
+.map-marker.marker-late     { background: var(--warning); }
+.map-marker.marker-alert    { background: var(--danger); }
+
+.map-popup { display: flex; flex-direction: column; gap: 4px; min-width: 180px; }
+.map-popup-title { font-size: 0.92rem; color: #111; }
+.map-popup-meta { font-size: 0.76rem; color: #444; }
+.map-popup-weather { font-size: 0.78rem; color: #222; }
+.map-popup-route {
+  margin-top: 4px; font-size: 0.8rem; font-weight: 600; color: #2f6fed;
+  text-decoration: none;
+}
+.map-popup-route:hover { text-decoration: underline; }
+
+.chantier-map-empty, .chantier-map-fallback {
+  display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
+  padding: var(--space-4); border-radius: var(--radius-lg);
+  border: 1px dashed var(--border); background: var(--surface-soft);
+  color: var(--text-muted); font-size: 0.85rem;
+}
+.chantier-map-empty strong, .chantier-map-fallback strong { color: var(--text-primary); }
+.chantier-map-loading { padding: var(--space-4); color: var(--text-muted); font-size: 0.85rem; }
+
+.chantier-map-page { width: min(1400px, 100%); margin: 0 auto; padding: 18px 24px 40px; }
+.chantier-map-page-head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: var(--space-3); margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3); border-bottom: 1px solid var(--border);
+}
+.chantier-map-page-head h1 { font-size: 1.6rem; font-weight: 700; }
+.chantier-map-page .chantier-map-canvas { height: 68vh; }
+
 /* Widget management (Paramètres > Dashboard > Widgets) */
 .widget-row { gap: var(--space-2); }
 .widget-controls { display: inline-flex; align-items: center; gap: 6px; }

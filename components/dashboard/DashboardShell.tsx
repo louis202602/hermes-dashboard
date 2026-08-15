@@ -12,6 +12,7 @@ import AgentActivityPanel from "@/components/dashboard/AgentActivityPanel";
 import AppearanceSync from "@/components/dashboard/AppearanceSync";
 import AlertsPanel from "@/components/dashboard/AlertsPanel";
 import ApprovalsPanel from "@/components/dashboard/ApprovalsPanel";
+import ChantierMapWidget from "@/components/dashboard/ChantierMapWidget";
 import CommercialPanel from "@/components/dashboard/CommercialPanel";
 import ContextBar from "@/components/dashboard/ContextBar";
 import CostGovernance from "@/components/dashboard/CostGovernance";
@@ -242,6 +243,7 @@ export default function DashboardShell({
     "resolver-status": () => <ResolverStatus resolver={resolver} />,
     "resolver-control": () => <ResolverControlPanel control={resolverControl} />,
     cost: () => <CostGovernance cost={cost} />,
+    "chantiers-map": () => <ChantierMapWidget />,
   };
   const renderWidget = (id: string): React.ReactNode =>
     widgetNodes[id]?.() ?? null; // unknown id ⇒ nothing (safe)

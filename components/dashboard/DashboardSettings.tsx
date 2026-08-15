@@ -315,6 +315,15 @@ export default function DashboardSettings({
   const onSize = (id: string, size: WidgetSize) => {
     commitLayout({ ...layout, sizes: setWidgetSize(layout.sizes, id, size) });
   };
+  // Add from the gallery: un-hide AND mark explicitly ordered (so an opt-in
+  // widget like the map, hidden by default, becomes visible and stays visible).
+  const onShow = (id: string) => {
+    commitLayout({
+      ...layout,
+      order: resolved.items.map((it) => it.id),
+      hidden: setWidgetHidden(layout.hidden, id, false),
+    });
+  };
   const onContext = (seg: ContextSegment, on: boolean) => {
     commitLayout({ ...layout, context: { ...layout.context, [seg]: on } });
   };
@@ -471,7 +480,7 @@ export default function DashboardSettings({
                           type="button"
                           className="widget-btn widget-btn-add"
                           aria-label={`Ajouter ${it.label}`}
-                          onClick={() => onHide(it.id, false)}
+                          onClick={() => onShow(it.id)}
                         >
                           Ajouter
                         </button>

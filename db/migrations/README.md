@@ -729,3 +729,26 @@ known keys/ids and clamps sizes to each widget's `supportedSizes`, so it is
 **forward- and backward-compatible** by construction — a renamed/removed widget id
 is ignored, a new size or a new layout field is additive, and no data migration is
 required. Only bump `schemaVersion` if a future change needs an active transform.
+
+## CARTE-1 — Worksite map geo source (2026-08-15)
+
+Canonical geographic source for the free (MapLibre + OpenStreetMap) worksite map.
+
+| File | Purpose |
+|------|---------|
+| `20260815_hermes_chantier_geo_1.sql` | `hermes_os.btp_chantier_geo` (PK `chantier_id`; `tenant_id`, `latitude`, `longitude`, `formatted_address`, `country_code`, `iana_timezone`, `geocoded_at`, `geocode_provider`, `geocode_status`). **Separate** from `btp_chantiers` (which the BTP agent writes) to avoid write collisions. RLS deny-all. `public.get_chantiers_map()` (active tenant's geocoded worksites, bounded 500) + `public.upsert_chantier_geocode(...)` (persist a one-shot geocode for a worksite the tenant owns; validates coord range + tenant ownership). Both SECURITY DEFINER, `auth.uid` + `resolve_active_tenant`, `search_path` locked, REVOKE PUBLIC / GRANT authenticated. |
+| `20260815_hermes_chantier_geo_9_rollback.sql` | Drops both facades + the geo table. Nothing else touched. |
+
+### Invariants
+
+- **Geocoding is one-shot** (address → lat/lon persisted); never geocoded at render.
+  The initial seed used **Nominatim (OSM)** at ≤ 1 req/s with a proper User-Agent.
+- **Same lat/lon feed the map AND the worksite weather** (Open-Meteo, `timezone:auto`)
+  — no second geographic system, no second geocoding.
+- **Tenant-scoped, fail-closed**: verified live — member sees only their geocoded
+  worksites; unauthenticated ⇒ `UNAUTHENTICATED`; no client `tenant_id`.
+- **COST-FIRST**: `MAP_COST = GEOCODING_COST = ROUTING_COST = 0 €`, `LLM = 0`. Free
+  keyless OSM vector tiles (OpenFreeMap by default, `NEXT_PUBLIC_MAP_STYLE_URL`
+  overridable for self-hosted PMTiles/tileserver). MapLibre + the map data load ONLY
+  when the opt-in `chantiers-map` widget is added or the `/chantiers/carte` page is
+  opened. External routing = an "Ouvrir l'itinéraire" link (no paid API).
