@@ -33,11 +33,30 @@ function fmtCurrency(amount: number, currency: string, locale: string): string {
   }
 }
 
-export default function ContextBar({ model, initialClock }: Props) {
+export default function ContextBar({ model, initialClock, visibleSegments }: Props) {
   const { settings, timezone, timezoneSource, units, weather, cost, alerts } =
     model;
   const locale = settings.locale || "fr-FR";
   const hour12 = units.hourCycle === "12h";
+  // DASH-4B: per-segment visibility (unset ⇒ every segment shown). Toggling a
+  // segment only changes rendering — never adds a fetch (data already loaded, and
+  // weather is skipped upstream when its segment is off).
+  const show = (seg: string) => !visibleSegments || visibleSegments.includes(seg);
+  const showLocation = show("location");
+  const showDate = show("date");
+  const showTime = show("time");
+  const showClock = showDate || showTime;
+  const showWeather = show("weather");
+  const showTemperature = show("temperature");
+  const showRain = show("rain");
+  const showWind = show("wind");
+  // The weather block renders if ANY weather-dependent segment is on (temperature
+  // is a peer of the weather condition, not a child) — must match the upstream
+  // fetch condition so the data is available whenever any part is shown.
+  const showWeatherSeg = showWeather || showTemperature || showRain || showWind;
+  const showNextEvent = show("nextEvent");
+  const showAlerts = show("alerts");
+  const showCost = show("cost");
   const showSeconds = model.showSeconds;
 
   // Live clock island — the only timer on the dashboard. Null until mounted so
@@ -72,75 +91,97 @@ export default function ContextBar({ model, initialClock }: Props) {
   return (
     <div className="context-bar" role="status" aria-live="off">
       {/* Localisation */}
-      <span className="context-seg context-seg-location">
-        <MapPin className="context-ico" aria-hidden />
-        {settings.city ? (
-          <span className="context-strong">{settings.city}</span>
-        ) : (
-          <span className="context-muted">Localisation à configurer</span>
-        )}
-      </span>
+      {showLocation ? (
+        <span className="context-seg context-seg-location">
+          <MapPin className="context-ico" aria-hidden />
+          {settings.city ? (
+            <span className="context-strong">{settings.city}</span>
+          ) : (
+            <span className="context-muted">Localisation à configurer</span>
+          )}
+        </span>
+      ) : null}
 
-      <span className="context-sep" aria-hidden>
-        ·
-      </span>
+      {showLocation && showClock ? (
+        <span className="context-sep" aria-hidden>
+          ·
+        </span>
+      ) : null}
 
       {/* Date · heure locale (live) */}
-      <span className="context-seg context-seg-clock">
-        <span className="context-date">{clock.date}</span>
-        <span className="context-time" suppressHydrationWarning>
-          {clock.time}
+      {showClock ? (
+        <span className="context-seg context-seg-clock">
+          {showDate ? <span className="context-date">{clock.date}</span> : null}
+          {showTime ? (
+            <span className="context-time" suppressHydrationWarning>
+              {clock.time}
+            </span>
+          ) : null}
+          {showTime ? (
+            <span className="context-tz" title={timezone}>
+              {clock.offset}
+            </span>
+          ) : null}
         </span>
-        <span className="context-tz" title={timezone}>
-          {clock.offset}
+      ) : null}
+
+      {(showLocation || showClock) && showWeatherSeg ? (
+        <span className="context-sep" aria-hidden>
+          ·
         </span>
-      </span>
+      ) : null}
 
-      <span className="context-sep" aria-hidden>
-        ·
-      </span>
-
-      {/* Météo */}
+      {/* Météo — chaque sous-segment (condition, température, pluie, vent) est
+          gaté indépendamment ; le conteneur s'affiche si l'un d'eux est visible. */}
+      {showWeatherSeg ? (
       <span className="context-seg context-seg-weather">
         {weather.provenance === "REAL" ? (
           <>
-            <span className="context-wx-icon" aria-hidden>
-              {weather.snapshot.icon}
-            </span>
-            <span className="context-strong">
-              {formatTemperature(
-                weather.snapshot.temperatureC,
-                units.temperature,
-              )}
-            </span>
-            <span className="context-muted context-hide-mobile">
-              {weather.snapshot.condition}
-            </span>
-            {weather.snapshot.precipitationMm !== null &&
+            {showWeather ? (
+              <span className="context-wx-icon" aria-hidden>
+                {weather.snapshot.icon}
+              </span>
+            ) : null}
+            {showTemperature ? (
+              <span className="context-strong">
+                {formatTemperature(
+                  weather.snapshot.temperatureC,
+                  units.temperature,
+                )}
+              </span>
+            ) : null}
+            {showWeather ? (
+              <span className="context-muted context-hide-mobile">
+                {weather.snapshot.condition}
+              </span>
+            ) : null}
+            {showRain &&
+            weather.snapshot.precipitationMm !== null &&
             weather.snapshot.precipitationMm > 0 ? (
               <span className="context-muted context-hide-tablet">
                 · {weather.snapshot.precipitationMm} mm
               </span>
             ) : null}
-            {weather.snapshot.windKph !== null ? (
+            {showWind && weather.snapshot.windKph !== null ? (
               <span className="context-muted context-hide-tablet">
                 · {formatWind(weather.snapshot.windKph, units.wind)}
               </span>
             ) : null}
           </>
-        ) : (
+        ) : showWeather ? (
           <span className="context-muted">
             {settings.locationConfigured
               ? "Météo indisponible"
               : "Météo à configurer"}
           </span>
-        )}
+        ) : null}
       </span>
+      ) : null}
 
       <span className="context-spacer" aria-hidden />
 
       {/* Prochain RDV — emplacement préparé ; source agenda = DASH-2. */}
-      {model.nextEvent.provenance === "REAL" ? (
+      {showNextEvent && model.nextEvent.provenance === "REAL" ? (
         <span className="context-seg context-seg-agenda context-hide-mobile">
           <CalendarClock className="context-ico" aria-hidden />
           <span className="context-strong">{model.nextEvent.label}</span>
@@ -151,6 +192,7 @@ export default function ContextBar({ model, initialClock }: Props) {
       ) : null}
 
       {/* Alertes importantes */}
+      {showAlerts ? (
       <span className="context-seg context-seg-alerts">
         <AlertTriangle className="context-ico" aria-hidden />
         {alerts.provenance === "REAL" ? (
@@ -163,9 +205,11 @@ export default function ContextBar({ model, initialClock }: Props) {
           <span className="context-muted">—</span>
         )}
       </span>
+      ) : null}
 
       {/* Coût Hermès (devise source réelle — SW23/USD). Aujourd'hui = principal ;
           mois + budget restant = secondaires (masqués sur petits écrans). */}
+      {showCost ? (
       <span className="context-seg context-seg-cost">
         <Sparkles className="context-ico" aria-hidden />
         <span className="context-muted">Hermès</span>
@@ -202,6 +246,7 @@ export default function ContextBar({ model, initialClock }: Props) {
           </span>
         )}
       </span>
+      ) : null}
     </div>
   );
 }

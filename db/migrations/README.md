@@ -713,3 +713,12 @@ accessibility, behavior, and the regional override — all applied via `<html>`
   server-side. The `hermes-appearance` cookie carries ONLY the appearance dataset
   (no layout/profiles/sensitive data), `SameSite=Lax`, `Secure` on HTTPS,
   non-HttpOnly by necessity (the pre-paint script reads it from JS).
+
+### DASH-4B — widget registry (no schema change)
+
+The widget registry / gallery / show-hide / order + configurable context bar
+(DASH-4B) persist entirely in the **existing** `layout` JSONB sub-object of
+`dashboard_user_preferences` (`{ order, hidden, context, schemaVersion }`), through
+the **same** `upsert_dashboard_user_preferences` facade — no new table, no new
+migration. Optimistic version, tenant scoping, and the payload guards all apply
+unchanged. Unknown widget ids are ignored on resolution (forward/backward safe).

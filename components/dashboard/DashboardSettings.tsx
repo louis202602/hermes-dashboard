@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { saveDashboardPreferencesAction } from "@/app/actions/dashboard-preferences";
 import {
@@ -17,6 +17,19 @@ import {
   type DashboardPreferences,
   type RegionalOverride,
 } from "@/lib/dashboard/preferences";
+import {
+  CONTEXT_SEGMENTS,
+  LAYOUT_SCHEMA_VERSION,
+  clampLayout,
+  moveWidget,
+  resolveContextConfig,
+  resolveWidgetLayout,
+  setWidgetHidden,
+  widgetById,
+  type ContextSegment,
+  type LayoutPreferences,
+  type WidgetCategory,
+} from "@/lib/dashboard/widgets";
 
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
 
@@ -103,9 +116,36 @@ const R: Record<string, Opt[]> = {
   firstDayOfWeek: [{ value: "auto", label: "Auto" }, { value: "monday", label: "Lundi" }, { value: "sunday", label: "Dimanche" }],
 };
 
+const CONTEXT_LABELS: Record<ContextSegment, string> = {
+  time: "Heure",
+  date: "Date",
+  weather: "Météo",
+  temperature: "Température",
+  rain: "Pluie",
+  wind: "Vent",
+  location: "Localisation",
+  cost: "Coût Hermès",
+  alerts: "Alertes",
+  nextEvent: "Prochain événement",
+};
+
+const CATEGORY_LABELS: Record<WidgetCategory, string> = {
+  general: "Général",
+  agenda: "Agenda",
+  weather: "Météo",
+  alerts: "Alertes",
+  commercial: "Commercial",
+  finance: "Finance",
+  agents: "Agents",
+  system: "Système",
+  chantiers: "Chantiers",
+  btp: "BTP",
+  immobilier: "Immobilier",
+};
+
+const SIZE_SHORT: Record<string, string> = { small: "S", medium: "M", large: "L" };
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  // Native <details>: open two-pane on desktop; on mobile each section is a real
-  // collapsible drill-in (keyboard + touch accessible, no JS) instead of one long scroll.
   return (
     <details className="settings-section" open>
       <summary className="settings-section-title">{title}</summary>
@@ -170,42 +210,58 @@ function ToggleRow({
 
 export default function DashboardSettings({
   initial,
+  availableWidgets = [],
 }: {
   initial: DashboardPreferences;
+  availableWidgets?: string[];
 }) {
   const [appearance, setAppearance] = useState<Appearance>(initial.appearance);
   const [behavior, setBehavior] = useState<Behavior>(initial.behavior);
   const [regional, setRegional] = useState<RegionalOverride>(initial.regional);
+  const [layout, setLayout] = useState<LayoutPreferences>(() =>
+    clampLayout(initial.layout),
+  );
   const version = useRef<number>(initial.version);
   const [save, setSave] = useState<SaveState>("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pending = useRef<Record<string, unknown>>({});
 
-  const persist = useCallback(
-    (a: Appearance, b: Behavior, r: RegionalOverride) => {
-      if (timer.current) clearTimeout(timer.current);
-      setSave("saving");
-      timer.current = setTimeout(async () => {
-        const res = await saveDashboardPreferencesAction(
-          {
-            appearance: a,
-            behavior: b,
-            regional: r,
-            schema_version: PREFERENCES_SCHEMA_VERSION,
-          },
-          version.current,
-        );
-        if (res.ok && typeof res.version === "number") {
-          version.current = res.version;
-          setSave("saved");
-        } else if (res.status === "VERSION_CONFLICT") {
-          setSave("conflict");
-          setTimeout(() => window.location.reload(), 1400);
-        } else {
-          setSave("error");
-        }
-      }, 600);
+  const availableSet = useMemo(
+    () => new Set(availableWidgets),
+    [availableWidgets],
+  );
+
+  // Unified optimistic persistence: patches (appearance/behavior/regional/layout)
+  // accumulate and flush ONCE after a debounce — the replace-per-subobject upsert
+  // preserves everything untouched. Shared version ⇒ no self-inflicted conflicts.
+  const schedule = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    setSave("saving");
+    timer.current = setTimeout(async () => {
+      const patch = {
+        ...pending.current,
+        schema_version: PREFERENCES_SCHEMA_VERSION,
+      };
+      pending.current = {};
+      const res = await saveDashboardPreferencesAction(patch, version.current);
+      if (res.ok && typeof res.version === "number") {
+        version.current = res.version;
+        setSave("saved");
+      } else if (res.status === "VERSION_CONFLICT") {
+        setSave("conflict");
+        setTimeout(() => window.location.reload(), 1400);
+      } else {
+        setSave("error");
+      }
+    }, 600);
+  }, []);
+
+  const persistPatch = useCallback(
+    (p: Record<string, unknown>) => {
+      pending.current = { ...pending.current, ...p };
+      schedule();
     },
-    [],
+    [schedule],
   );
 
   // Live preview: reflect appearance on <html> as it changes.
@@ -218,22 +274,59 @@ export default function DashboardSettings({
   const setA = (patch: Partial<Appearance>) => {
     const next = { ...appearance, ...patch };
     setAppearance(next);
-    persist(next, behavior, regional);
+    persistPatch({ appearance: next });
   };
   const setB = (patch: Partial<Behavior>) => {
     const next = { ...behavior, ...patch };
     setBehavior(next);
-    persist(appearance, next, regional);
+    persistPatch({ behavior: next });
   };
   const setR = (patch: Partial<RegionalOverride>) => {
     const next = { ...regional, ...patch };
     setRegional(next);
-    persist(appearance, behavior, next);
+    persistPatch({ regional: next });
   };
   const resetAppearance = () => {
     setAppearance(HERMES_DEFAULT_APPEARANCE);
-    persist(HERMES_DEFAULT_APPEARANCE, behavior, regional);
+    persistPatch({ appearance: HERMES_DEFAULT_APPEARANCE });
   };
+
+  // --- DASH-4B widget layout ---
+  const resolved = useMemo(
+    () => resolveWidgetLayout(layout, availableSet),
+    [layout, availableSet],
+  );
+  const ctx = useMemo(() => resolveContextConfig(layout.context), [layout]);
+
+  const commitLayout = (next: LayoutPreferences) => {
+    setLayout(next);
+    persistPatch({ layout: next });
+  };
+  const onMove = (id: string, dir: -1 | 1) => {
+    const base = resolved.items.map((it) => it.id);
+    commitLayout({ ...layout, order: moveWidget(base, id, dir) });
+  };
+  const onHide = (id: string, hide: boolean) => {
+    commitLayout({ ...layout, hidden: setWidgetHidden(layout.hidden, id, hide) });
+  };
+  const onContext = (seg: ContextSegment, on: boolean) => {
+    commitLayout({ ...layout, context: { ...layout.context, [seg]: on } });
+  };
+  const resetWidgets = () => {
+    const cleared: LayoutPreferences = {
+      order: [],
+      hidden: [],
+      context: {},
+      schemaVersion: LAYOUT_SCHEMA_VERSION,
+    };
+    setLayout(cleared);
+    persistPatch({ layout: cleared });
+  };
+
+  const activeItems = resolved.items.filter((it) => it.available && !it.hidden);
+  const galleryItems = resolved.items.filter(
+    (it) => !it.available || it.hidden,
+  );
 
   const saveLabel =
     save === "saving"
@@ -293,6 +386,100 @@ export default function DashboardSettings({
           <ToggleRow label="Animations" checked={behavior.animations} onChange={(v) => setB({ animations: v })} />
         </Section>
 
+        <Section title="Widgets actifs">
+          {activeItems.length === 0 ? (
+            <p className="settings-reset-note">Aucun widget actif.</p>
+          ) : (
+            activeItems.map((it, idx) => (
+              <div className="settings-row widget-row" key={it.id}>
+                <span className="settings-row-label">{it.label}</span>
+                <span className="widget-controls">
+                  <button
+                    type="button"
+                    className="widget-btn"
+                    aria-label={`Monter ${it.label}`}
+                    disabled={idx === 0}
+                    onClick={() => onMove(it.id, -1)}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="widget-btn"
+                    aria-label={`Descendre ${it.label}`}
+                    disabled={idx === activeItems.length - 1}
+                    onClick={() => onMove(it.id, 1)}
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    className="widget-btn widget-btn-hide"
+                    aria-label={`Masquer ${it.label}`}
+                    onClick={() => onHide(it.id, true)}
+                  >
+                    Masquer
+                  </button>
+                </span>
+              </div>
+            ))
+          )}
+        </Section>
+
+        <Section title="Ajouter un widget">
+          {galleryItems.length === 0 ? (
+            <p className="settings-reset-note">Tous les widgets disponibles sont actifs.</p>
+          ) : (
+            <div className="widget-gallery">
+              {galleryItems.map((it) => {
+                const def = widgetById(it.id);
+                const sizes = (def?.supportedSizes ?? [])
+                  .map((s) => SIZE_SHORT[s] ?? s)
+                  .join(" · ");
+                return (
+                  <div
+                    className={`widget-card${it.available ? "" : " is-unavailable"}`}
+                    key={it.id}
+                  >
+                    <div className="widget-card-head">
+                      <span className="widget-card-name">{it.label}</span>
+                      <span className="widget-card-cat">
+                        {CATEGORY_LABELS[it.category]}
+                      </span>
+                    </div>
+                    <div className="widget-card-foot">
+                      <span className="widget-card-sizes">{sizes}</span>
+                      {it.available ? (
+                        <button
+                          type="button"
+                          className="widget-btn widget-btn-add"
+                          aria-label={`Ajouter ${it.label}`}
+                          onClick={() => onHide(it.id, false)}
+                        >
+                          Ajouter
+                        </button>
+                      ) : (
+                        <span className="widget-card-unavail">Non disponible</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Section>
+
+        <Section title="Barre de contexte">
+          {CONTEXT_SEGMENTS.map((seg) => (
+            <ToggleRow
+              key={seg}
+              label={CONTEXT_LABELS[seg]}
+              checked={ctx[seg]}
+              onChange={(v) => onContext(seg, v)}
+            />
+          ))}
+        </Section>
+
         <Section title="Régional / Heure">
           <SelectRow label="Locale" value={regional.locale ?? ""} options={R.locale} onChange={(v) => setR({ locale: v || null })} />
           <SelectRow label="Pays" value={regional.country ?? ""} options={R.country} onChange={(v) => setR({ country: v || null })} />
@@ -313,6 +500,13 @@ export default function DashboardSettings({
           <p className="settings-reset-note">
             Réinitialise uniquement l’apparence (thème, accent, texte…). Les widgets
             et réglages régionaux ne sont pas touchés.
+          </p>
+          <button type="button" className="settings-reset" onClick={resetWidgets}>
+            Restaurer les widgets par défaut
+          </button>
+          <p className="settings-reset-note">
+            Réinitialise uniquement les widgets et la barre de contexte. L’apparence,
+            le régional et le comportement ne sont pas touchés.
           </p>
         </Section>
       </div>

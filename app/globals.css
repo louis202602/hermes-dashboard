@@ -4486,3 +4486,52 @@ html[data-reduce-transparency="1"] .context-bar { backdrop-filter: none; backgro
   .settings-body { grid-template-columns: 1fr; }
   .settings-select { max-width: 55%; }
 }
+
+/* ── DASH-4B — configurable widget grid + gallery ─────────────────────────── */
+.dashboard-widgets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.dash-widget { min-width: 0; }
+.dash-widget.span-full { grid-column: 1 / -1; }
+.dash-widget.span-half { grid-column: span 1; }
+@media (max-width: 1024px) {
+  .dashboard-widgets { grid-template-columns: 1fr; }
+  .dash-widget.span-half { grid-column: 1 / -1; }
+}
+
+/* Widget management (Paramètres > Dashboard > Widgets) */
+.widget-row { gap: var(--space-2); }
+.widget-controls { display: inline-flex; align-items: center; gap: 6px; }
+.widget-btn {
+  min-width: 34px; min-height: 34px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-input);
+  background: var(--surface-soft); color: var(--text-primary);
+  font-size: 0.82rem; cursor: pointer;
+}
+.widget-btn:hover:not(:disabled) { border-color: var(--border-strong); }
+.widget-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.widget-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.widget-btn-add { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+
+.widget-gallery {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-2); padding: 4px 2px;
+}
+.widget-card {
+  border: 1px solid var(--border); border-radius: var(--radius-input);
+  background: var(--surface-soft); padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.widget-card.is-unavailable { opacity: 0.55; }
+.widget-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.widget-card-name { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
+.widget-card-cat {
+  font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-muted); white-space: nowrap;
+}
+.widget-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.widget-card-sizes { font-size: 0.72rem; color: var(--text-muted); }
+.widget-card-unavail { font-size: 0.72rem; color: var(--text-muted); }
