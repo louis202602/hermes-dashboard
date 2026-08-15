@@ -12,6 +12,9 @@ import {
   resolveTimezone,
   resolveUnitPreferences,
 } from "@/lib/dashboard/contextBar";
+import {
+  HERMES_DEFAULT_PREFERENCES,
+} from "@/lib/dashboard/preferences";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getDashboardAgenda, getUnifiedAlerts } from "@/services/hermes/agenda";
 import { getRecentConversations } from "@/services/hermes/conversations";
@@ -33,6 +36,7 @@ import {
   getResolverControl,
   getResolverObservability,
 } from "@/services/hermes/panels";
+import { getDashboardUserPreferences } from "@/services/hermes/preferences";
 import {
   getAgentActionStats,
   getDashboardCommercial,
@@ -69,6 +73,7 @@ export default async function HomePage() {
     platformHealth,
     actionStats,
     commercial,
+    preferencesResult,
   ] = await Promise.all([
     getActiveTenantIdentity(),
     getPublicKpis(),
@@ -87,16 +92,29 @@ export default async function HomePage() {
     getPlatformHealth(),
     getAgentActionStats(),
     getDashboardCommercial(),
+    getDashboardUserPreferences(),
   ]);
 
   // --- DASH-1 context bar assembly (deterministic clock + cached weather) ---
-  const settings = contextSettingsResult.ok
+  const tenantSettings = contextSettingsResult.ok
     ? contextSettingsResult.data
     : DEFAULT_CONTEXT_SETTINGS;
-  // Timezone precedence: user → tenant → UTC (no user tz source yet).
+  // DASH-4A: user regional override layered on top of the DASH-1 tenant defaults
+  // (kept SEPARATE from visual appearance). null override ⇒ inherit tenant.
+  const prefs = preferencesResult.ok
+    ? preferencesResult.data
+    : HERMES_DEFAULT_PREFERENCES;
+  const reg = prefs.regional;
+  const settings = {
+    ...tenantSettings,
+    locale: reg.locale ?? tenantSettings.locale,
+    country: reg.country ?? tenantSettings.country,
+    currency: reg.currency ?? tenantSettings.currency,
+  };
+  // Timezone precedence: user override → tenant → UTC (DST-safe).
   const tz = resolveTimezone({
-    userTimezone: null,
-    tenantTimezone: settings.timezone,
+    userTimezone: reg.timezone,
+    tenantTimezone: tenantSettings.timezone,
   });
   // Weather only when a real location is configured — never fabricated. Cached
   // server-side (15 min) so it is not called per render.
@@ -108,8 +126,13 @@ export default async function HomePage() {
           tz.timezone,
         )
       : null;
-  // Units follow the tenant locale/country (override-ready), never hardcoded FR.
-  const units = resolveUnitPreferences(settings.locale, settings.country);
+  // Units follow locale/country (override-ready); user regional overrides win.
+  const units = resolveUnitPreferences(settings.locale, settings.country, {
+    ...(reg.temperatureUnit ? { temperature: reg.temperatureUnit } : {}),
+    ...(reg.windUnit ? { wind: reg.windUnit } : {}),
+    ...(reg.hourCycle ? { hourCycle: reg.hourCycle } : {}),
+  });
+  const showSeconds = reg.showSeconds;
   // Cost: real SW23 day/month exposure + monthly budget remaining (USD source).
   const costTodayUsd =
     cost.ok && cost.data.period?.day ? cost.data.period.day.exposureUsd : null;
@@ -135,6 +158,7 @@ export default async function HomePage() {
     timezone: tz.timezone,
     timezoneSource: tz.source,
     units,
+    showSeconds,
     weather: weatherResult && weatherResult.ok ? weatherResult.data : null,
     costTodayUsd,
     costMonthUsd,
@@ -144,6 +168,7 @@ export default async function HomePage() {
   });
   const initialClock = formatClock(now, tz.timezone, settings.locale, {
     hour12: units.hourCycle === "12h",
+    showSeconds,
   });
 
   return (
@@ -170,6 +195,9 @@ export default async function HomePage() {
       commercial={commercial}
       timezone={tz.timezone}
       hour12={units.hourCycle === "12h"}
+      appearance={prefs.appearance}
+      behavior={prefs.behavior}
+      preferencesVersion={prefs.version}
     />
   );
 }

@@ -38,6 +38,7 @@ export default function ContextBar({ model, initialClock }: Props) {
     model;
   const locale = settings.locale || "fr-FR";
   const hour12 = units.hourCycle === "12h";
+  const showSeconds = model.showSeconds;
 
   // Live clock island — the only timer on the dashboard. Null until mounted so
   // the first client render reuses the server strings (hydration-safe), then we
@@ -60,11 +61,11 @@ export default function ContextBar({ model, initialClock }: Props) {
       }
     }
     const tick = () =>
-      setLiveClock(formatClock(new Date(), tz, locale, { hour12 }));
+      setLiveClock(formatClock(new Date(), tz, locale, { hour12, showSeconds }));
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [timezone, timezoneSource, locale, hour12]);
+  }, [timezone, timezoneSource, locale, hour12, showSeconds]);
 
   const clock = liveClock ?? initialClock;
 

@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 
 import { NONCE_HEADER } from "@/lib/security/headers";
-import { THEME_INIT_SCRIPT } from "@/lib/theme";
+import { APPEARANCE_INIT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -40,7 +40,7 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col">
         <script
           nonce={nonce}
-          dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
+          dangerouslySetInnerHTML={{ __html: APPEARANCE_INIT_SCRIPT }}
         />
         {children}
       </body>
