@@ -675,3 +675,41 @@ system, no LLM, no external API.
   absent and never fabricated.
 - **COST-FIRST.** Deterministic, no LLM, no external API, no polling; the three
   reads join the existing `Promise.all`.
+
+## DASH-4A — Dashboard user preferences (2026-08-15)
+
+Foundation of the **Paramètres > Dashboard** centre: one user-scoped preferences
+row + optimistic-concurrency facades. Powers appearance (theme/accent/contrast/
+transparency/blur/radius/shadow), typography (font/size/weight/density),
+accessibility, behavior, and the regional override — all applied via `<html>`
+`data-*` tokens (live preview) and an anti-FOUC cookie. No LLM, no external API.
+
+| File | Purpose |
+|------|---------|
+| `20260815_hermes_dashboard_user_preferences_1.sql` | `hermes_os.dashboard_user_preferences` (PK `user_id, tenant_id`; appearance/behavior/regional/layout/profiles JSONB; `schema_version`, `version`, `updated_at`). RLS deny-all. `public.get_dashboard_user_preferences()` (own row only) + `public.upsert_dashboard_user_preferences(p_patch, p_expected_version)` (optimistic version — stale ⇒ `VERSION_CONFLICT`, never last-write-wins). Both SECURITY DEFINER, `auth.uid` + `resolve_active_tenant`, REVOKE PUBLIC / GRANT authenticated. |
+| `20260815_hermes_dashboard_user_preferences_2.sql` | Hardening (CREATE OR REPLACE, same signature): server-side JSONB guards on the upsert — payload ≤ `MAX_PREFS_PAYLOAD_BYTES` = **16384** (else `PAYLOAD_TOO_LARGE`), and every present sub-object must be a JSON object (else `BAD_PAYLOAD`). Defense-in-depth: the DB never trusts the client's clamps. |
+| `20260815_hermes_dashboard_user_preferences_9_rollback.sql` | Drops both facades + the table. Nothing else touched. |
+
+### Invariants
+
+- **User-scoped, fail-closed.** A user reads/writes only their own row (`auth.uid`);
+  tenant resolved server-side. Unauthenticated ⇒ `UNAUTHENTICATED`; verified live
+  (cross-user + cross-tenant see nothing; version conflict rejects).
+- **Resolution user → tenant → Hermès default** (app-side, `resolvePreferences`);
+  regional overrides layer on the DASH-1 tenant defaults, kept SEPARATE from appearance.
+- **COST-FIRST.** 1 preferences read in the existing `Promise.all`; writes ONLY on an
+  explicit user change (debounced). No LLM, no external API, no scheduler, no polling;
+  the clock tick stays 0 network/DB/LLM.
+- **Anti-FOUC (server-first, zero new-device flash).** The **layout resolves the
+  canonical appearance server-side** (`resolveInitialAppearance`) and stamps the
+  `data-*` tokens onto `<html>` in the SSR response, so a brand-new device (server
+  prefs exist, no cookie yet) paints correctly on the FIRST frame. The read is
+  `React.cache()`-shared with the page, so it costs **no** extra DB round-trip. The
+  tiny pre-paint init script now only does what the server cannot: resolve
+  `theme:auto` against the OS, and bridge a legacy `hermes-theme` localStorage value
+  for users who predate the cookie. Precedence: **server DB (canonical) → appearance
+  cookie (cache) → localStorage (legacy/cache only)**.
+- **Payload hardening.** `MAX_PREFS_PAYLOAD_BYTES = 16384`; sub-objects type-checked
+  server-side. The `hermes-appearance` cookie carries ONLY the appearance dataset
+  (no layout/profiles/sensitive data), `SameSite=Lax`, `Secure` on HTTPS,
+  non-HttpOnly by necessity (the pre-paint script reads it from JS).

@@ -1,13 +1,28 @@
 "use client";
 
-import { Bell, HelpCircle, Menu, Moon, Sun } from "lucide-react";
+import { Bell, Menu, Moon, Settings, Sun } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useRef, useState } from "react";
 
 import { HermesLogoSymbol } from "@/components/common/HermesLogo";
-import { useTheme } from "@/hooks/useTheme";
+import { saveDashboardPreferencesAction } from "@/app/actions/dashboard-preferences";
+import {
+  applyAppearance,
+  resolveThemeAttr,
+  writeAppearanceCookie,
+} from "@/lib/dashboard/applyAppearance";
+import {
+  HERMES_DEFAULT_APPEARANCE,
+  PREFERENCES_SCHEMA_VERSION,
+  type Appearance,
+} from "@/lib/dashboard/preferences";
 
 type HeaderProps = {
   onMenuClick?: () => void;
   userEmail?: string;
+  appearance?: Appearance;
+  preferencesVersion?: number;
 };
 
 function initials(email: string): string {
@@ -17,9 +32,40 @@ function initials(email: string): string {
   return (letters || local.slice(0, 2) || "?").toUpperCase();
 }
 
-export default function Header({ onMenuClick, userEmail }: HeaderProps) {
-  const { theme, toggleTheme } = useTheme();
+export default function Header({
+  onMenuClick,
+  userEmail,
+  appearance = HERMES_DEFAULT_APPEARANCE,
+  preferencesVersion = 0,
+}: HeaderProps) {
   const email = userEmail ?? "";
+  const router = useRouter();
+  const [appr, setAppr] = useState<Appearance>(appearance);
+  const versionRef = useRef<number>(preferencesVersion);
+  // Effective light/dark for the icon (resolves auto/named themes at click time).
+  const isLight = resolveThemeAttr(appr.theme) === "light";
+
+  // Quick light/dark toggle — CANONICAL: it goes through the very same optimistic
+  // upsert (and version) as the Settings page, applies live, and mirrors the cookie.
+  // On VERSION_CONFLICT (another device wrote first) it refreshes to the canonical
+  // server state instead of silently overwriting — no parallel write path.
+  const toggle = () => {
+    const next: Appearance = { ...appr, theme: isLight ? "dark" : "light" };
+    setAppr(next);
+    applyAppearance(next);
+    writeAppearanceCookie(next);
+    void saveDashboardPreferencesAction(
+      { appearance: next, schema_version: PREFERENCES_SCHEMA_VERSION },
+      versionRef.current,
+    ).then((r) => {
+      if (r.ok && typeof r.version === "number") {
+        versionRef.current = r.version;
+      } else if (r.status === "VERSION_CONFLICT") {
+        if (typeof r.version === "number") versionRef.current = r.version;
+        router.refresh(); // pull canonical appearance; AppearanceSync reconciles
+      }
+    });
+  };
 
   return (
     <header className="hos-topbar">
@@ -41,17 +87,24 @@ export default function Header({ onMenuClick, userEmail }: HeaderProps) {
         <button
           type="button"
           className="hos-icon-btn"
-          aria-label={
-            theme === "dark" ? "Activer le thème clair" : "Activer le thème sombre"
-          }
-          onClick={toggleTheme}
+          aria-label={isLight ? "Activer le thème sombre" : "Activer le thème clair"}
+          onClick={toggle}
         >
-          {theme === "dark" ? (
-            <Sun size={19} strokeWidth={1.8} />
-          ) : (
+          {isLight ? (
             <Moon size={19} strokeWidth={1.8} />
+          ) : (
+            <Sun size={19} strokeWidth={1.8} />
           )}
         </button>
+
+        <Link
+          href="/parametres/dashboard"
+          className="hos-icon-btn"
+          aria-label="Paramètres du dashboard"
+          title="Paramètres du dashboard"
+        >
+          <Settings size={19} strokeWidth={1.8} />
+        </Link>
 
         <button
           type="button"
@@ -61,16 +114,6 @@ export default function Header({ onMenuClick, userEmail }: HeaderProps) {
           title="Bientôt disponible"
         >
           <Bell size={19} strokeWidth={1.8} />
-        </button>
-
-        <button
-          type="button"
-          className="hos-icon-btn"
-          aria-label="Aide"
-          disabled
-          title="Bientôt disponible"
-        >
-          <HelpCircle size={19} strokeWidth={1.8} />
         </button>
 
         <span className="hos-userchip" title={email || undefined}>

@@ -125,7 +125,7 @@ export function formatClock(
   instant: Date,
   timezone: string,
   locale = "fr-FR",
-  opts: { hour12?: boolean } = {},
+  opts: { hour12?: boolean; showSeconds?: boolean } = {},
 ): { time: string; date: string; offset: string } {
   const tz = isValidTimeZone(timezone) ? timezone : "UTC";
   const hour12 = opts.hour12 === true;
@@ -133,6 +133,7 @@ export function formatClock(
     timeZone: tz,
     hour: hour12 ? "numeric" : "2-digit",
     minute: "2-digit",
+    ...(opts.showSeconds ? { second: "2-digit" as const } : {}),
     hour12,
   }).format(instant);
   const date = new Intl.DateTimeFormat(locale, {
@@ -318,6 +319,7 @@ export function buildContextBarModel(input: {
   timezone: string;
   timezoneSource: TimezoneSource;
   units: UnitPreferences;
+  showSeconds?: boolean;
   weather: WeatherSnapshot | null;
   costTodayUsd: number | null;
   costMonthUsd?: number | null;
@@ -329,6 +331,7 @@ export function buildContextBarModel(input: {
   timezone: string;
   timezoneSource: TimezoneSource;
   units: UnitPreferences;
+  showSeconds: boolean;
   weather: Provenanced<{ snapshot: WeatherSnapshot }>;
   cost: Provenanced<ContextCost>;
   alerts: Provenanced<ContextAlerts>;
@@ -339,6 +342,7 @@ export function buildContextBarModel(input: {
     timezone: input.timezone,
     timezoneSource: input.timezoneSource,
     units: input.units,
+    showSeconds: input.showSeconds === true,
     weather: input.weather
       ? { provenance: "REAL", snapshot: input.weather }
       : { provenance: "UNAVAILABLE" },

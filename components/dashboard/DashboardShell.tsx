@@ -6,6 +6,7 @@ import ActionAuditTrail from "@/components/dashboard/ActionAuditTrail";
 import AgendaPanel from "@/components/dashboard/AgendaPanel";
 import AgentActionPanel from "@/components/dashboard/AgentActionPanel";
 import AgentActivityPanel from "@/components/dashboard/AgentActivityPanel";
+import AppearanceSync from "@/components/dashboard/AppearanceSync";
 import AlertsPanel from "@/components/dashboard/AlertsPanel";
 import ApprovalsPanel from "@/components/dashboard/ApprovalsPanel";
 import CommercialPanel from "@/components/dashboard/CommercialPanel";
@@ -42,6 +43,7 @@ import type {
   DashboardAgenda,
   UnifiedAlerts,
 } from "@/lib/dashboard/agenda";
+import type { Appearance, Behavior } from "@/lib/dashboard/preferences";
 import type { ContextBarModel } from "@/lib/dashboard/contextBar";
 import type {
   AgentActionStats,
@@ -72,6 +74,9 @@ type DashboardShellProps = {
   commercial: ServiceResult<DashboardCommercial>;
   timezone: string;
   hour12: boolean;
+  appearance: Appearance;
+  behavior: Behavior;
+  preferencesVersion: number;
 };
 
 export default function DashboardShell({
@@ -97,12 +102,22 @@ export default function DashboardShell({
   commercial,
   timezone,
   hour12,
+  appearance,
+  behavior,
+  preferencesVersion,
 }: DashboardShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(behavior.sidebarCollapsed);
 
   return (
     <main className={`dashboard-shell${collapsed ? " is-collapsed" : ""}`}>
+      {/* DASH-4A: reconcile server-canonical appearance on load + keep the cookie
+          mirror fresh (init script already applied it pre-paint). Renders nothing. */}
+      <AppearanceSync
+        appearance={appearance}
+        behavior={behavior}
+        version={preferencesVersion}
+      />
       <div
         className={`dashboard-sidebar-wrapper ${mobileMenuOpen ? "is-open" : ""}`}
       >
@@ -126,6 +141,8 @@ export default function DashboardShell({
         <Header
           userEmail={userEmail}
           onMenuClick={() => setMobileMenuOpen((value) => !value)}
+          appearance={appearance}
+          preferencesVersion={preferencesVersion}
         />
 
         <div className="dashboard-content">
