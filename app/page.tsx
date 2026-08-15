@@ -29,9 +29,14 @@ import {
   getCostGovernanceSnapshot,
   getObservabilitySnapshot,
   getOperationalPriorities,
+  getPlatformHealth,
   getResolverControl,
   getResolverObservability,
 } from "@/services/hermes/panels";
+import {
+  getAgentActionStats,
+  getDashboardCommercial,
+} from "@/services/hermes/systemActivity";
 import { getActiveTenantIdentity } from "@/services/hermes/tenantIdentity";
 
 export default async function HomePage() {
@@ -61,6 +66,9 @@ export default async function HomePage() {
     contextSettingsResult,
     agenda,
     alerts,
+    platformHealth,
+    actionStats,
+    commercial,
   ] = await Promise.all([
     getActiveTenantIdentity(),
     getPublicKpis(),
@@ -76,6 +84,9 @@ export default async function HomePage() {
     getDashboardContextSettings(),
     getDashboardAgenda(),
     getUnifiedAlerts(),
+    getPlatformHealth(),
+    getAgentActionStats(),
+    getDashboardCommercial(),
   ]);
 
   // --- DASH-1 context bar assembly (deterministic clock + cached weather) ---
@@ -154,6 +165,11 @@ export default async function HomePage() {
       agenda={agenda}
       alerts={alerts}
       locale={settings.locale}
+      platformHealth={platformHealth}
+      actionStats={actionStats}
+      commercial={commercial}
+      timezone={tz.timezone}
+      hour12={units.hourCycle === "12h"}
     />
   );
 }

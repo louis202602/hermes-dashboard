@@ -5,8 +5,10 @@ import { useState } from "react";
 import ActionAuditTrail from "@/components/dashboard/ActionAuditTrail";
 import AgendaPanel from "@/components/dashboard/AgendaPanel";
 import AgentActionPanel from "@/components/dashboard/AgentActionPanel";
+import AgentActivityPanel from "@/components/dashboard/AgentActivityPanel";
 import AlertsPanel from "@/components/dashboard/AlertsPanel";
 import ApprovalsPanel from "@/components/dashboard/ApprovalsPanel";
+import CommercialPanel from "@/components/dashboard/CommercialPanel";
 import ContextBar from "@/components/dashboard/ContextBar";
 import CostGovernance from "@/components/dashboard/CostGovernance";
 import Header from "@/components/dashboard/Header";
@@ -18,6 +20,7 @@ import RecentConversations from "@/components/dashboard/RecentConversations";
 import ResolverControlPanel from "@/components/dashboard/ResolverControlPanel";
 import ResolverStatus from "@/components/dashboard/ResolverStatus";
 import Sidebar from "@/components/dashboard/Sidebar";
+import SystemHealthPanel from "@/components/dashboard/SystemHealthPanel";
 import SystemStatus from "@/components/dashboard/SystemStatus";
 import TasksPanel from "@/components/dashboard/TasksPanel";
 import TenantBadge from "@/components/dashboard/TenantBadge";
@@ -28,6 +31,7 @@ import type {
   DashboardProjects,
   ObservabilitySnapshot,
   OperationalPriorities,
+  PlatformHealth,
   PublicKpis,
   RecentConversations as RecentConversationsData,
   ResolverObservability,
@@ -39,6 +43,10 @@ import type {
   UnifiedAlerts,
 } from "@/lib/dashboard/agenda";
 import type { ContextBarModel } from "@/lib/dashboard/contextBar";
+import type {
+  AgentActionStats,
+  DashboardCommercial,
+} from "@/lib/dashboard/systemActivity";
 import type { ResolverControl } from "@/lib/resolver/controlState";
 
 type DashboardShellProps = {
@@ -59,6 +67,11 @@ type DashboardShellProps = {
   agenda: ServiceResult<DashboardAgenda>;
   alerts: ServiceResult<UnifiedAlerts>;
   locale: string;
+  platformHealth: ServiceResult<PlatformHealth>;
+  actionStats: ServiceResult<AgentActionStats>;
+  commercial: ServiceResult<DashboardCommercial>;
+  timezone: string;
+  hour12: boolean;
 };
 
 export default function DashboardShell({
@@ -79,6 +92,11 @@ export default function DashboardShell({
   agenda,
   alerts,
   locale,
+  platformHealth,
+  actionStats,
+  commercial,
+  timezone,
+  hour12,
 }: DashboardShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -145,6 +163,28 @@ export default function DashboardShell({
           {/* 2 — KPI exécutifs, above the fold. */}
           <KpiGrid kpis={kpis} />
 
+          {/* 2b — État global Hermès + activité récente des agents (DASH-3,
+              déterministe : composition de signaux réels déjà mesurés). */}
+          <div className="exec-grid-2">
+            <SystemHealthPanel
+              kpis={kpis}
+              observability={observability}
+              platformHealth={platformHealth}
+              actionStats={actionStats}
+              resolver={resolver}
+              cost={cost}
+              locale={locale}
+              timezone={timezone}
+              hour12={hour12}
+            />
+            <AgentActivityPanel
+              observability={observability}
+              timezone={timezone}
+              locale={locale}
+              hour12={hour12}
+            />
+          </div>
+
           {/* 3 — Agenda du jour + alertes/priorités unifiées (DASH-2, réel,
               déterministe : événements datés + signaux actionnables). */}
           <div className="exec-grid-2">
@@ -166,6 +206,9 @@ export default function DashboardShell({
             <ProjectsTable projects={projects} />
             <AgentActionPanel />
           </div>
+
+          {/* 5b — Activité commerciale (devis réels ; le reste UNAVAILABLE). */}
+          <CommercialPanel commercial={commercial} locale={locale} />
 
           {/* Actions disponibles (compactes). */}
           <QuickActions capabilities={capabilities} />
