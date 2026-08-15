@@ -3,7 +3,9 @@
 import { useState } from "react";
 
 import ActionAuditTrail from "@/components/dashboard/ActionAuditTrail";
+import AgendaPanel from "@/components/dashboard/AgendaPanel";
 import AgentActionPanel from "@/components/dashboard/AgentActionPanel";
+import AlertsPanel from "@/components/dashboard/AlertsPanel";
 import ApprovalsPanel from "@/components/dashboard/ApprovalsPanel";
 import ContextBar from "@/components/dashboard/ContextBar";
 import CostGovernance from "@/components/dashboard/CostGovernance";
@@ -32,6 +34,10 @@ import type {
   ServiceResult,
   TenantIdentity,
 } from "@/types/hermes";
+import type {
+  DashboardAgenda,
+  UnifiedAlerts,
+} from "@/lib/dashboard/agenda";
 import type { ContextBarModel } from "@/lib/dashboard/contextBar";
 import type { ResolverControl } from "@/lib/resolver/controlState";
 
@@ -50,6 +56,9 @@ type DashboardShellProps = {
   resolverControl: ServiceResult<ResolverControl>;
   contextBar: ContextBarModel;
   initialClock: { time: string; date: string; offset: string };
+  agenda: ServiceResult<DashboardAgenda>;
+  alerts: ServiceResult<UnifiedAlerts>;
+  locale: string;
 };
 
 export default function DashboardShell({
@@ -67,6 +76,9 @@ export default function DashboardShell({
   resolverControl,
   contextBar,
   initialClock,
+  agenda,
+  alerts,
+  locale,
 }: DashboardShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -133,7 +145,14 @@ export default function DashboardShell({
           {/* 2 — KPI exécutifs, above the fold. */}
           <KpiGrid kpis={kpis} />
 
-          {/* 3 — Alertes : approbations à traiter + priorités opérationnelles. */}
+          {/* 3 — Agenda du jour + alertes/priorités unifiées (DASH-2, réel,
+              déterministe : événements datés + signaux actionnables). */}
+          <div className="exec-grid-2">
+            <AgendaPanel agenda={agenda} locale={locale} />
+            <AlertsPanel alerts={alerts} />
+          </div>
+
+          {/* 3b — Alertes : approbations à traiter + priorités opérationnelles. */}
           <div className="exec-grid-2">
             <ApprovalsPanel />
             <TasksPanel priorities={priorities} />

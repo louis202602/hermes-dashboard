@@ -2,6 +2,10 @@ import { redirect } from "next/navigation";
 
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import {
+  actionableAlertCount,
+  nextEventForBar,
+} from "@/lib/dashboard/agenda";
+import {
   DEFAULT_CONTEXT_SETTINGS,
   buildContextBarModel,
   formatClock,
@@ -9,6 +13,7 @@ import {
   resolveUnitPreferences,
 } from "@/lib/dashboard/contextBar";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getDashboardAgenda, getUnifiedAlerts } from "@/services/hermes/agenda";
 import { getRecentConversations } from "@/services/hermes/conversations";
 import {
   getCurrentWeather,
@@ -54,6 +59,8 @@ export default async function HomePage() {
     resolver,
     resolverControl,
     contextSettingsResult,
+    agenda,
+    alerts,
   ] = await Promise.all([
     getActiveTenantIdentity(),
     getPublicKpis(),
@@ -67,6 +74,8 @@ export default async function HomePage() {
     getResolverObservability(),
     getResolverControl(),
     getDashboardContextSettings(),
+    getDashboardAgenda(),
+    getUnifiedAlerts(),
   ]);
 
   // --- DASH-1 context bar assembly (deterministic clock + cached weather) ---
@@ -101,12 +110,14 @@ export default async function HomePage() {
     cost.ok && cost.data.period?.month
       ? cost.data.period.month.remainingUsd
       : null;
-  // Alerts: real operational counts.
-  const alertCount = priorities.ok
-    ? priorities.data.summary.pendingApprovals +
-      priorities.data.summary.openIncidents +
-      priorities.data.summary.toQualify +
-      priorities.data.summary.late
+  // DASH-2: ALERT_COUNT from the unified, deterministic alerts source (only
+  // actionable severities); NEXT_EVENT from the real agenda (never fabricated).
+  const now = new Date();
+  const alertCount = alerts.ok
+    ? actionableAlertCount(alerts.data.alerts)
+    : null;
+  const nextEvent = agenda.ok
+    ? nextEventForBar(agenda.data, now, settings.locale)
     : null;
   const contextBar = buildContextBarModel({
     settings,
@@ -118,10 +129,9 @@ export default async function HomePage() {
     costMonthUsd,
     budgetRemainingUsd,
     alertCount,
-    // Agenda source lands in DASH-2 — slot prepared, no fabricated event.
-    nextEvent: null,
+    nextEvent,
   });
-  const initialClock = formatClock(new Date(), tz.timezone, settings.locale, {
+  const initialClock = formatClock(now, tz.timezone, settings.locale, {
     hour12: units.hourCycle === "12h",
   });
 
@@ -141,6 +151,9 @@ export default async function HomePage() {
       resolverControl={resolverControl}
       contextBar={contextBar}
       initialClock={initialClock}
+      agenda={agenda}
+      alerts={alerts}
+      locale={settings.locale}
     />
   );
 }
