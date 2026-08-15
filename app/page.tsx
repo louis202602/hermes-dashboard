@@ -15,6 +15,13 @@ import {
 import {
   HERMES_DEFAULT_PREFERENCES,
 } from "@/lib/dashboard/preferences";
+import {
+  availableWidgetIds,
+  clampLayout,
+  contextVisibleSegments,
+  resolveContextConfig,
+  resolveWidgetLayout,
+} from "@/lib/dashboard/widgets";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getDashboardAgenda, getUnifiedAlerts } from "@/services/hermes/agenda";
 import { getRecentConversations } from "@/services/hermes/conversations";
@@ -116,10 +123,26 @@ export default async function HomePage() {
     userTimezone: reg.timezone,
     tenantTimezone: tenantSettings.timezone,
   });
-  // Weather only when a real location is configured — never fabricated. Cached
-  // server-side (15 min) so it is not called per render.
+  // DASH-4B: resolve the user's widget layout (order + show/hide, capability-filtered)
+  // and the configurable context-bar segments — all from the SINGLE prefs read + the
+  // capabilities snapshot already loaded above (0 extra DB calls).
+  const layout = clampLayout(prefs.layout);
+  const capabilityKeys = new Set(
+    capabilities.ok
+      ? capabilities.data.capabilities.map((c) => c.actionKey)
+      : [],
+  );
+  const available = availableWidgetIds(capabilityKeys);
+  const { visible: visibleWidgets } = resolveWidgetLayout(layout, available);
+  const contextConfig = resolveContextConfig(layout.context);
+  const contextSegments = contextVisibleSegments(contextConfig);
+  // Weather only when a real location is configured AND the weather segment is
+  // shown — never fabricated, and skipping it when hidden strictly REDUCES the
+  // external Open-Meteo calls (COST-FIRST). Cached server-side when fetched.
   const weatherResult =
-    settings.latitude !== null && settings.longitude !== null
+    contextConfig.weather &&
+    settings.latitude !== null &&
+    settings.longitude !== null
       ? await getCurrentWeather(
           settings.latitude,
           settings.longitude,
@@ -198,6 +221,8 @@ export default async function HomePage() {
       appearance={prefs.appearance}
       behavior={prefs.behavior}
       preferencesVersion={prefs.version}
+      visibleWidgets={visibleWidgets}
+      contextSegments={contextSegments}
     />
   );
 }
