@@ -622,3 +622,28 @@ Adds the per-tenant **international context** the compact dashboard bar reads
   override-ready for a future per-user preference). Cost shows today + this month
   + monthly budget remaining, all from the real SW23 read model in its SOURCE
   currency (USD) — a display-currency conversion needs a real FX rate (later).
+
+## DASH-2 — Agenda du jour + alertes/priorités unifiées (2026-08-15)
+
+Two read-only aggregation facades over signals **already present** in `hermes_os`
+(no new business system, no LLM, no external API). They power the "Agenda du jour"
+and "Alertes & priorités" panels and back-fill the DASH-1 context bar's NEXT_EVENT
+and ALERT_COUNT.
+
+| File | Purpose |
+|------|---------|
+| `20260815_hermes_dashboard_agenda_alerts_1.sql` | `public.get_dashboard_agenda()` — dated events (BTP phases, project start/end, approval expiries) bucketed today/upcoming/overdue **in the tenant timezone** (DASH-1 `dashboard_context_settings.iana_timezone`, DST-safe). `public.get_unified_alerts()` — actionable signals (pending approvals, open incidents, resolver circuit OPEN, monthly budget threshold, quota blocks today, late chantiers, dead-letters) normalised to INFO/WARNING/HIGH/CRITICAL. |
+| `20260815_hermes_dashboard_agenda_alerts_9_rollback.sql` | Drops both facades. No business data touched. |
+
+### Invariants
+
+- **Tenant-scoped, fail-closed.** Caller's tenant only via `resolve_active_tenant`
+  (never a client id); unauthenticated ⇒ `UNAUTHENTICATED`; no tenant ⇒ empty,
+  never cross-tenant data. REVOKE PUBLIC / GRANT authenticated, `search_path` locked.
+- **Fail-soft per source.** Each source is aggregated in its own exception block;
+  a broken source is listed in `unavailable[]` and the others still render.
+- **Deterministic, COST-FIRST.** No LLM, no external API. Severity and next-event
+  selection follow documented rules (`lib/dashboard/agenda.ts`). ALERT_COUNT counts
+  only actionable severities (WARNING/HIGH/CRITICAL), never neutral INFO.
+- **No fabrication.** Every entry carries a canonical `source`/`source_id` and
+  `provenance:REAL`; absent data yields an empty list, never an invented event.
