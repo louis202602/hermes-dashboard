@@ -21,7 +21,6 @@ import {
   contextVisibleSegments,
   needsWeather,
   resolveContextConfig,
-  resolveWidgetLayout,
 } from "@/lib/dashboard/widgets";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getDashboardAgenda, getUnifiedAlerts } from "@/services/hermes/agenda";
@@ -134,7 +133,6 @@ export default async function HomePage() {
       : [],
   );
   const available = availableWidgetIds(capabilityKeys);
-  const { visible: visibleWidgets } = resolveWidgetLayout(layout, available);
   const contextConfig = resolveContextConfig(layout.context);
   const contextSegments = contextVisibleSegments(contextConfig);
   // Weather only when a real location is configured AND at least one weather-
@@ -223,7 +221,8 @@ export default async function HomePage() {
       appearance={prefs.appearance}
       behavior={prefs.behavior}
       preferencesVersion={prefs.version}
-      visibleWidgets={visibleWidgets}
+      layout={layout}
+      availableWidgets={[...available]}
       contextSegments={contextSegments}
     />
   );
