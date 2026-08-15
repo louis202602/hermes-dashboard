@@ -12,7 +12,9 @@
 --
 -- Both: caller's tenant only (resolve_active_tenant — never a client id), FAIL-SOFT
 -- per source (one broken source never blanks the panel), REVOKE PUBLIC / GRANT
--- authenticated. No PII beyond the human labels the dashboard already shows.
+-- authenticated. Results are BOUNDED per source (LIMIT 200) so a pathological tenant
+-- can never build an unbounded payload. No PII beyond the human labels the dashboard
+-- already shows.
 begin;
 
 -- =====================================================================
@@ -54,82 +56,94 @@ begin
     v_tz := 'UTC'; v_today := (now() at time zone 'UTC')::date;
   end;
 
-  -- BTP planning phases (planned start/end), not done/cancelled.
+  -- BTP planning phases (planned start/end), not done/cancelled. Bounded.
   begin
-    select coalesce(jsonb_agg(jsonb_build_object(
-        'id','BTP_PHASE:'||p.id::text, 'kind','phase', 'title', coalesce(p.phase_name,'Phase'),
-        'subtitle', ch.chantier_name, 'source','BTP_PHASE', 'source_id', p.id::text,
-        'starts_at', (coalesce(p.date_debut_planifie,p.date_fin_planifiee)::timestamp at time zone v_tz),
-        'ends_at', case when p.date_fin_planifiee is not null
-                        then (p.date_fin_planifiee::timestamp at time zone v_tz) else null end,
-        'is_all_day', true, 'status', coalesce(p.status,'PLANNED'),
-        'event_date', coalesce(p.date_debut_planifie,p.date_fin_planifiee),
-        'day_bucket', case when coalesce(p.date_debut_planifie,p.date_fin_planifiee) = v_today then 'today'
-                           when coalesce(p.date_debut_planifie,p.date_fin_planifiee) > v_today then 'upcoming'
-                           else 'overdue' end,
-        'provenance','REAL')), '[]'::jsonb)
-      into v_part
-      from hermes_os.btp_planning p
-      left join hermes_os.btp_chantiers ch on ch.id = p.chantier_id
-      where p.tenant_id = v_tenant
-        and upper(coalesce(p.status,'')) not in ('DONE','TERMINE','TERMINÉ','FINI','CANCELLED','ANNULE','ANNULÉ')
-        and coalesce(p.date_debut_planifie,p.date_fin_planifiee) is not null;
+    select coalesce(jsonb_agg(x.obj order by x.d), '[]'::jsonb) into v_part
+      from (
+        select jsonb_build_object(
+          'id','BTP_PHASE:'||p.id::text, 'kind','phase', 'title', coalesce(p.phase_name,'Phase'),
+          'subtitle', ch.chantier_name, 'source','BTP_PHASE', 'source_id', p.id::text,
+          'starts_at', (coalesce(p.date_debut_planifie,p.date_fin_planifiee)::timestamp at time zone v_tz),
+          'ends_at', case when p.date_fin_planifiee is not null
+                          then (p.date_fin_planifiee::timestamp at time zone v_tz) else null end,
+          'is_all_day', true, 'status', coalesce(p.status,'PLANNED'),
+          'event_date', coalesce(p.date_debut_planifie,p.date_fin_planifiee),
+          'day_bucket', case when coalesce(p.date_debut_planifie,p.date_fin_planifiee) = v_today then 'today'
+                             when coalesce(p.date_debut_planifie,p.date_fin_planifiee) > v_today then 'upcoming'
+                             else 'overdue' end,
+          'provenance','REAL') obj,
+          coalesce(p.date_debut_planifie,p.date_fin_planifiee) d
+          from hermes_os.btp_planning p
+          left join hermes_os.btp_chantiers ch on ch.id = p.chantier_id
+          where p.tenant_id = v_tenant
+            and upper(coalesce(p.status,'')) not in ('DONE','TERMINE','TERMINÉ','FINI','CANCELLED','ANNULE','ANNULÉ')
+            and coalesce(p.date_debut_planifie,p.date_fin_planifiee) is not null
+          order by coalesce(p.date_debut_planifie,p.date_fin_planifiee)
+          limit 200
+      ) x;
     v_events := v_events || v_part;
   exception when others then v_unavail := array_append(v_unavail,'BTP_PHASE'); end;
 
-  -- Project start / end milestones.
+  -- Project start / end milestones. Bounded.
   begin
-    select coalesce(jsonb_agg(e), '[]'::jsonb) into v_part from (
-      select jsonb_build_object(
-        'id','PROJECT_START:'||ch.id::text,'kind','project_start','title','Début chantier',
-        'subtitle',ch.chantier_name,'source','PROJECT_START','source_id',ch.id::text,
-        'starts_at',(ch.date_debut_planifie::timestamp at time zone v_tz),'ends_at',null,
-        'is_all_day',true,'status',coalesce(ch.status,''),'event_date',ch.date_debut_planifie,
-        'day_bucket', case when ch.date_debut_planifie = v_today then 'today'
-                           when ch.date_debut_planifie > v_today then 'upcoming' else 'overdue' end,
-        'provenance','REAL') e
-        from hermes_os.btp_chantiers ch
-        where ch.tenant_id = v_tenant and ch.date_debut_planifie is not null
-          and upper(coalesce(ch.status,'')) not in ('CANCELLED','ANNULE','ANNULÉ','TERMINE','TERMINÉ','DONE')
-      union all
-      select jsonb_build_object(
-        'id','PROJECT_END:'||ch.id::text,'kind','project_end','title','Fin chantier prévue',
-        'subtitle',ch.chantier_name,'source','PROJECT_END','source_id',ch.id::text,
-        'starts_at',(ch.date_fin_planifiee::timestamp at time zone v_tz),'ends_at',null,
-        'is_all_day',true,'status',coalesce(ch.status,''),'event_date',ch.date_fin_planifiee,
-        'day_bucket', case when ch.date_fin_planifiee = v_today then 'today'
-                           when ch.date_fin_planifiee > v_today then 'upcoming' else 'overdue' end,
-        'provenance','REAL')
-        from hermes_os.btp_chantiers ch
-        where ch.tenant_id = v_tenant and ch.date_fin_planifiee is not null
-          and upper(coalesce(ch.status,'')) not in ('CANCELLED','ANNULE','ANNULÉ','TERMINE','TERMINÉ','DONE')
-    ) s;
+    select coalesce(jsonb_agg(x.obj order by x.d), '[]'::jsonb) into v_part
+      from (
+        select jsonb_build_object(
+          'id','PROJECT_START:'||ch.id::text,'kind','project_start','title','Début chantier',
+          'subtitle',ch.chantier_name,'source','PROJECT_START','source_id',ch.id::text,
+          'starts_at',(ch.date_debut_planifie::timestamp at time zone v_tz),'ends_at',null,
+          'is_all_day',true,'status',coalesce(ch.status,''),'event_date',ch.date_debut_planifie,
+          'day_bucket', case when ch.date_debut_planifie = v_today then 'today'
+                             when ch.date_debut_planifie > v_today then 'upcoming' else 'overdue' end,
+          'provenance','REAL') obj, ch.date_debut_planifie d
+          from hermes_os.btp_chantiers ch
+          where ch.tenant_id = v_tenant and ch.date_debut_planifie is not null
+            and upper(coalesce(ch.status,'')) not in ('CANCELLED','ANNULE','ANNULÉ','TERMINE','TERMINÉ','DONE')
+        union all
+        select jsonb_build_object(
+          'id','PROJECT_END:'||ch.id::text,'kind','project_end','title','Fin chantier prévue',
+          'subtitle',ch.chantier_name,'source','PROJECT_END','source_id',ch.id::text,
+          'starts_at',(ch.date_fin_planifiee::timestamp at time zone v_tz),'ends_at',null,
+          'is_all_day',true,'status',coalesce(ch.status,''),'event_date',ch.date_fin_planifiee,
+          'day_bucket', case when ch.date_fin_planifiee = v_today then 'today'
+                             when ch.date_fin_planifiee > v_today then 'upcoming' else 'overdue' end,
+          'provenance','REAL') obj, ch.date_fin_planifiee d
+          from hermes_os.btp_chantiers ch
+          where ch.tenant_id = v_tenant and ch.date_fin_planifiee is not null
+            and upper(coalesce(ch.status,'')) not in ('CANCELLED','ANNULE','ANNULÉ','TERMINE','TERMINÉ','DONE')
+        order by d limit 200
+      ) x;
     v_events := v_events || v_part;
   exception when others then v_unavail := array_append(v_unavail,'PROJECT_MILESTONE'); end;
 
-  -- Approval expiries (real timestamptz deadline for a pending approval).
+  -- Approval expiries (real timestamptz deadline for a pending approval). Bounded.
   begin
-    select coalesce(jsonb_agg(jsonb_build_object(
-        'id','APPROVAL_EXPIRY:'||sar.approval_request_id::text,'kind','approval',
-        'title','Approbation à échéance','subtitle', coalesce(cat.display_name, ar.action_key),
-        'source','APPROVAL_EXPIRY','source_id', sar.approval_request_id::text,
-        'starts_at', sar.expires_at, 'ends_at', null, 'is_all_day', false,
-        'status', ar.status, 'event_date', (sar.expires_at at time zone v_tz)::date,
-        'day_bucket', case when (sar.expires_at at time zone v_tz)::date = v_today then 'today'
-                           when (sar.expires_at at time zone v_tz)::date > v_today then 'upcoming'
-                           else 'overdue' end,
-        'provenance','REAL')), '[]'::jsonb)
-      into v_part
-      from hermes_os.agent_action_requests ar
-      join hermes_os.sw15_approval_requests sar on sar.approval_request_id = ar.approval_request_id
-      left join hermes_os.agent_action_catalog cat on cat.action_key = ar.action_key
-      where ar.tenant_id = v_tenant and ar.status = 'PENDING_APPROVAL' and sar.expires_at is not null;
+    select coalesce(jsonb_agg(x.obj order by x.d), '[]'::jsonb) into v_part
+      from (
+        select jsonb_build_object(
+          'id','APPROVAL_EXPIRY:'||sar.approval_request_id::text,'kind','approval',
+          'title','Approbation à échéance','subtitle', coalesce(cat.display_name, ar.action_key),
+          'source','APPROVAL_EXPIRY','source_id', sar.approval_request_id::text,
+          'starts_at', sar.expires_at, 'ends_at', null, 'is_all_day', false,
+          'status', ar.status, 'event_date', (sar.expires_at at time zone v_tz)::date,
+          'day_bucket', case when (sar.expires_at at time zone v_tz)::date = v_today then 'today'
+                             when (sar.expires_at at time zone v_tz)::date > v_today then 'upcoming'
+                             else 'overdue' end,
+          'provenance','REAL') obj, sar.expires_at d
+          from hermes_os.agent_action_requests ar
+          join hermes_os.sw15_approval_requests sar on sar.approval_request_id = ar.approval_request_id
+          left join hermes_os.agent_action_catalog cat on cat.action_key = ar.action_key
+          where ar.tenant_id = v_tenant and ar.status = 'PENDING_APPROVAL' and sar.expires_at is not null
+          order by sar.expires_at
+          limit 200
+      ) x;
     v_events := v_events || v_part;
   exception when others then v_unavail := array_append(v_unavail,'APPROVAL_EXPIRY'); end;
 
-  -- Stable order: soonest first.
+  -- Stable order: soonest first, then bound the payload.
   select coalesce(jsonb_agg(e order by (e->>'starts_at')), '[]'::jsonb)
-    into v_sorted from jsonb_array_elements(v_events) e;
+    into v_sorted
+    from (select e from jsonb_array_elements(v_events) e order by (e->>'starts_at') limit 100) q(e);
 
   return jsonb_build_object(
     'resolution_status','OK','tenant_id',v_tenant,'timezone',v_tz,'today_local',v_today,
@@ -161,7 +175,6 @@ declare
   v_part jsonb;
   v_unavail text[] := '{}';
   v_sorted jsonb;
-  -- budget
   v_month_budget numeric; v_alert_pct numeric; v_hard boolean;
   v_month_exp numeric; v_ratio numeric; v_sev text;
   v_month_key text := to_char(now() at time zone 'UTC','YYYY-MM');
@@ -177,33 +190,46 @@ begin
       'alerts','[]'::jsonb, 'summary', jsonb_build_object('total',0,'critical',0,'high',0,'warning',0));
   end if;
 
-  -- Pending approvals (HIGH — a human must act).
+  -- Pending approvals: WARNING by default; HIGH only when the approval deadline is
+  -- imminent (<= 24h) or already passed — never systematically over-ranked.
   begin
-    select coalesce(jsonb_agg(jsonb_build_object(
-        'id','APPROVAL_PENDING:'||ar.id::text,'severity','HIGH','kind','approval',
-        'title','Approbation requise','detail', coalesce(cat.display_name, ar.action_key),
-        'source','APPROVAL_PENDING','source_id',ar.id::text,'ts',ar.created_at,'provenance','REAL')
-      order by ar.created_at asc),'[]'::jsonb) into v_part
-      from hermes_os.agent_action_requests ar
-      left join hermes_os.agent_action_catalog cat on cat.action_key = ar.action_key
-      where ar.tenant_id = v_tenant and ar.status = 'PENDING_APPROVAL';
+    select coalesce(jsonb_agg(x.obj order by x.ts asc), '[]'::jsonb) into v_part
+      from (
+        select jsonb_build_object(
+          'id','APPROVAL_PENDING:'||ar.id::text,
+          'severity', case when sar.expires_at is not null and sar.expires_at <= now() + interval '24 hours'
+                           then 'HIGH' else 'WARNING' end,
+          'kind','approval','title','Approbation requise', 'detail', coalesce(cat.display_name, ar.action_key),
+          'source','APPROVAL_PENDING','source_id',ar.id::text,'ts',ar.created_at,'provenance','REAL') obj,
+          ar.created_at ts
+          from hermes_os.agent_action_requests ar
+          left join hermes_os.sw15_approval_requests sar on sar.approval_request_id = ar.approval_request_id
+          left join hermes_os.agent_action_catalog cat on cat.action_key = ar.action_key
+          where ar.tenant_id = v_tenant and ar.status = 'PENDING_APPROVAL'
+          order by ar.created_at asc
+          limit 200
+      ) x;
     v_alerts := v_alerts || v_part;
   exception when others then v_unavail := array_append(v_unavail,'APPROVAL_PENDING'); end;
 
-  -- Open quality incidents (severity mapped from the incident row).
+  -- Open quality incidents (severity mapped from the incident row). Bounded.
   begin
-    select coalesce(jsonb_agg(jsonb_build_object(
-        'id','INCIDENT_OPEN:'||i.id::text,
-        'severity', case when upper(coalesce(i.severity,'')) in ('CRITICAL','CRITIQUE') then 'CRITICAL'
-                         when upper(coalesce(i.severity,'')) in ('MAJOR','MAJEUR','HIGH','ELEVE','ÉLEVÉ') then 'HIGH'
-                         else 'WARNING' end,
-        'kind','incident','title','Incident qualité ouvert',
-        'detail', coalesce(i.type_incident,'incident')||coalesce(' — '||ch.chantier_name,''),
-        'source','INCIDENT_OPEN','source_id',i.id::text,'ts',i.created_at,'provenance','REAL')
-      order by i.created_at asc),'[]'::jsonb) into v_part
-      from hermes_os.btp_incidents_qualite i
-      left join hermes_os.btp_chantiers ch on ch.id = i.chantier_id
-      where i.tenant_id = v_tenant and upper(coalesce(i.status,'')) in ('OUVERT','OPEN');
+    select coalesce(jsonb_agg(x.obj order by x.ts asc), '[]'::jsonb) into v_part
+      from (
+        select jsonb_build_object(
+          'id','INCIDENT_OPEN:'||i.id::text,
+          'severity', case when upper(coalesce(i.severity,'')) in ('CRITICAL','CRITIQUE') then 'CRITICAL'
+                           when upper(coalesce(i.severity,'')) in ('MAJOR','MAJEUR','HIGH','ELEVE','ÉLEVÉ') then 'HIGH'
+                           else 'WARNING' end,
+          'kind','incident','title','Incident qualité ouvert',
+          'detail', coalesce(i.type_incident,'incident')||coalesce(' — '||ch.chantier_name,''),
+          'source','INCIDENT_OPEN','source_id',i.id::text,'ts',i.created_at,'provenance','REAL') obj, i.created_at ts
+          from hermes_os.btp_incidents_qualite i
+          left join hermes_os.btp_chantiers ch on ch.id = i.chantier_id
+          where i.tenant_id = v_tenant and upper(coalesce(i.status,'')) in ('OUVERT','OPEN')
+          order by i.created_at asc
+          limit 200
+      ) x;
     v_alerts := v_alerts || v_part;
   exception when others then v_unavail := array_append(v_unavail,'INCIDENT_OPEN'); end;
 
@@ -219,7 +245,7 @@ begin
     v_alerts := v_alerts || v_part;
   exception when others then v_unavail := array_append(v_unavail,'CIRCUIT_OPEN'); end;
 
-  -- Budget threshold on the current month (WARNING / HIGH / CRITICAL).
+  -- Budget threshold on the current month (WARNING / HIGH / CRITICAL when hard-stop).
   begin
     select monthly_budget_usd, alert_threshold_pct, hard_stop
       into v_month_budget, v_alert_pct, v_hard
@@ -257,41 +283,56 @@ begin
     v_alerts := v_alerts || v_part;
   exception when others then v_unavail := array_append(v_unavail,'QUOTA_BLOCK'); end;
 
-  -- Late chantiers (HIGH) — latest suivi row per chantier with retards_jours > 0.
+  -- Late chantiers (HIGH) — latest suivi row per chantier with retards_jours > 0. Bounded.
   begin
-    select coalesce(jsonb_agg(jsonb_build_object(
-        'id','LATE_ITEM:'||sv.chantier_id::text,'severity','HIGH','kind','late',
-        'title','Chantier en retard','detail', coalesce(ch.chantier_name,'?')||' ('||sv.retards_jours||' j)',
-        'source','LATE_ITEM','source_id',sv.chantier_id::text,'ts',sv.created_at,'provenance','REAL')
-      order by sv.retards_jours desc),'[]'::jsonb) into v_part
+    select coalesce(jsonb_agg(x.obj order by x.r desc), '[]'::jsonb) into v_part
       from (
-        select distinct on (chantier_id) chantier_id, retards_jours, created_at
-          from hermes_os.btp_suivi_avancement
-          where tenant_id = v_tenant
-          order by chantier_id, created_at desc
-      ) sv
-      left join hermes_os.btp_chantiers ch on ch.id = sv.chantier_id
-      where coalesce(sv.retards_jours,0) > 0;
+        select jsonb_build_object(
+          'id','LATE_ITEM:'||sv.chantier_id::text,'severity','HIGH','kind','late',
+          'title','Chantier en retard','detail', coalesce(ch.chantier_name,'?')||' ('||sv.retards_jours||' j)',
+          'source','LATE_ITEM','source_id',sv.chantier_id::text,'ts',sv.created_at,'provenance','REAL') obj,
+          sv.retards_jours r
+          from (
+            select distinct on (chantier_id) chantier_id, retards_jours, created_at
+              from hermes_os.btp_suivi_avancement
+              where tenant_id = v_tenant
+              order by chantier_id, created_at desc
+          ) sv
+          left join hermes_os.btp_chantiers ch on ch.id = sv.chantier_id
+          where coalesce(sv.retards_jours,0) > 0
+          order by sv.retards_jours desc
+          limit 200
+      ) x;
     v_alerts := v_alerts || v_part;
   exception when others then v_unavail := array_append(v_unavail,'LATE_ITEM'); end;
 
-  -- Dead-letter actions (HIGH) — exhausted retries, need attention.
+  -- Dead-letter actions (HIGH) — exhausted retries, need attention. Bounded.
   begin
-    select coalesce(jsonb_agg(jsonb_build_object(
-        'id','DEAD_LETTER:'||ar.id::text,'severity','HIGH','kind','dead_letter',
-        'title','Action en échec définitif','detail', ar.action_key,
-        'source','DEAD_LETTER','source_id',ar.id::text,'ts',ar.updated_at,'provenance','REAL')
-      order by ar.updated_at desc),'[]'::jsonb) into v_part
-      from hermes_os.agent_action_requests ar
-      where ar.tenant_id = v_tenant and upper(coalesce(ar.status,'')) = 'DEAD_LETTER';
+    select coalesce(jsonb_agg(x.obj order by x.ts desc), '[]'::jsonb) into v_part
+      from (
+        select jsonb_build_object(
+          'id','DEAD_LETTER:'||ar.id::text,'severity','HIGH','kind','dead_letter',
+          'title','Action en échec définitif','detail', ar.action_key,
+          'source','DEAD_LETTER','source_id',ar.id::text,'ts',ar.updated_at,'provenance','REAL') obj, ar.updated_at ts
+          from hermes_os.agent_action_requests ar
+          where ar.tenant_id = v_tenant and upper(coalesce(ar.status,'')) = 'DEAD_LETTER'
+          order by ar.updated_at desc
+          limit 200
+      ) x;
     v_alerts := v_alerts || v_part;
   exception when others then v_unavail := array_append(v_unavail,'DEAD_LETTER'); end;
 
-  -- Order: CRITICAL → HIGH → WARNING → INFO, then most recent.
+  -- Order: CRITICAL → HIGH → WARNING → INFO, then most recent; bound the payload.
   select coalesce(jsonb_agg(e order by
       case e->>'severity' when 'CRITICAL' then 0 when 'HIGH' then 1 when 'WARNING' then 2 else 3 end,
       (e->>'ts') desc nulls last), '[]'::jsonb)
-    into v_sorted from jsonb_array_elements(v_alerts) e;
+    into v_sorted
+    from (
+      select e from jsonb_array_elements(v_alerts) e
+      order by case e->>'severity' when 'CRITICAL' then 0 when 'HIGH' then 1 when 'WARNING' then 2 else 3 end,
+               (e->>'ts') desc nulls last
+      limit 100
+    ) q(e);
 
   return jsonb_build_object('resolution_status','OK','tenant_id',v_tenant,
     'alerts', v_sorted,

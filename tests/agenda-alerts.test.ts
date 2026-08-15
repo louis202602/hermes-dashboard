@@ -199,6 +199,8 @@ test("ALERT_COUNT_ONLY_ACTIONABLE: neutral INFO never counted", () => {
     { id: "d", severity: "INFO", kind: "x", title: "", detail: null, source: "S", sourceId: "d", ts: null },
   ];
   assert.equal(actionableAlertCount(alerts), 3);
+  // ALERT_COUNT_EMPTY = 0
+  assert.equal(actionableAlertCount([]), 0);
 });
 
 // --- NO_DUPLICATES ----------------------------------------------------------
@@ -211,6 +213,14 @@ test("NO_DUPLICATES: same canonical id collapses once", () => {
   assert.equal(dedupeAlerts(dup).length, 2);
   // parseAlerts also dedupes.
   assert.equal(parseAlerts({ resolution_status: "OK", alerts: dup }).alerts.length, 2);
+
+  // Same numeric source_id under different sources must NOT collide — the
+  // canonical id is SOURCE:source_id, so both survive.
+  const crossSource: UnifiedAlert[] = [
+    { id: "APPROVAL_PENDING:123", severity: "WARNING", kind: "approval", title: "", detail: null, source: "APPROVAL_PENDING", sourceId: "123", ts: null },
+    { id: "INCIDENT_OPEN:123", severity: "HIGH", kind: "incident", title: "", detail: null, source: "INCIDENT_OPEN", sourceId: "123", ts: null },
+  ];
+  assert.equal(dedupeAlerts(crossSource).length, 2);
 });
 
 // --- FAIL_SOFT_SOURCE_UNAVAILABLE -------------------------------------------
