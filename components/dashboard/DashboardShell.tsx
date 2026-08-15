@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { Check, Pencil } from "lucide-react";
+import dynamic from "next/dynamic";
+import { useCallback, useMemo, useRef, useState } from "react";
 
+import { saveDashboardPreferencesAction } from "@/app/actions/dashboard-preferences";
 import ActionAuditTrail from "@/components/dashboard/ActionAuditTrail";
 import AgendaPanel from "@/components/dashboard/AgendaPanel";
 import AgentActionPanel from "@/components/dashboard/AgentActionPanel";
@@ -43,9 +46,27 @@ import type {
   DashboardAgenda,
   UnifiedAlerts,
 } from "@/lib/dashboard/agenda";
-import type { Appearance, Behavior } from "@/lib/dashboard/preferences";
-import { widgetById } from "@/lib/dashboard/widgets";
+import {
+  PREFERENCES_SCHEMA_VERSION,
+  type Appearance,
+  type Behavior,
+} from "@/lib/dashboard/preferences";
+import {
+  normalizeOrder,
+  resolveWidgetLayout,
+  setWidgetHidden,
+  setWidgetSize,
+  type LayoutPreferences,
+  type WidgetSize,
+} from "@/lib/dashboard/widgets";
 import type { ContextBarModel } from "@/lib/dashboard/contextBar";
+
+// Edit mode pulls dnd-kit — loaded ONLY when the user enters edit mode, so the
+// normal dashboard bundle never carries the drag/drop code.
+const EditableWidgetGrid = dynamic(
+  () => import("@/components/dashboard/EditableWidgetGrid"),
+  { ssr: false },
+);
 import type {
   AgentActionStats,
   DashboardCommercial,
@@ -78,7 +99,8 @@ type DashboardShellProps = {
   appearance: Appearance;
   behavior: Behavior;
   preferencesVersion: number;
-  visibleWidgets: string[];
+  layout: LayoutPreferences;
+  availableWidgets: string[];
   contextSegments: string[];
 };
 
@@ -108,11 +130,73 @@ export default function DashboardShell({
   appearance,
   behavior,
   preferencesVersion,
-  visibleWidgets,
+  layout: initialLayout,
+  availableWidgets,
   contextSegments,
 }: DashboardShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(behavior.sidebarCollapsed);
+
+  // DASH-4C: widget layout is now client-driven (edit mode). Server-resolved on
+  // first paint (pure, hydration-safe); edits mutate this state + persist.
+  const [layout, setLayout] = useState<LayoutPreferences>(initialLayout);
+  const [editing, setEditing] = useState(false);
+  const versionRef = useRef<number>(preferencesVersion);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const availableSet = useMemo(
+    () => new Set(availableWidgets),
+    [availableWidgets],
+  );
+  const resolved = useMemo(
+    () => resolveWidgetLayout(layout, availableSet),
+    [layout, availableSet],
+  );
+  const visibleItems = resolved.items.filter(
+    (it) => it.available && !it.hidden,
+  );
+
+  // Persist the layout sub-object through the SAME optimistic upsert as DASH-4A/4B
+  // (shared version, VERSION_CONFLICT ⇒ reload). Committed on drag-end / resize /
+  // hide only — never during pointer move. Debounced for rapid edits.
+  const persistLayout = useCallback((next: LayoutPreferences) => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(async () => {
+      const res = await saveDashboardPreferencesAction(
+        { layout: next, schema_version: PREFERENCES_SCHEMA_VERSION },
+        versionRef.current,
+      );
+      if (res.ok && typeof res.version === "number") {
+        versionRef.current = res.version;
+      } else if (res.status === "VERSION_CONFLICT") {
+        window.location.reload(); // pull canonical; no silent last-write-wins
+      }
+    }, 500);
+  }, []);
+
+  const commitLayout = useCallback(
+    (next: LayoutPreferences) => {
+      setLayout(next);
+      persistLayout(next);
+    },
+    [persistLayout],
+  );
+
+  const onReorder = useCallback(
+    (orderedVisibleIds: string[]) =>
+      commitLayout({ ...layout, order: normalizeOrder(orderedVisibleIds) }),
+    [commitLayout, layout],
+  );
+  const onResize = useCallback(
+    (id: string, size: WidgetSize) =>
+      commitLayout({ ...layout, sizes: setWidgetSize(layout.sizes, id, size) }),
+    [commitLayout, layout],
+  );
+  const onHideWidget = useCallback(
+    (id: string) =>
+      commitLayout({ ...layout, hidden: setWidgetHidden(layout.hidden, id, true) }),
+    [commitLayout, layout],
+  );
 
   // DASH-4B: id → renderer for every registry widget. Each reads an ALREADY-loaded
   // shared snapshot (0 extra DB reads). The order + visibility come from the
@@ -159,6 +243,8 @@ export default function DashboardShell({
     "resolver-control": () => <ResolverControlPanel control={resolverControl} />,
     cost: () => <CostGovernance cost={cost} />,
   };
+  const renderWidget = (id: string): React.ReactNode =>
+    widgetNodes[id]?.() ?? null; // unknown id ⇒ nothing (safe)
 
   return (
     <main className={`dashboard-shell${collapsed ? " is-collapsed" : ""}`}>
@@ -232,26 +318,56 @@ export default function DashboardShell({
             <HermesPanel />
           </div>
 
-          {/* 2 — Widgets configurables : ordre + affichage/masquage user-scoped
-              (DASH-4B). half ⇒ pairé 2 colonnes desktop ; full ⇒ pleine largeur ;
-              une colonne sur mobile. Chaque widget lit un snapshot déjà chargé. */}
-          <div className="dashboard-widgets">
-            {visibleWidgets.map((id) => {
-              const node = widgetNodes[id];
-              if (!node) return null; // unknown id ⇒ skip safely
-              const def = widgetById(id);
-              const span = def?.span === "half" ? "span-half" : "span-full";
-              return (
-                <section
-                  key={id}
-                  id={`widget-${id}`}
-                  className={`dash-widget ${span}`}
-                >
-                  {node()}
-                </section>
-              );
-            })}
+          {/* 2 — Widgets configurables : ordre + taille + affichage user-scoped.
+              Mode « Modifier le dashboard » (DASH-4C) : drag/drop tactile+clavier,
+              contrôle de taille S/M/L, masquer. Persisté dans le layout JSONB
+              (concurrence optimiste). Chaque widget lit un snapshot déjà chargé. */}
+          <div className="dashboard-widgets-toolbar">
+            <button
+              type="button"
+              className={`edit-toggle-btn${editing ? " is-active" : ""}`}
+              aria-pressed={editing}
+              onClick={() => setEditing((v) => !v)}
+            >
+              {editing ? (
+                <>
+                  <Check size={16} strokeWidth={1.9} aria-hidden /> Terminé
+                </>
+              ) : (
+                <>
+                  <Pencil size={15} strokeWidth={1.8} aria-hidden /> Modifier le
+                  dashboard
+                </>
+              )}
+            </button>
+            {editing ? (
+              <span className="edit-hint" role="status">
+                Glissez pour réorganiser · redimensionnez (S/M/L) · masquez
+              </span>
+            ) : null}
           </div>
+
+          {editing ? (
+            <EditableWidgetGrid
+              items={visibleItems}
+              renderWidget={renderWidget}
+              onReorder={onReorder}
+              onResize={onResize}
+              onHide={onHideWidget}
+            />
+          ) : (
+            <div className="dashboard-widgets">
+              {visibleItems.map((it) => (
+                <section
+                  key={it.id}
+                  id={`widget-${it.id}`}
+                  className={`dash-widget size-${it.size}`}
+                >
+                  {renderWidget(it.id)}
+                </section>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </main>

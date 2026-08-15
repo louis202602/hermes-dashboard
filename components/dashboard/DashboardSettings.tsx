@@ -21,14 +21,17 @@ import {
   CONTEXT_SEGMENTS,
   LAYOUT_SCHEMA_VERSION,
   clampLayout,
+  cycleWidgetSize,
   moveWidget,
   resolveContextConfig,
   resolveWidgetLayout,
   setWidgetHidden,
+  setWidgetSize,
   widgetById,
   type ContextSegment,
   type LayoutPreferences,
   type WidgetCategory,
+  type WidgetSize,
 } from "@/lib/dashboard/widgets";
 
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
@@ -309,6 +312,9 @@ export default function DashboardSettings({
   const onHide = (id: string, hide: boolean) => {
     commitLayout({ ...layout, hidden: setWidgetHidden(layout.hidden, id, hide) });
   };
+  const onSize = (id: string, size: WidgetSize) => {
+    commitLayout({ ...layout, sizes: setWidgetSize(layout.sizes, id, size) });
+  };
   const onContext = (seg: ContextSegment, on: boolean) => {
     commitLayout({ ...layout, context: { ...layout.context, [seg]: on } });
   };
@@ -316,6 +322,7 @@ export default function DashboardSettings({
     const cleared: LayoutPreferences = {
       order: [],
       hidden: [],
+      sizes: {},
       context: {},
       schemaVersion: LAYOUT_SCHEMA_VERSION,
     };
@@ -412,6 +419,16 @@ export default function DashboardSettings({
                   >
                     ↓
                   </button>
+                  {it.supportedSizes.length > 1 ? (
+                    <button
+                      type="button"
+                      className="widget-btn"
+                      aria-label={`Changer la taille de ${it.label} (actuelle : ${it.size})`}
+                      onClick={() => onSize(it.id, cycleWidgetSize(it.id, it.size))}
+                    >
+                      {SIZE_SHORT[it.size]}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="widget-btn widget-btn-hide"

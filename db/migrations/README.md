@@ -714,11 +714,18 @@ accessibility, behavior, and the regional override — all applied via `<html>`
   (no layout/profiles/sensitive data), `SameSite=Lax`, `Secure` on HTTPS,
   non-HttpOnly by necessity (the pre-paint script reads it from JS).
 
-### DASH-4B — widget registry (no schema change)
+### DASH-4B / DASH-4C — widget registry + edit mode (no schema change)
 
 The widget registry / gallery / show-hide / order + configurable context bar
-(DASH-4B) persist entirely in the **existing** `layout` JSONB sub-object of
-`dashboard_user_preferences` (`{ order, hidden, context, schemaVersion }`), through
-the **same** `upsert_dashboard_user_preferences` facade — no new table, no new
-migration. Optimistic version, tenant scoping, and the payload guards all apply
-unchanged. Unknown widget ids are ignored on resolution (forward/backward safe).
+(DASH-4B) **and** the edit mode (drag/drop reorder + per-widget sizes, DASH-4C)
+persist entirely in the **existing** `layout` JSONB sub-object of
+`dashboard_user_preferences` (`{ order, hidden, sizes, context, schemaVersion }`),
+through the **same** `upsert_dashboard_user_preferences` facade — no new table, no
+new migration. Optimistic version, tenant scoping, and the payload guards all apply
+unchanged.
+
+Layout schema evolution (`schemaVersion`, currently 1): `clampLayout` reads only
+known keys/ids and clamps sizes to each widget's `supportedSizes`, so it is
+**forward- and backward-compatible** by construction — a renamed/removed widget id
+is ignored, a new size or a new layout field is additive, and no data migration is
+required. Only bump `schemaVersion` if a future change needs an active transform.

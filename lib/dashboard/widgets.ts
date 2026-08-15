@@ -55,8 +55,8 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: "agent-activity", label: "Activité des agents", category: "agents", supportedSizes: ["medium", "large"], defaultSize: "medium", span: "half", snapshotKeys: ["observability"] },
   { id: "agenda", label: "Agenda du jour", category: "agenda", supportedSizes: ["medium", "large"], defaultSize: "medium", span: "half", snapshotKeys: ["agenda"] },
   { id: "alerts", label: "Alertes & priorités", category: "alerts", supportedSizes: ["medium", "large"], defaultSize: "medium", span: "half", snapshotKeys: ["alerts"] },
-  { id: "approvals", label: "Approbations à traiter", category: "alerts", supportedSizes: ["medium"], defaultSize: "medium", span: "half", snapshotKeys: [] },
-  { id: "tasks", label: "Priorités opérationnelles", category: "alerts", supportedSizes: ["medium"], defaultSize: "medium", span: "half", snapshotKeys: ["priorities"] },
+  { id: "approvals", label: "Approbations à traiter", category: "alerts", supportedSizes: ["small", "medium"], defaultSize: "medium", span: "half", snapshotKeys: [] },
+  { id: "tasks", label: "Priorités opérationnelles", category: "alerts", supportedSizes: ["small", "medium"], defaultSize: "medium", span: "half", snapshotKeys: ["priorities"] },
   { id: "conversations", label: "Activité récente", category: "general", supportedSizes: ["medium", "large"], defaultSize: "large", span: "full", snapshotKeys: ["conversations"] },
   { id: "projects", label: "Portefeuille projets", category: "btp", supportedSizes: ["large"], defaultSize: "large", span: "full", snapshotKeys: ["projects"] },
   { id: "commercial", label: "Activité commerciale", category: "commercial", supportedSizes: ["medium", "large"], defaultSize: "large", span: "full", snapshotKeys: ["commercial"] },
@@ -92,6 +92,8 @@ export type ContextConfig = Record<ContextSegment, boolean>;
 export type LayoutPreferences = {
   order: string[];
   hidden: string[];
+  /** Per-widget size override (clamped to the widget's supportedSizes on resolve). */
+  sizes: Record<string, WidgetSize>;
   context: Partial<Record<ContextSegment, boolean>>;
   schemaVersion: number;
 };
@@ -99,6 +101,7 @@ export type LayoutPreferences = {
 export const DEFAULT_LAYOUT: LayoutPreferences = {
   order: [],
   hidden: [],
+  sizes: {},
   context: {},
   schemaVersion: LAYOUT_SCHEMA_VERSION,
 };
@@ -116,6 +119,8 @@ function strArray(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 }
 
+const SIZE_SET = new Set<string>(WIDGET_SIZES);
+
 /** Fail-safe parse of the persisted `layout` JSONB into a typed LayoutPreferences. */
 export function clampLayout(input: unknown): LayoutPreferences {
   const l = (input ?? {}) as Record<string, unknown>;
@@ -124,12 +129,28 @@ export function clampLayout(input: unknown): LayoutPreferences {
   for (const seg of CONTEXT_SEGMENTS) {
     if (typeof rawCtx[seg] === "boolean") context[seg] = rawCtx[seg] as boolean;
   }
+  const sizes: Record<string, WidgetSize> = {};
+  const rawSizes = (l.sizes ?? {}) as Record<string, unknown>;
+  for (const [k, v] of Object.entries(rawSizes)) {
+    // keep only known widget ids with a valid size token (clamped to supported at resolve).
+    if (REGISTRY_IDS.has(k) && typeof v === "string" && SIZE_SET.has(v)) {
+      sizes[k] = v as WidgetSize;
+    }
+  }
   return {
     order: strArray(l.order),
     hidden: strArray(l.hidden),
+    sizes,
     context,
     schemaVersion: Number(l.schemaVersion ?? LAYOUT_SCHEMA_VERSION) || LAYOUT_SCHEMA_VERSION,
   };
+}
+
+/** Clamp a requested size to what the widget actually supports (else its default). */
+export function clampWidgetSize(def: WidgetDef, size: unknown): WidgetSize {
+  return typeof size === "string" && def.supportedSizes.includes(size as WidgetSize)
+    ? (size as WidgetSize)
+    : def.defaultSize;
 }
 
 /** Ids available to this tenant = capability satisfied (or no capability required). */
@@ -146,6 +167,8 @@ export type ResolvedWidgetItem = {
   label: string;
   category: WidgetCategory;
   span: "half" | "full";
+  size: WidgetSize;
+  supportedSizes: WidgetSize[];
   hidden: boolean;
   available: boolean;
 };
@@ -164,6 +187,7 @@ export function resolveWidgetLayout(
   const order = [...userOrder, ...DEFAULT_WIDGET_ORDER.filter((id) => !seen.has(id))];
   const hidden = new Set(strArray(userLayout?.hidden).filter((id) => REGISTRY_IDS.has(id)));
 
+  const sizes = (userLayout?.sizes ?? {}) as Record<string, unknown>;
   const items: ResolvedWidgetItem[] = order.map((id) => {
     const def = widgetById(id)!;
     const isAvailable = available.has(id);
@@ -172,6 +196,8 @@ export function resolveWidgetLayout(
       label: def.label,
       category: def.category,
       span: def.span,
+      size: clampWidgetSize(def, sizes[id]),
+      supportedSizes: def.supportedSizes,
       hidden: hidden.has(id),
       available: isAvailable,
     };
@@ -240,4 +266,23 @@ export function setWidgetHidden(hidden: string[], id: string, hide: boolean): st
   if (hide) set.add(id);
   else set.delete(id);
   return [...set];
+}
+
+/** Set a widget's size — ignored if the widget doesn't support that size (fail-safe). */
+export function setWidgetSize(
+  sizes: Record<string, WidgetSize>,
+  id: string,
+  size: WidgetSize,
+): Record<string, WidgetSize> {
+  const def = widgetById(id);
+  if (!def || !def.supportedSizes.includes(size)) return sizes;
+  return { ...sizes, [id]: size };
+}
+
+/** Cycle to the next size the widget supports (for a single S/M/L toggle button). */
+export function cycleWidgetSize(id: string, current: WidgetSize): WidgetSize {
+  const def = widgetById(id);
+  if (!def) return current;
+  const i = def.supportedSizes.indexOf(current);
+  return def.supportedSizes[(i + 1) % def.supportedSizes.length];
 }

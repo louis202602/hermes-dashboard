@@ -9,7 +9,9 @@ import {
   WIDGET_REGISTRY,
   availableWidgetIds,
   clampLayout,
+  clampWidgetSize,
   contextVisibleSegments,
+  cycleWidgetSize,
   moveWidget,
   needsWeather,
   normalizeOrder,
@@ -17,6 +19,8 @@ import {
   resolveContextConfig,
   resolveWidgetLayout,
   setWidgetHidden,
+  setWidgetSize,
+  widgetById,
   type LayoutPreferences,
 } from "../lib/dashboard/widgets.ts";
 
@@ -123,6 +127,46 @@ test("CONTEXT show/hide: default all on; overrides drop segments", () => {
   assert.ok(visible.includes("date"));
 });
 
+// --- WIDGET SIZES (DASH-4C) -------------------------------------------------
+test("SIZE_SMALL/MEDIUM/LARGE + UNSUPPORTED_SIZE_CLAMP", () => {
+  // a widget that supports [small, medium] (approvals)
+  const appr = widgetById("approvals")!;
+  assert.deepEqual(appr.supportedSizes, ["small", "medium"]);
+  assert.equal(clampWidgetSize(appr, "small"), "small");
+  assert.equal(clampWidgetSize(appr, "medium"), "medium");
+  // unsupported size ⇒ clamped to the widget's default (never an illegal size)
+  assert.equal(clampWidgetSize(appr, "large"), appr.defaultSize);
+  assert.equal(clampWidgetSize(appr, "garbage"), appr.defaultSize);
+  // resolution applies the clamp: request large on approvals ⇒ default
+  const r = resolveWidgetLayout({ sizes: { approvals: "large" } }, new Set(registryIds()));
+  const item = r.items.find((i) => i.id === "approvals")!;
+  assert.equal(item.size, appr.defaultSize);
+  // a valid override is kept
+  const r2 = resolveWidgetLayout({ sizes: { approvals: "small" } }, new Set(registryIds()));
+  assert.equal(r2.items.find((i) => i.id === "approvals")!.size, "small");
+});
+
+test("setWidgetSize / cycleWidgetSize respect supportedSizes", () => {
+  // setWidgetSize ignores an unsupported size (approvals can't be large)
+  assert.deepEqual(setWidgetSize({}, "approvals", "large"), {});
+  assert.deepEqual(setWidgetSize({}, "approvals", "small"), { approvals: "small" });
+  // cycle wraps within supported sizes only
+  assert.equal(cycleWidgetSize("approvals", "small"), "medium");
+  assert.equal(cycleWidgetSize("approvals", "medium"), "small"); // wraps
+  // single-size widget stays put
+  const single = WIDGET_REGISTRY.find((w) => w.supportedSizes.length === 1);
+  if (single) {
+    assert.equal(cycleWidgetSize(single.id, single.defaultSize), single.defaultSize);
+  }
+});
+
+test("clampLayout: sizes are validated (known id + valid token)", () => {
+  const l = clampLayout({ sizes: { approvals: "medium", ghost: "large", kpis: 42 } });
+  assert.equal(l.sizes.approvals, "medium");
+  assert.equal("ghost" in l.sizes, false); // unknown widget dropped
+  assert.equal("kpis" in l.sizes, false); // non-string size dropped
+});
+
 // --- WEATHER fetch logic: ANY weather-dependent segment ---------------------
 test("needsWeather: fetch iff any of weather/temperature/rain/wind is shown", () => {
   assert.equal(needsWeather(resolveContextConfig({})), true); // all on by default
@@ -152,7 +196,13 @@ test("RESET_WIDGETS_SCOPED: cleared layout ⇒ default order + all segments", ()
   const cleared = clampLayout({});
   assert.deepEqual(cleared.order, []);
   assert.deepEqual(cleared.hidden, []);
+  assert.deepEqual(cleared.sizes, {}); // sizes reset to default too
   assert.deepEqual(resolveWidgetLayout(cleared, ALL).visible, DEFAULT_WIDGET_ORDER);
+  // widgets fall back to their registry defaultSize after a reset
+  const r = resolveWidgetLayout(cleared, ALL);
+  for (const it of r.items) {
+    assert.equal(it.size, widgetById(it.id)!.defaultSize);
+  }
   const cfg = resolveContextConfig(cleared.context);
   assert.equal(contextVisibleSegments(cfg).length, CONTEXT_SEGMENTS.length);
 });
@@ -185,7 +235,9 @@ test("CSS: widget grid + gallery classes present, responsive", () => {
     "utf8",
   );
   assert.match(css, /\.dashboard-widgets\s*\{/);
-  assert.match(css, /\.dash-widget\.span-full/);
+  assert.match(css, /\.dash-widget\.size-large/);
   assert.match(css, /\.widget-gallery/);
-  assert.match(css, /@media \(max-width: 1024px\)[^@]*\.dashboard-widgets/s);
+  assert.match(css, /\.edit-toggle-btn/); // DASH-4C edit mode
+  assert.match(css, /\.widget-drag-handle/);
+  assert.match(css, /@media \(max-width: 720px\)[^@]*\.dashboard-widgets/s);
 });
