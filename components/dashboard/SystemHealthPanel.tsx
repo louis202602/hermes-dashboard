@@ -5,6 +5,7 @@ import {
   classifyPlatformHealth,
   describeResolver,
   extractCostSummary,
+  formatActivityTime,
   type AgentActionStats,
   type PlatformHealthStatus,
 } from "@/lib/dashboard/systemActivity";
@@ -25,6 +26,8 @@ type Props = {
   resolver: ServiceResult<ResolverObservability>;
   cost: ServiceResult<CostGovernanceSnapshot>;
   locale: string;
+  timezone: string;
+  hour12: boolean;
 };
 
 const HEALTH_LABEL: Record<PlatformHealthStatus, string> = {
@@ -62,6 +65,9 @@ export default function SystemHealthPanel({
   actionStats,
   resolver,
   cost,
+  locale,
+  timezone,
+  hour12,
 }: Props) {
   const health = classifyPlatformHealth(platformHealth);
   const res = describeResolver(resolver);
@@ -101,7 +107,12 @@ export default function SystemHealthPanel({
           <strong>Plateforme {HEALTH_LABEL[health.status]}</strong>
           <span>
             {health.coverage === "PARTIAL"
-              ? "Couverture partielle : composants + dernière exécution"
+              ? `Couverture partielle (composants + dernière exécution) · dernière exéc. ${formatActivityTime(
+                  health.lastExecutionAt,
+                  timezone,
+                  locale,
+                  hour12,
+                )}`
               : "Mesure indisponible"}
           </span>
         </div>
@@ -150,7 +161,9 @@ export default function SystemHealthPanel({
             {res.available
               ? `${res.enabled ? "activé" : "désactivé"} · circuit ${
                   res.circuit === "OPEN" ? "OUVERT" : "CLOSED"
-                }`
+                } · file ${res.queueDepth ?? "—"} · en cours ${
+                  res.running ?? "—"
+                } · dead-letter ${res.deadLetter ?? "—"}`
               : "—"}
           </strong>
         </span>

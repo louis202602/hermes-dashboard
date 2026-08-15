@@ -174,6 +174,8 @@ export default function DashboardShell({
               resolver={resolver}
               cost={cost}
               locale={locale}
+              timezone={timezone}
+              hour12={hour12}
             />
             <AgentActivityPanel
               observability={observability}
