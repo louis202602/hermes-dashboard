@@ -175,6 +175,48 @@ function strOrNull(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 && v.length <= 64 ? v : null;
 }
 
+// --- Regional validators (deterministic, Intl-backed; NO network, NO list) ----
+
+/** Valid IANA zone name — verified by asking Intl to build a formatter for it. */
+function validTimeZoneOrNull(v: unknown): string | null {
+  const s = strOrNull(v);
+  if (!s) return null;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: s });
+    return s;
+  } catch {
+    return null;
+  }
+}
+/** Well-formed BCP-47 locale (e.g. "fr-FR"), canonicalised by Intl. */
+function validLocaleOrNull(v: unknown): string | null {
+  const s = strOrNull(v);
+  if (!s) return null;
+  try {
+    const [canonical] = Intl.getCanonicalLocales(s);
+    return canonical ?? null;
+  } catch {
+    return null;
+  }
+}
+/** ISO 3166-1 alpha-2 country (two uppercase letters). */
+function validCountryOrNull(v: unknown): string | null {
+  const s = strOrNull(v);
+  return s && /^[A-Za-z]{2}$/.test(s) ? s.toUpperCase() : null;
+}
+/** ISO 4217-style currency (three uppercase letters, accepted by Intl). */
+function validCurrencyOrNull(v: unknown): string | null {
+  const s = strOrNull(v);
+  if (!s || !/^[A-Za-z]{3}$/.test(s)) return null;
+  const up = s.toUpperCase();
+  try {
+    new Intl.NumberFormat("en", { style: "currency", currency: up });
+    return up;
+  } catch {
+    return null;
+  }
+}
+
 export function clampAppearance(input: unknown): Appearance {
   const a = (input ?? {}) as Record<string, unknown>;
   const d = HERMES_DEFAULT_APPEARANCE;
@@ -209,11 +251,11 @@ export function clampBehavior(input: unknown): Behavior {
 export function clampRegional(input: unknown): RegionalOverride {
   const r = (input ?? {}) as Record<string, unknown>;
   return {
-    language: strOrNull(r.language),
-    locale: strOrNull(r.locale),
-    country: strOrNull(r.country),
-    currency: strOrNull(r.currency),
-    timezone: strOrNull(r.timezone),
+    language: validLocaleOrNull(r.language),
+    locale: validLocaleOrNull(r.locale),
+    country: validCountryOrNull(r.country),
+    currency: validCurrencyOrNull(r.currency),
+    timezone: validTimeZoneOrNull(r.timezone),
     temperatureUnit:
       r.temperatureUnit === "C" || r.temperatureUnit === "F"
         ? r.temperatureUnit
@@ -295,6 +337,72 @@ export function appearanceToDataset(a: Appearance): Record<string, string> {
   if (a.reduceMotion) ds.reduceMotion = "1";
   if (a.reduceTransparency) ds.reduceTransparency = "1";
   return ds;
+}
+
+/**
+ * Fold behavior.animations into the effective appearance: turning animations off
+ * enforces reduced motion (never the reverse — accessibility can only add safety).
+ * Pure: shared by the server (SSR anti-FOUC) and the client (live apply).
+ */
+export function effectiveAppearance(
+  appearance: Appearance,
+  behavior: Behavior,
+): Appearance {
+  return {
+    ...appearance,
+    reduceMotion: appearance.reduceMotion || !behavior.animations,
+  };
+}
+
+/** Inverse of `appearanceToDataset`: a data-* record → a clamped Appearance. */
+export function datasetToAppearance(ds: Record<string, string>): Appearance {
+  return clampAppearance({
+    theme: ds.theme,
+    accent: ds.accent,
+    contrast: ds.contrast,
+    transparency: ds.transparency,
+    blur: ds.blur,
+    radius: ds.radius,
+    shadow: ds.shadow,
+    font: ds.font,
+    textSize: ds.textsize,
+    fontWeight: ds.weight,
+    density: ds.density,
+    reduceMotion: ds.reduceMotion === "1",
+    reduceTransparency: ds.reduceTransparency === "1",
+  });
+}
+
+// Dataset key → real `data-*` attribute name (for SSR onto <html>).
+const HTML_ATTR_KEYS: Record<string, string> = {
+  theme: "data-theme",
+  accent: "data-accent",
+  contrast: "data-contrast",
+  transparency: "data-transparency",
+  blur: "data-blur",
+  radius: "data-radius",
+  shadow: "data-shadow",
+  font: "data-font",
+  textsize: "data-textsize",
+  weight: "data-weight",
+  density: "data-density",
+  reduceMotion: "data-reduce-motion",
+  reduceTransparency: "data-reduce-transparency",
+};
+
+/**
+ * Appearance → a `{ "data-theme": …, … }` record ready to spread onto the server
+ * `<html>` element so the FIRST paint already carries the user's real appearance
+ * (no flash on a brand-new device). `theme:"auto"` is emitted verbatim; the tiny
+ * init script resolves it against the OS pre-paint (the server can't know it).
+ */
+export function appearanceToHtmlAttrs(a: Appearance): Record<string, string> {
+  const ds = appearanceToDataset(a);
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(ds)) {
+    out[HTML_ATTR_KEYS[k] ?? `data-${k.toLowerCase()}`] = v;
+  }
+  return out;
 }
 
 // --- Compact cookie (anti-FOUC). Format: "k:v;k:v" of dataset pairs ----------

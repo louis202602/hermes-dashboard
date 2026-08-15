@@ -9,8 +9,11 @@ import {
   appearanceToDataset,
   serializeAppearanceCookie,
   type Appearance,
-  type Behavior,
 } from "@/lib/dashboard/preferences";
+
+// `effectiveAppearance` is pure (folds animations → reduced motion) and now lives
+// in the DOM-free contract; re-exported here so existing client imports keep working.
+export { effectiveAppearance } from "@/lib/dashboard/preferences";
 
 const MANAGED_KEYS = [
   "theme",
@@ -39,20 +42,6 @@ export function resolveThemeAttr(theme: string): string {
   return "dark";
 }
 
-/**
- * Fold behavior.animations into the effective appearance: turning animations off
- * enforces reduced motion (never the reverse — accessibility can only add safety).
- */
-export function effectiveAppearance(
-  appearance: Appearance,
-  behavior: Behavior,
-): Appearance {
-  return {
-    ...appearance,
-    reduceMotion: appearance.reduceMotion || !behavior.animations,
-  };
-}
-
 /** Apply the appearance to `<html>` data-* attributes (idempotent, cleans stale keys). */
 export function applyAppearance(a: Appearance): void {
   if (typeof document === "undefined") return;
@@ -66,9 +55,18 @@ export function applyAppearance(a: Appearance): void {
   }
 }
 
-/** Mirror the appearance into the (non-HttpOnly) cookie read by the init script. */
+/**
+ * Mirror the appearance into the appearance cookie (a CACHE — the server DB row is
+ * canonical). Cannot be HttpOnly: the pre-paint init script and this helper both read
+ * it from JS. `Secure` is added on HTTPS so it is never sent in clear. Contains only
+ * the appearance dataset (theme/accent/…) — no layout, no profiles, no sensitive data.
+ */
 export function writeAppearanceCookie(a: Appearance): void {
   if (typeof document === "undefined") return;
   const val = encodeURIComponent(serializeAppearanceCookie(a));
-  document.cookie = `${APPEARANCE_COOKIE_NAME}=${val};path=/;max-age=31536000;SameSite=Lax`;
+  const secure =
+    typeof location !== "undefined" && location.protocol === "https:"
+      ? ";Secure"
+      : "";
+  document.cookie = `${APPEARANCE_COOKIE_NAME}=${val};path=/;max-age=31536000;SameSite=Lax${secure}`;
 }

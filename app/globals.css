@@ -3376,16 +3376,21 @@ html[data-theme="light"] .hos-nav-item.is-active {
 .hos-collapse-btn { flex: 0 0 auto; }
 
 /* Collapsed rail (icons only) */
-.dashboard-shell.is-collapsed { --sidebar-width: 78px; }
-.hos-sidebar.is-collapsed { padding: 18px 12px 14px; }
-.hos-sidebar.is-collapsed .hos-nav-label,
-.hos-sidebar.is-collapsed .hos-brand-copy,
-.hos-sidebar.is-collapsed .hos-profile-copy { display: none; }
-.hos-sidebar.is-collapsed .hos-nav-item { justify-content: center; padding: 10px; }
-.hos-sidebar.is-collapsed .hos-brand { justify-content: center; padding: 6px 0 16px; }
-.hos-sidebar.is-collapsed .hos-profile { justify-content: center; padding: 8px; }
-.hos-sidebar.is-collapsed .hos-foot-actions { flex-direction: column; }
-.hos-sidebar.is-collapsed .hos-foot-btn { justify-content: center; }
+/* Desktop-only: the user's persisted "sidebar collapsed" preference. On mobile the
+   sidebar is an ephemeral drawer, so it must ALWAYS render full-width (labels shown)
+   regardless of this desktop choice — otherwise the drawer nav would break. */
+@media (min-width: 821px) {
+  .dashboard-shell.is-collapsed { --sidebar-width: 78px; }
+  .hos-sidebar.is-collapsed { padding: 18px 12px 14px; }
+  .hos-sidebar.is-collapsed .hos-nav-label,
+  .hos-sidebar.is-collapsed .hos-brand-copy,
+  .hos-sidebar.is-collapsed .hos-profile-copy { display: none; }
+  .hos-sidebar.is-collapsed .hos-nav-item { justify-content: center; padding: 10px; }
+  .hos-sidebar.is-collapsed .hos-brand { justify-content: center; padding: 6px 0 16px; }
+  .hos-sidebar.is-collapsed .hos-profile { justify-content: center; padding: 8px; }
+  .hos-sidebar.is-collapsed .hos-foot-actions { flex-direction: column; }
+  .hos-sidebar.is-collapsed .hos-foot-btn { justify-content: center; }
+}
 
 /* Slim premium top bar (right-aligned action cluster). */
 .hos-topbar {
@@ -4428,6 +4433,18 @@ html[data-reduce-transparency="1"] .context-bar { backdrop-filter: none; backgro
 .settings-section-title {
   font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em;
   color: var(--text-muted); margin: 2px 4px var(--space-2);
+  cursor: pointer; list-style: none;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-2); min-height: 32px;
+}
+.settings-section-title::-webkit-details-marker { display: none; }
+.settings-section-title::after {
+  content: "\25B8"; font-size: 0.8rem; color: var(--text-muted);
+  transition: transform var(--motion-fast) var(--easing);
+}
+.settings-section[open] > .settings-section-title::after { transform: rotate(90deg); }
+.settings-section-title:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px;
 }
 .settings-group { display: flex; flex-direction: column; }
 .settings-row {

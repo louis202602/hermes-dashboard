@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import {
   parsePreferences,
   type DashboardPreferences,
@@ -12,8 +14,11 @@ import type { ServiceResult } from "@/types/hermes";
  * The caller's own dashboard preferences (user-scoped). Tenant scoping + own-row
  * filtering are enforced in the RPC. Anything unresolved collapses to the Hermès
  * defaults (parsePreferences), never a fabricated or cross-user value.
+ *
+ * Wrapped in React `cache()` so the layout (SSR anti-FOUC) and the page/settings
+ * route share ONE actual DB read per request (COST-FIRST: NEW_DB_READS = 1).
  */
-export async function getDashboardUserPreferences(): Promise<
+export const getDashboardUserPreferences = cache(async function getDashboardUserPreferences(): Promise<
   ServiceResult<DashboardPreferences>
 > {
   try {
@@ -32,4 +37,4 @@ export async function getDashboardUserPreferences(): Promise<
     });
     return { ok: false, provenance: "UNAVAILABLE", error: "user_prefs" };
   }
-}
+});

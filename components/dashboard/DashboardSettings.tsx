@@ -104,11 +104,13 @@ const R: Record<string, Opt[]> = {
 };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  // Native <details>: open two-pane on desktop; on mobile each section is a real
+  // collapsible drill-in (keyboard + touch accessible, no JS) instead of one long scroll.
   return (
-    <section className="settings-section">
-      <h3 className="settings-section-title">{title}</h3>
+    <details className="settings-section" open>
+      <summary className="settings-section-title">{title}</summary>
       <div className="settings-group">{children}</div>
-    </section>
+    </details>
   );
 }
 

@@ -2,6 +2,7 @@
 
 import { Bell, Menu, Moon, Settings, Sun } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 import { HermesLogoSymbol } from "@/components/common/HermesLogo";
@@ -38,13 +39,16 @@ export default function Header({
   preferencesVersion = 0,
 }: HeaderProps) {
   const email = userEmail ?? "";
+  const router = useRouter();
   const [appr, setAppr] = useState<Appearance>(appearance);
   const versionRef = useRef<number>(preferencesVersion);
   // Effective light/dark for the icon (resolves auto/named themes at click time).
   const isLight = resolveThemeAttr(appr.theme) === "light";
 
-  // Quick light/dark toggle — CANONICAL: applies live, mirrors the cookie, and
-  // persists server-side (optimistic version) so it survives reload + syncs.
+  // Quick light/dark toggle — CANONICAL: it goes through the very same optimistic
+  // upsert (and version) as the Settings page, applies live, and mirrors the cookie.
+  // On VERSION_CONFLICT (another device wrote first) it refreshes to the canonical
+  // server state instead of silently overwriting — no parallel write path.
   const toggle = () => {
     const next: Appearance = { ...appr, theme: isLight ? "dark" : "light" };
     setAppr(next);
@@ -54,7 +58,12 @@ export default function Header({
       { appearance: next, schema_version: PREFERENCES_SCHEMA_VERSION },
       versionRef.current,
     ).then((r) => {
-      if (r.ok && typeof r.version === "number") versionRef.current = r.version;
+      if (r.ok && typeof r.version === "number") {
+        versionRef.current = r.version;
+      } else if (r.status === "VERSION_CONFLICT") {
+        if (typeof r.version === "number") versionRef.current = r.version;
+        router.refresh(); // pull canonical appearance; AppearanceSync reconciles
+      }
     });
   };
 

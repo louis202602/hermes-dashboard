@@ -5,10 +5,14 @@ import { test } from "node:test";
 
 import {
   HERMES_DEFAULT_APPEARANCE,
+  HERMES_DEFAULT_BEHAVIOR,
   HERMES_DEFAULT_PREFERENCES,
   appearanceToDataset,
+  appearanceToHtmlAttrs,
   clampAppearance,
   clampRegional,
+  datasetToAppearance,
+  effectiveAppearance,
   parseAppearanceCookie,
   parsePreferences,
   resolvePreferences,
@@ -159,6 +163,75 @@ test("clampRegional: units/hourCycle/timezone override, junk dropped", () => {
   assert.equal(bad.temperatureUnit, null);
   assert.equal(bad.hourCycle, null);
   assert.equal(bad.firstDayOfWeek, "auto");
+});
+
+// --- REGIONAL Intl validation (IANA / locale / currency / country) ----------
+test("clampRegional: IANA timezone / locale / currency / country validated by Intl", () => {
+  const good = clampRegional({
+    timezone: "Europe/Paris",
+    locale: "fr-FR",
+    currency: "eur", // lowercased input → uppercased ISO
+    country: "fr", // lowercased alpha-2 → uppercased
+  });
+  assert.equal(good.timezone, "Europe/Paris");
+  assert.equal(good.locale, "fr-FR");
+  assert.equal(good.currency, "EUR");
+  assert.equal(good.country, "FR");
+  // Garbage in every field ⇒ null (never stored/consumed).
+  const bad = clampRegional({
+    timezone: "Mars/Olympus_Mons",
+    locale: "not a locale!!",
+    currency: "EUROS",
+    country: "FRA",
+  });
+  assert.equal(bad.timezone, null);
+  assert.equal(bad.locale, null);
+  assert.equal(bad.currency, null);
+  assert.equal(bad.country, null);
+});
+
+// --- SSR anti-FOUC: html attrs + dataset roundtrip --------------------------
+test("appearanceToHtmlAttrs: data-* attributes for server-side first paint", () => {
+  const attrs = appearanceToHtmlAttrs({
+    ...HERMES_DEFAULT_APPEARANCE,
+    theme: "ocean",
+    accent: "cyan",
+    textSize: "large",
+    fontWeight: "strong",
+    reduceMotion: true,
+  });
+  assert.equal(attrs["data-theme"], "ocean");
+  assert.equal(attrs["data-accent"], "cyan");
+  assert.equal(attrs["data-textsize"], "large");
+  assert.equal(attrs["data-weight"], "strong");
+  assert.equal(attrs["data-reduce-motion"], "1");
+  // "auto" is emitted verbatim (the init script resolves it against the OS).
+  const auto = appearanceToHtmlAttrs({ ...HERMES_DEFAULT_APPEARANCE, theme: "auto" });
+  assert.equal(auto["data-theme"], "auto");
+});
+
+test("datasetToAppearance ∘ appearanceToDataset: lossless clamped roundtrip", () => {
+  const a: Appearance = {
+    ...HERMES_DEFAULT_APPEARANCE,
+    theme: "midnight",
+    accent: "purple",
+    density: "spacious",
+    reduceTransparency: true,
+  };
+  const back = datasetToAppearance(appearanceToDataset(a));
+  assert.deepEqual(back, a);
+});
+
+// --- effectiveAppearance: animations off ⇒ reduced motion -------------------
+test("effectiveAppearance: disabling animations enforces reduced motion", () => {
+  const eff = effectiveAppearance(HERMES_DEFAULT_APPEARANCE, {
+    ...HERMES_DEFAULT_BEHAVIOR,
+    animations: false,
+  });
+  assert.equal(eff.reduceMotion, true);
+  // Never the reverse: animations on + reduceMotion off ⇒ stays off.
+  const eff2 = effectiveAppearance(HERMES_DEFAULT_APPEARANCE, HERMES_DEFAULT_BEHAVIOR);
+  assert.equal(eff2.reduceMotion, false);
 });
 
 // --- SHOW_SECONDS (clock) ---------------------------------------------------
