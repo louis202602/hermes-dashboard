@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { saveDashboardPreferencesAction } from "@/app/actions/dashboard-preferences";
@@ -27,126 +28,52 @@ import {
   resolveWidgetLayout,
   setWidgetHidden,
   setWidgetSize,
-  widgetById,
   type ContextSegment,
   type LayoutPreferences,
-  type WidgetCategory,
   type WidgetSize,
 } from "@/lib/dashboard/widgets";
+import { LANGUAGES, type MessageKey } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
-
 type Opt = { value: string; label: string };
 
-const A: Record<string, Opt[]> = {
-  theme: [
-    { value: "dark", label: "Hermès Sombre" },
-    { value: "light", label: "Hermès Clair" },
-    { value: "auto", label: "Automatique (système)" },
-    { value: "midnight", label: "Midnight" },
-    { value: "graphite", label: "Graphite" },
-    { value: "ocean", label: "Ocean" },
-    { value: "solar", label: "Solar" },
-    { value: "minimal", label: "Minimal" },
-  ],
-  accent: [
-    { value: "blue", label: "Bleu" },
-    { value: "cyan", label: "Cyan" },
-    { value: "purple", label: "Violet" },
-    { value: "green", label: "Vert" },
-    { value: "orange", label: "Orange" },
-    { value: "red", label: "Rouge" },
-    { value: "neutral", label: "Neutre" },
-  ],
-  contrast: [
-    { value: "standard", label: "Standard" },
-    { value: "high", label: "Renforcé" },
-  ],
-  transparency: [
-    { value: "glass", label: "Verre" },
-    { value: "soft", label: "Doux" },
-    { value: "solid", label: "Opaque" },
-  ],
-  blur: [
-    { value: "none", label: "Aucun" },
-    { value: "low", label: "Faible" },
-    { value: "standard", label: "Standard" },
-    { value: "high", label: "Élevé" },
-  ],
-  radius: [
-    { value: "small", label: "Petits" },
-    { value: "standard", label: "Standard" },
-    { value: "large", label: "Larges" },
-  ],
-  shadow: [
-    { value: "none", label: "Aucune" },
-    { value: "subtle", label: "Subtile" },
-    { value: "standard", label: "Standard" },
-  ],
-  font: [
-    { value: "hermes", label: "Hermès" },
-    { value: "modern", label: "Moderne" },
-    { value: "classic", label: "Classique" },
-    { value: "accessible", label: "Accessible" },
-  ],
-  textSize: [
-    { value: "compact", label: "Compact" },
-    { value: "standard", label: "Standard" },
-    { value: "large", label: "Large" },
-  ],
-  fontWeight: [
-    { value: "normal", label: "Normale" },
-    { value: "medium", label: "Moyenne" },
-    { value: "strong", label: "Forte" },
-  ],
-  density: [
-    { value: "compact", label: "Compact" },
-    { value: "comfortable", label: "Confortable" },
-    { value: "spacious", label: "Spacieux" },
-  ],
-};
-
-const INHERIT = { value: "", label: "Hérité (tenant)" };
-const R: Record<string, Opt[]> = {
-  locale: [INHERIT, ...["fr-FR", "fr-CA", "en-US", "en-GB", "es-ES", "de-DE", "it-IT", "pt-PT", "pt-BR", "nl-NL"].map((v) => ({ value: v, label: v }))],
-  country: [INHERIT, ...["FR", "CA", "US", "GB", "ES", "DE", "IT", "PT", "BR", "NL", "BE", "CH"].map((v) => ({ value: v, label: v }))],
-  currency: [INHERIT, ...["EUR", "USD", "GBP", "CHF", "CAD", "BRL"].map((v) => ({ value: v, label: v }))],
-  timezone: [INHERIT, ...["Europe/Paris", "Europe/Madrid", "Europe/London", "America/New_York", "America/Los_Angeles", "America/Sao_Paulo", "Asia/Tokyo", "Asia/Dubai", "Australia/Sydney"].map((v) => ({ value: v, label: v }))],
-  temperatureUnit: [INHERIT, { value: "C", label: "°C" }, { value: "F", label: "°F" }],
-  windUnit: [INHERIT, { value: "kmh", label: "km/h" }, { value: "mph", label: "mph" }],
-  hourCycle: [{ value: "", label: "Auto (locale)" }, { value: "24h", label: "24 h" }, { value: "12h", label: "12 h" }],
-  dateFormat: [{ value: "auto", label: "Auto" }, { value: "short", label: "Court" }, { value: "long", label: "Long" }],
-  firstDayOfWeek: [{ value: "auto", label: "Auto" }, { value: "monday", label: "Lundi" }, { value: "sunday", label: "Dimanche" }],
-};
-
-const CONTEXT_LABELS: Record<ContextSegment, string> = {
-  time: "Heure",
-  date: "Date",
-  weather: "Météo",
-  temperature: "Température",
-  rain: "Pluie",
-  wind: "Vent",
-  location: "Localisation",
-  cost: "Coût Hermès",
-  alerts: "Alertes",
-  nextEvent: "Prochain événement",
-};
-
-const CATEGORY_LABELS: Record<WidgetCategory, string> = {
-  general: "Général",
-  agenda: "Agenda",
-  weather: "Météo",
-  alerts: "Alertes",
-  commercial: "Commercial",
-  finance: "Finance",
-  agents: "Agents",
-  system: "Système",
-  chantiers: "Chantiers",
-  btp: "BTP",
-  immobilier: "Immobilier",
-};
-
 const SIZE_SHORT: Record<string, string> = { small: "S", medium: "M", large: "L" };
+
+// Appearance option value lists (labels resolved via i18n at render).
+const A_VALUES: Record<string, string[]> = {
+  theme: ["dark", "light", "auto", "midnight", "graphite", "ocean", "solar", "minimal"],
+  accent: ["blue", "cyan", "purple", "green", "orange", "red", "neutral"],
+  contrast: ["standard", "high"],
+  transparency: ["glass", "soft", "solid"],
+  blur: ["none", "low", "standard", "high"],
+  radius: ["small", "standard", "large"],
+  shadow: ["none", "subtle", "standard"],
+  font: ["hermes", "modern", "classic", "accessible"],
+  textSize: ["compact", "standard", "large"],
+  fontWeight: ["normal", "medium", "strong"],
+  density: ["compact", "comfortable", "spacious"],
+};
+// opt.* key groups (textSize→size, fontWeight→weight); named themes keep literal names.
+const OPT_GROUP: Record<string, string> = {
+  accent: "accent",
+  contrast: "contrast",
+  transparency: "transparency",
+  blur: "blur",
+  radius: "radius",
+  shadow: "shadow",
+  font: "font",
+  textSize: "size",
+  fontWeight: "weight",
+  density: "density",
+};
+const NAMED_THEMES: Record<string, string> = {
+  midnight: "Midnight",
+  graphite: "Graphite",
+  ocean: "Ocean",
+  solar: "Solar",
+  minimal: "Minimal",
+};
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -218,33 +145,54 @@ export default function DashboardSettings({
   initial: DashboardPreferences;
   availableWidgets?: string[];
 }) {
+  const { t } = useI18n();
+  const router = useRouter();
   const [appearance, setAppearance] = useState<Appearance>(initial.appearance);
   const [behavior, setBehavior] = useState<Behavior>(initial.behavior);
   const [regional, setRegional] = useState<RegionalOverride>(initial.regional);
-  const [layout, setLayout] = useState<LayoutPreferences>(() =>
-    clampLayout(initial.layout),
-  );
+  const [layout, setLayout] = useState<LayoutPreferences>(() => clampLayout(initial.layout));
   const version = useRef<number>(initial.version);
   const [save, setSave] = useState<SaveState>("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pending = useRef<Record<string, unknown>>({});
 
-  const availableSet = useMemo(
-    () => new Set(availableWidgets),
-    [availableWidgets],
-  );
+  const availableSet = useMemo(() => new Set(availableWidgets), [availableWidgets]);
 
-  // Unified optimistic persistence: patches (appearance/behavior/regional/layout)
-  // accumulate and flush ONCE after a debounce — the replace-per-subobject upsert
-  // preserves everything untouched. Shared version ⇒ no self-inflicted conflicts.
+  // --- i18n-resolved option label helpers ---
+  const themeLabel = (v: string): string =>
+    v === "dark" ? t("opt.theme.dark")
+    : v === "light" ? t("opt.theme.light")
+    : v === "auto" ? t("settings.autoSystem")
+    : NAMED_THEMES[v] ?? v;
+  const optLabel = (group: string, v: string): string =>
+    group === "theme" ? themeLabel(v) : t(`opt.${OPT_GROUP[group]}.${v}` as MessageKey);
+  const opts = (group: string): Opt[] =>
+    A_VALUES[group].map((v) => ({ value: v, label: optLabel(group, v) }));
+  const INHERIT: Opt = { value: "", label: t("settings.inherit") };
+  const codeOpts = (codes: string[]): Opt[] => [
+    INHERIT,
+    ...codes.map((v) => ({ value: v, label: v })),
+  ];
+
+  const R = {
+    locale: codeOpts(["fr-FR", "fr-CA", "en-US", "en-GB", "es-ES", "de-DE", "it-IT", "pt-PT", "pt-BR", "nl-NL"]),
+    country: codeOpts(["FR", "CA", "US", "GB", "ES", "DE", "IT", "PT", "BR", "NL", "BE", "CH"]),
+    currency: codeOpts(["EUR", "USD", "GBP", "CHF", "CAD", "BRL"]),
+    timezone: codeOpts(["Europe/Paris", "Europe/Madrid", "Europe/London", "America/New_York", "America/Los_Angeles", "America/Sao_Paulo", "Asia/Tokyo", "Asia/Dubai", "Australia/Sydney"]),
+    temperatureUnit: [INHERIT, { value: "C", label: "°C" }, { value: "F", label: "°F" }],
+    windUnit: [INHERIT, { value: "kmh", label: "km/h" }, { value: "mph", label: "mph" }],
+    hourCycle: [{ value: "", label: t("settings.autoLocale") }, { value: "24h", label: t("opt.hour.24") }, { value: "12h", label: t("opt.hour.12") }],
+    dateFormat: [{ value: "auto", label: t("settings.auto") }, { value: "short", label: t("opt.date.short") }, { value: "long", label: t("opt.date.long") }],
+    firstDayOfWeek: [{ value: "auto", label: t("settings.auto") }, { value: "monday", label: t("opt.day.monday") }, { value: "sunday", label: t("opt.day.sunday") }],
+    language: [INHERIT, ...LANGUAGES.map((l) => ({ value: l.code, label: l.label }))],
+  };
+
+  // Unified optimistic persistence (merged debounced patch — replace-per-subobject).
   const schedule = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
     setSave("saving");
     timer.current = setTimeout(async () => {
-      const patch = {
-        ...pending.current,
-        schema_version: PREFERENCES_SCHEMA_VERSION,
-      };
+      const patch = { ...pending.current, schema_version: PREFERENCES_SCHEMA_VERSION };
       pending.current = {};
       const res = await saveDashboardPreferencesAction(patch, version.current);
       if (res.ok && typeof res.version === "number") {
@@ -258,7 +206,6 @@ export default function DashboardSettings({
       }
     }, 600);
   }, []);
-
   const persistPatch = useCallback(
     (p: Record<string, unknown>) => {
       pending.current = { ...pending.current, ...p };
@@ -267,7 +214,6 @@ export default function DashboardSettings({
     [schedule],
   );
 
-  // Live preview: reflect appearance on <html> as it changes.
   useEffect(() => {
     const eff = effectiveAppearance(appearance, behavior);
     applyAppearance(eff);
@@ -289,18 +235,34 @@ export default function DashboardSettings({
     setRegional(next);
     persistPatch({ regional: next });
   };
+  // Language change: persist immediately, then refresh so the server re-resolves the
+  // UI catalog (robust, no divergence, only the active catalog ever reaches the client).
+  const onLanguageChange = async (code: string) => {
+    const next = { ...regional, language: code || null };
+    setRegional(next);
+    setSave("saving");
+    const res = await saveDashboardPreferencesAction(
+      { regional: next, schema_version: PREFERENCES_SCHEMA_VERSION },
+      version.current,
+    );
+    if (res.ok && typeof res.version === "number") {
+      version.current = res.version;
+      setSave("saved");
+      router.refresh();
+    } else if (res.status === "VERSION_CONFLICT") {
+      setSave("conflict");
+      setTimeout(() => window.location.reload(), 1400);
+    } else {
+      setSave("error");
+    }
+  };
   const resetAppearance = () => {
     setAppearance(HERMES_DEFAULT_APPEARANCE);
     persistPatch({ appearance: HERMES_DEFAULT_APPEARANCE });
   };
 
-  // --- DASH-4B widget layout ---
-  const resolved = useMemo(
-    () => resolveWidgetLayout(layout, availableSet),
-    [layout, availableSet],
-  );
+  const resolved = useMemo(() => resolveWidgetLayout(layout, availableSet), [layout, availableSet]);
   const ctx = useMemo(() => resolveContextConfig(layout.context), [layout]);
-
   const commitLayout = (next: LayoutPreferences) => {
     setLayout(next);
     persistPatch({ layout: next });
@@ -315,8 +277,6 @@ export default function DashboardSettings({
   const onSize = (id: string, size: WidgetSize) => {
     commitLayout({ ...layout, sizes: setWidgetSize(layout.sizes, id, size) });
   };
-  // Add from the gallery: un-hide AND mark explicitly ordered (so an opt-in
-  // widget like the map, hidden by default, becomes visible and stays visible).
   const onShow = (id: string) => {
     commitLayout({
       ...layout,
@@ -328,164 +288,105 @@ export default function DashboardSettings({
     commitLayout({ ...layout, context: { ...layout.context, [seg]: on } });
   };
   const resetWidgets = () => {
-    const cleared: LayoutPreferences = {
-      order: [],
-      hidden: [],
-      sizes: {},
-      context: {},
-      schemaVersion: LAYOUT_SCHEMA_VERSION,
-    };
+    const cleared: LayoutPreferences = { order: [], hidden: [], sizes: {}, context: {}, schemaVersion: LAYOUT_SCHEMA_VERSION };
     setLayout(cleared);
     persistPatch({ layout: cleared });
   };
 
   const activeItems = resolved.items.filter((it) => it.available && !it.hidden);
-  const galleryItems = resolved.items.filter(
-    (it) => !it.available || it.hidden,
-  );
+  const galleryItems = resolved.items.filter((it) => !it.available || it.hidden);
+  const widgetName = (id: string) => t(`widget.${id}` as MessageKey);
+  const segLabel = (seg: ContextSegment) => t(`seg.${seg}` as MessageKey);
 
   const saveLabel =
-    save === "saving"
-      ? "Synchronisation…"
-      : save === "saved"
-        ? "Enregistré"
-        : save === "conflict"
-          ? "Conflit — rechargement…"
-          : save === "error"
-            ? "Erreur d’enregistrement"
-            : "";
+    save === "saving" ? t("common.save.saving")
+    : save === "saved" ? t("common.save.saved")
+    : save === "conflict" ? t("common.save.conflict")
+    : save === "error" ? t("common.save.error")
+    : "";
 
   return (
     <div className="settings-page">
       <header className="settings-header">
         <div>
-          <span className="panel-eyebrow">PARAMÈTRES</span>
-          <h2>Dashboard</h2>
+          <span className="panel-eyebrow">{t("settings.eyebrow")}</span>
+          <h2>{t("settings.title")}</h2>
         </div>
         <div className="settings-header-right">
-          <span className={`settings-savestate is-${save}`} aria-live="polite">
-            {saveLabel}
-          </span>
-          <Link href="/" className="settings-back">
-            ← Retour
-          </Link>
+          <span className={`settings-savestate is-${save}`} aria-live="polite">{saveLabel}</span>
+          <Link href="/" className="settings-back">← {t("common.back")}</Link>
         </div>
       </header>
 
       <div className="settings-body">
-        <Section title="Apparence">
-          <SelectRow label="Thème" value={appearance.theme} options={A.theme} onChange={(v) => setA({ theme: v as Appearance["theme"] })} />
-          <SelectRow label="Couleur d’accent" value={appearance.accent} options={A.accent} onChange={(v) => setA({ accent: v as Appearance["accent"] })} />
-          <SelectRow label="Contraste" value={appearance.contrast} options={A.contrast} onChange={(v) => setA({ contrast: v as Appearance["contrast"] })} />
-          <SelectRow label="Transparence des cartes" value={appearance.transparency} options={A.transparency} onChange={(v) => setA({ transparency: v as Appearance["transparency"] })} />
-          <SelectRow label="Flou (blur)" value={appearance.blur} options={A.blur} onChange={(v) => setA({ blur: v as Appearance["blur"] })} />
-          <SelectRow label="Coins arrondis" value={appearance.radius} options={A.radius} onChange={(v) => setA({ radius: v as Appearance["radius"] })} />
-          <SelectRow label="Ombres" value={appearance.shadow} options={A.shadow} onChange={(v) => setA({ shadow: v as Appearance["shadow"] })} />
+        <Section title={t("settings.section.appearance")}>
+          <SelectRow label={t("settings.row.theme")} value={appearance.theme} options={opts("theme")} onChange={(v) => setA({ theme: v as Appearance["theme"] })} />
+          <SelectRow label={t("settings.row.accent")} value={appearance.accent} options={opts("accent")} onChange={(v) => setA({ accent: v as Appearance["accent"] })} />
+          <SelectRow label={t("settings.row.contrast")} value={appearance.contrast} options={opts("contrast")} onChange={(v) => setA({ contrast: v as Appearance["contrast"] })} />
+          <SelectRow label={t("settings.row.transparency")} value={appearance.transparency} options={opts("transparency")} onChange={(v) => setA({ transparency: v as Appearance["transparency"] })} />
+          <SelectRow label={t("settings.row.blur")} value={appearance.blur} options={opts("blur")} onChange={(v) => setA({ blur: v as Appearance["blur"] })} />
+          <SelectRow label={t("settings.row.radius")} value={appearance.radius} options={opts("radius")} onChange={(v) => setA({ radius: v as Appearance["radius"] })} />
+          <SelectRow label={t("settings.row.shadow")} value={appearance.shadow} options={opts("shadow")} onChange={(v) => setA({ shadow: v as Appearance["shadow"] })} />
         </Section>
 
-        <Section title="Texte">
-          <SelectRow label="Police" value={appearance.font} options={A.font} onChange={(v) => setA({ font: v as Appearance["font"] })} />
-          <SelectRow label="Taille du texte" value={appearance.textSize} options={A.textSize} onChange={(v) => setA({ textSize: v as Appearance["textSize"] })} />
-          <SelectRow label="Graisse" value={appearance.fontWeight} options={A.fontWeight} onChange={(v) => setA({ fontWeight: v as Appearance["fontWeight"] })} />
-          <SelectRow label="Densité" value={appearance.density} options={A.density} onChange={(v) => setA({ density: v as Appearance["density"] })} />
+        <Section title={t("settings.section.text")}>
+          <SelectRow label={t("settings.row.font")} value={appearance.font} options={opts("font")} onChange={(v) => setA({ font: v as Appearance["font"] })} />
+          <SelectRow label={t("settings.row.textSize")} value={appearance.textSize} options={opts("textSize")} onChange={(v) => setA({ textSize: v as Appearance["textSize"] })} />
+          <SelectRow label={t("settings.row.fontWeight")} value={appearance.fontWeight} options={opts("fontWeight")} onChange={(v) => setA({ fontWeight: v as Appearance["fontWeight"] })} />
+          <SelectRow label={t("settings.row.density")} value={appearance.density} options={opts("density")} onChange={(v) => setA({ density: v as Appearance["density"] })} />
         </Section>
 
-        <Section title="Accessibilité">
-          <ToggleRow label="Contraste renforcé" checked={appearance.contrast === "high"} onChange={(v) => setA({ contrast: v ? "high" : "standard" })} />
-          <ToggleRow label="Réduire les animations" checked={appearance.reduceMotion} onChange={(v) => setA({ reduceMotion: v })} />
-          <ToggleRow label="Réduire la transparence" checked={appearance.reduceTransparency} onChange={(v) => setA({ reduceTransparency: v })} />
-          <ToggleRow label="Densité confortable" checked={appearance.density === "comfortable"} onChange={(v) => setA({ density: v ? "comfortable" : "compact" })} />
+        <Section title={t("settings.section.accessibility")}>
+          <ToggleRow label={t("settings.row.highContrast")} checked={appearance.contrast === "high"} onChange={(v) => setA({ contrast: v ? "high" : "standard" })} />
+          <ToggleRow label={t("settings.row.reduceMotion")} checked={appearance.reduceMotion} onChange={(v) => setA({ reduceMotion: v })} />
+          <ToggleRow label={t("settings.row.reduceTransparency")} checked={appearance.reduceTransparency} onChange={(v) => setA({ reduceTransparency: v })} />
+          <ToggleRow label={t("settings.row.comfortableDensity")} checked={appearance.density === "comfortable"} onChange={(v) => setA({ density: v ? "comfortable" : "compact" })} />
         </Section>
 
-        <Section title="Comportement">
-          <ToggleRow label="Sidebar réduite" checked={behavior.sidebarCollapsed} onChange={(v) => setB({ sidebarCollapsed: v })} />
-          <ToggleRow label="Animations" checked={behavior.animations} onChange={(v) => setB({ animations: v })} />
+        <Section title={t("settings.section.behavior")}>
+          <ToggleRow label={t("settings.row.sidebarCollapsed")} checked={behavior.sidebarCollapsed} onChange={(v) => setB({ sidebarCollapsed: v })} />
+          <ToggleRow label={t("settings.row.animations")} checked={behavior.animations} onChange={(v) => setB({ animations: v })} />
         </Section>
 
-        <Section title="Widgets actifs">
+        <Section title={t("settings.section.activeWidgets")}>
           {activeItems.length === 0 ? (
-            <p className="settings-reset-note">Aucun widget actif.</p>
+            <p className="settings-reset-note">{t("settings.widgets.none")}</p>
           ) : (
             activeItems.map((it, idx) => (
               <div className="settings-row widget-row" key={it.id}>
-                <span className="settings-row-label">{it.label}</span>
+                <span className="settings-row-label">{widgetName(it.id)}</span>
                 <span className="widget-controls">
-                  <button
-                    type="button"
-                    className="widget-btn"
-                    aria-label={`Monter ${it.label}`}
-                    disabled={idx === 0}
-                    onClick={() => onMove(it.id, -1)}
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    className="widget-btn"
-                    aria-label={`Descendre ${it.label}`}
-                    disabled={idx === activeItems.length - 1}
-                    onClick={() => onMove(it.id, 1)}
-                  >
-                    ↓
-                  </button>
+                  <button type="button" className="widget-btn" aria-label={t("settings.widget.moveUp", { name: widgetName(it.id) })} disabled={idx === 0} onClick={() => onMove(it.id, -1)}>↑</button>
+                  <button type="button" className="widget-btn" aria-label={t("settings.widget.moveDown", { name: widgetName(it.id) })} disabled={idx === activeItems.length - 1} onClick={() => onMove(it.id, 1)}>↓</button>
                   {it.supportedSizes.length > 1 ? (
-                    <button
-                      type="button"
-                      className="widget-btn"
-                      aria-label={`Changer la taille de ${it.label} (actuelle : ${it.size})`}
-                      onClick={() => onSize(it.id, cycleWidgetSize(it.id, it.size))}
-                    >
-                      {SIZE_SHORT[it.size]}
-                    </button>
+                    <button type="button" className="widget-btn" aria-label={t("settings.widget.resize", { name: widgetName(it.id), size: it.size })} onClick={() => onSize(it.id, cycleWidgetSize(it.id, it.size))}>{SIZE_SHORT[it.size]}</button>
                   ) : null}
-                  <button
-                    type="button"
-                    className="widget-btn widget-btn-hide"
-                    aria-label={`Masquer ${it.label}`}
-                    onClick={() => onHide(it.id, true)}
-                  >
-                    Masquer
-                  </button>
+                  <button type="button" className="widget-btn widget-btn-hide" aria-label={t("settings.widget.hide", { name: widgetName(it.id) })} onClick={() => onHide(it.id, true)}>{t("settings.widget.masquer")}</button>
                 </span>
               </div>
             ))
           )}
         </Section>
 
-        <Section title="Ajouter un widget">
+        <Section title={t("settings.section.addWidget")}>
           {galleryItems.length === 0 ? (
-            <p className="settings-reset-note">Tous les widgets disponibles sont actifs.</p>
+            <p className="settings-reset-note">{t("settings.widgets.allActive")}</p>
           ) : (
             <div className="widget-gallery">
               {galleryItems.map((it) => {
-                const def = widgetById(it.id);
-                const sizes = (def?.supportedSizes ?? [])
-                  .map((s) => SIZE_SHORT[s] ?? s)
-                  .join(" · ");
+                const sizes = it.supportedSizes.map((s) => SIZE_SHORT[s] ?? s).join(" · ");
                 return (
-                  <div
-                    className={`widget-card${it.available ? "" : " is-unavailable"}`}
-                    key={it.id}
-                  >
+                  <div className={`widget-card${it.available ? "" : " is-unavailable"}`} key={it.id}>
                     <div className="widget-card-head">
-                      <span className="widget-card-name">{it.label}</span>
-                      <span className="widget-card-cat">
-                        {CATEGORY_LABELS[it.category]}
-                      </span>
+                      <span className="widget-card-name">{widgetName(it.id)}</span>
+                      <span className="widget-card-cat">{t(`cat.${it.category}` as MessageKey)}</span>
                     </div>
                     <div className="widget-card-foot">
                       <span className="widget-card-sizes">{sizes}</span>
                       {it.available ? (
-                        <button
-                          type="button"
-                          className="widget-btn widget-btn-add"
-                          aria-label={`Ajouter ${it.label}`}
-                          onClick={() => onShow(it.id)}
-                        >
-                          Ajouter
-                        </button>
+                        <button type="button" className="widget-btn widget-btn-add" aria-label={t("settings.widget.add", { name: widgetName(it.id) })} onClick={() => onShow(it.id)}>{t("settings.widget.ajouter")}</button>
                       ) : (
-                        <span className="widget-card-unavail">Non disponible</span>
+                        <span className="widget-card-unavail">{t("settings.widget.unavailable")}</span>
                       )}
                     </div>
                   </div>
@@ -495,45 +396,31 @@ export default function DashboardSettings({
           )}
         </Section>
 
-        <Section title="Barre de contexte">
+        <Section title={t("settings.section.contextBar")}>
           {CONTEXT_SEGMENTS.map((seg) => (
-            <ToggleRow
-              key={seg}
-              label={CONTEXT_LABELS[seg]}
-              checked={ctx[seg]}
-              onChange={(v) => onContext(seg, v)}
-            />
+            <ToggleRow key={seg} label={segLabel(seg)} checked={ctx[seg]} onChange={(v) => onContext(seg, v)} />
           ))}
         </Section>
 
-        <Section title="Régional / Heure">
-          <SelectRow label="Locale" value={regional.locale ?? ""} options={R.locale} onChange={(v) => setR({ locale: v || null })} />
-          <SelectRow label="Pays" value={regional.country ?? ""} options={R.country} onChange={(v) => setR({ country: v || null })} />
-          <SelectRow label="Devise" value={regional.currency ?? ""} options={R.currency} onChange={(v) => setR({ currency: v || null })} />
-          <SelectRow label="Fuseau horaire" value={regional.timezone ?? ""} options={R.timezone} onChange={(v) => setR({ timezone: v || null })} />
-          <SelectRow label="Température" value={regional.temperatureUnit ?? ""} options={R.temperatureUnit} onChange={(v) => setR({ temperatureUnit: (v || null) as RegionalOverride["temperatureUnit"] })} />
-          <SelectRow label="Vent" value={regional.windUnit ?? ""} options={R.windUnit} onChange={(v) => setR({ windUnit: (v || null) as RegionalOverride["windUnit"] })} />
-          <SelectRow label="Format heure" value={regional.hourCycle ?? ""} options={R.hourCycle} onChange={(v) => setR({ hourCycle: (v || null) as RegionalOverride["hourCycle"] })} />
-          <ToggleRow label="Afficher les secondes" checked={regional.showSeconds} onChange={(v) => setR({ showSeconds: v })} />
-          <SelectRow label="Format de date" value={regional.dateFormat} options={R.dateFormat} onChange={(v) => setR({ dateFormat: v as RegionalOverride["dateFormat"] })} />
-          <SelectRow label="Premier jour de semaine" value={regional.firstDayOfWeek} options={R.firstDayOfWeek} onChange={(v) => setR({ firstDayOfWeek: v as RegionalOverride["firstDayOfWeek"] })} />
+        <Section title={t("settings.section.regional")}>
+          <SelectRow label={t("settings.row.language")} value={regional.language ?? ""} options={R.language} onChange={(v) => onLanguageChange(v)} />
+          <SelectRow label={t("settings.row.locale")} value={regional.locale ?? ""} options={R.locale} onChange={(v) => setR({ locale: v || null })} />
+          <SelectRow label={t("settings.row.country")} value={regional.country ?? ""} options={R.country} onChange={(v) => setR({ country: v || null })} />
+          <SelectRow label={t("settings.row.currency")} value={regional.currency ?? ""} options={R.currency} onChange={(v) => setR({ currency: v || null })} />
+          <SelectRow label={t("settings.row.timezone")} value={regional.timezone ?? ""} options={R.timezone} onChange={(v) => setR({ timezone: v || null })} />
+          <SelectRow label={t("settings.row.temperature")} value={regional.temperatureUnit ?? ""} options={R.temperatureUnit} onChange={(v) => setR({ temperatureUnit: (v || null) as RegionalOverride["temperatureUnit"] })} />
+          <SelectRow label={t("settings.row.wind")} value={regional.windUnit ?? ""} options={R.windUnit} onChange={(v) => setR({ windUnit: (v || null) as RegionalOverride["windUnit"] })} />
+          <SelectRow label={t("settings.row.hourCycle")} value={regional.hourCycle ?? ""} options={R.hourCycle} onChange={(v) => setR({ hourCycle: (v || null) as RegionalOverride["hourCycle"] })} />
+          <ToggleRow label={t("settings.row.showSeconds")} checked={regional.showSeconds} onChange={(v) => setR({ showSeconds: v })} />
+          <SelectRow label={t("settings.row.dateFormat")} value={regional.dateFormat} options={R.dateFormat} onChange={(v) => setR({ dateFormat: v as RegionalOverride["dateFormat"] })} />
+          <SelectRow label={t("settings.row.firstDayOfWeek")} value={regional.firstDayOfWeek} options={R.firstDayOfWeek} onChange={(v) => setR({ firstDayOfWeek: v as RegionalOverride["firstDayOfWeek"] })} />
         </Section>
 
-        <Section title="Réinitialisation">
-          <button type="button" className="settings-reset" onClick={resetAppearance}>
-            Restaurer l’apparence par défaut
-          </button>
-          <p className="settings-reset-note">
-            Réinitialise uniquement l’apparence (thème, accent, texte…). Les widgets
-            et réglages régionaux ne sont pas touchés.
-          </p>
-          <button type="button" className="settings-reset" onClick={resetWidgets}>
-            Restaurer les widgets par défaut
-          </button>
-          <p className="settings-reset-note">
-            Réinitialise uniquement les widgets et la barre de contexte. L’apparence,
-            le régional et le comportement ne sont pas touchés.
-          </p>
+        <Section title={t("settings.section.reset")}>
+          <button type="button" className="settings-reset" onClick={resetAppearance}>{t("settings.reset.appearance")}</button>
+          <p className="settings-reset-note">{t("settings.reset.appearance.note")}</p>
+          <button type="button" className="settings-reset" onClick={resetWidgets}>{t("settings.reset.widgets")}</button>
+          <p className="settings-reset-note">{t("settings.reset.widgets.note")}</p>
         </Section>
       </div>
     </div>

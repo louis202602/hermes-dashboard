@@ -17,6 +17,7 @@ import {
   PREFERENCES_SCHEMA_VERSION,
   type Appearance,
 } from "@/lib/dashboard/preferences";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type HeaderProps = {
   onMenuClick?: () => void;
@@ -39,6 +40,7 @@ export default function Header({
   preferencesVersion = 0,
 }: HeaderProps) {
   const email = userEmail ?? "";
+  const { t } = useI18n();
   const router = useRouter();
   const [appr, setAppr] = useState<Appearance>(appearance);
   const versionRef = useRef<number>(preferencesVersion);
@@ -73,7 +75,7 @@ export default function Header({
         <button
           type="button"
           className="hos-icon-btn hos-menu-btn"
-          aria-label="Ouvrir le menu"
+          aria-label={t("header.menu")}
           onClick={onMenuClick}
         >
           <Menu size={20} strokeWidth={1.8} />
@@ -87,7 +89,7 @@ export default function Header({
         <button
           type="button"
           className="hos-icon-btn"
-          aria-label={isLight ? "Activer le thème sombre" : "Activer le thème clair"}
+          aria-label={isLight ? t("header.theme.toDark") : t("header.theme.toLight")}
           onClick={toggle}
         >
           {isLight ? (
@@ -100,8 +102,8 @@ export default function Header({
         <Link
           href="/parametres/dashboard"
           className="hos-icon-btn"
-          aria-label="Paramètres du dashboard"
-          title="Paramètres du dashboard"
+          aria-label={t("header.settings")}
+          title={t("header.settings")}
         >
           <Settings size={19} strokeWidth={1.8} />
         </Link>
@@ -109,9 +111,9 @@ export default function Header({
         <button
           type="button"
           className="hos-icon-btn"
-          aria-label="Notifications"
+          aria-label={t("header.notifications")}
           disabled
-          title="Bientôt disponible"
+          title={t("header.notifications.soon")}
         >
           <Bell size={19} strokeWidth={1.8} />
         </button>

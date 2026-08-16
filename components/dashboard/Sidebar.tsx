@@ -20,6 +20,8 @@ import {
 
 import { signOutAction } from "@/app/login/actions";
 import { HermesLogoSymbol } from "@/components/common/HermesLogo";
+import type { MessageKey } from "@/lib/i18n/locales/fr";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type SidebarProps = {
   userEmail?: string;
@@ -30,18 +32,19 @@ type SidebarProps = {
 // The official Hermès OS navigation. Only "Command Center" (the current Accueil)
 // is built; the other destinations are shown per the master mockup but are
 // disabled with a "Bientôt disponible" hint — never a fake, working button.
-const NAV = [
-  { label: "Command Center", icon: LayoutDashboard, active: true },
-  { label: "Hermès Chat", icon: Sparkles },
-  { label: "Activité", icon: Activity },
-  { label: "Entreprise", icon: Building2 },
-  { label: "Agents", icon: Bot },
-  { label: "Approbations", icon: ClipboardCheck },
-  { label: "Sécurité & Autonomie", icon: Shield },
-  { label: "Intégrations", icon: Blocks },
-  { label: "Notifications", icon: Bell },
-  { label: "Facturation & Coûts IA", icon: CreditCard },
-  { label: "Paramètres", icon: Settings },
+// Labels are i18n keys (localized at render); routes/icons are stable.
+const NAV: { key: MessageKey; icon: typeof LayoutDashboard; active?: boolean }[] = [
+  { key: "nav.commandCenter", icon: LayoutDashboard, active: true },
+  { key: "nav.chat", icon: Sparkles },
+  { key: "nav.activity", icon: Activity },
+  { key: "nav.company", icon: Building2 },
+  { key: "nav.agents", icon: Bot },
+  { key: "nav.approvals", icon: ClipboardCheck },
+  { key: "nav.security", icon: Shield },
+  { key: "nav.integrations", icon: Blocks },
+  { key: "header.notifications", icon: Bell },
+  { key: "nav.billing", icon: CreditCard },
+  { key: "nav.settings", icon: Settings },
 ];
 
 function initials(email: string): string {
@@ -55,7 +58,7 @@ function displayName(email: string): string {
   const local = email.split("@")[0] ?? "";
   const token = local.split(/[.\-_]/).filter(Boolean)[0] ?? local;
   const clean = token.replace(/\d+/g, "");
-  if (!clean) return "Utilisateur";
+  if (!clean) return "";
   return clean.charAt(0).toUpperCase() + clean.slice(1);
 }
 
@@ -64,7 +67,9 @@ export default function Sidebar({
   collapsed = false,
   onToggleCollapse,
 }: SidebarProps) {
+  const { t } = useI18n();
   const email = userEmail ?? "";
+  const name = displayName(email) || t("sidebar.userFallback");
 
   return (
     <aside className={`hos-sidebar${collapsed ? " is-collapsed" : ""}`}>
@@ -76,28 +81,28 @@ export default function Sidebar({
           <strong>
             HERMÈS <span className="hos-accent">OS</span>
           </strong>
-          <span>Directeur Général IA</span>
+          <span>{t("sidebar.role")}</span>
         </span>
       </div>
 
-      <nav className="hos-nav" aria-label="Navigation Hermès OS">
+      <nav className="hos-nav" aria-label={t("sidebar.navAria")}>
         {NAV.map((item) => {
           const Icon = item.icon;
           const soon = !item.active;
           return (
             <button
               type="button"
-              key={item.label}
+              key={item.key}
               className={`hos-nav-item${item.active ? " is-active" : ""}${
                 soon ? " is-soon" : ""
               }`}
               disabled={soon}
               aria-disabled={soon || undefined}
               aria-current={item.active ? "page" : undefined}
-              title={soon ? "Bientôt disponible" : undefined}
+              title={soon ? t("header.notifications.soon") : undefined}
             >
               <Icon size={19} strokeWidth={1.8} />
-              <span className="hos-nav-label">{item.label}</span>
+              <span className="hos-nav-label">{t(item.key)}</span>
             </button>
           );
         })}
@@ -108,17 +113,17 @@ export default function Sidebar({
           type="button"
           className="hos-nav-item is-soon"
           disabled
-          title="Bientôt disponible"
+          title={t("header.notifications.soon")}
         >
           <HelpCircle size={19} strokeWidth={1.8} />
-          <span className="hos-nav-label">Aide &amp; Support</span>
+          <span className="hos-nav-label">{t("sidebar.help")}</span>
         </button>
 
         <div className="hos-profile" title={email || undefined}>
           <span className="hos-avatar">{initials(email)}</span>
           <span className="hos-profile-copy">
-            <strong>{displayName(email)}</strong>
-            <span>{email || "Compte Hermès OS"}</span>
+            <strong>{name}</strong>
+            <span>{email || t("sidebar.account")}</span>
           </span>
         </div>
 
@@ -126,21 +131,23 @@ export default function Sidebar({
           <form action={signOutAction} className="hos-foot-form">
             <button type="submit" className="hos-foot-btn">
               <LogOut size={16} strokeWidth={1.8} />
-              <span className="hos-nav-label">Déconnexion</span>
+              <span className="hos-nav-label">{t("sidebar.logout")}</span>
             </button>
           </form>
           <button
             type="button"
             className="hos-foot-btn hos-collapse-btn"
             onClick={onToggleCollapse}
-            aria-label={collapsed ? "Étendre la navigation" : "Réduire la navigation"}
+            aria-label={collapsed ? t("sidebar.expandNav") : t("sidebar.collapseNav")}
           >
             {collapsed ? (
               <PanelLeftOpen size={16} strokeWidth={1.8} />
             ) : (
               <PanelLeftClose size={16} strokeWidth={1.8} />
             )}
-            <span className="hos-nav-label">{collapsed ? "Étendre" : "Réduire"}</span>
+            <span className="hos-nav-label">
+              {collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
+            </span>
           </button>
         </div>
       </div>

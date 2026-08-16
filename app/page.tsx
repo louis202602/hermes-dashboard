@@ -22,6 +22,8 @@ import {
   needsWeather,
   resolveContextConfig,
 } from "@/lib/dashboard/widgets";
+import { getLanguageDef, resolveLanguage } from "@/lib/i18n";
+import { I18nProvider } from "@/lib/i18n/I18nProvider";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getDashboardAgenda, getUnifiedAlerts } from "@/services/hermes/agenda";
 import { getRecentConversations } from "@/services/hermes/conversations";
@@ -134,6 +136,9 @@ export default async function HomePage() {
   );
   const available = availableWidgetIds(capabilityKeys);
   const contextConfig = resolveContextConfig(layout.context);
+  // DASH i18n: active UI language from the canonical user preference (→ tenant → default).
+  const lang = resolveLanguage(reg.language, tenantSettings.locale);
+  const dir = getLanguageDef(lang).dir;
   const contextSegments = contextVisibleSegments(contextConfig);
   // Weather only when a real location is configured AND at least one weather-
   // dependent segment (weather/temperature/rain/wind) is shown — never fabricated,
@@ -195,6 +200,7 @@ export default async function HomePage() {
   });
 
   return (
+    <I18nProvider lang={lang} dir={dir}>
     <DashboardShell
       userEmail={user.email ?? ""}
       tenant={tenant}
@@ -225,5 +231,6 @@ export default async function HomePage() {
       availableWidgets={[...available]}
       contextSegments={contextSegments}
     />
+    </I18nProvider>
   );
 }

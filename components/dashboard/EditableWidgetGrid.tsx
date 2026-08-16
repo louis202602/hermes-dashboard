@@ -26,6 +26,8 @@ import {
   type ResolvedWidgetItem,
   type WidgetSize,
 } from "@/lib/dashboard/widgets";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { MessageKey } from "@/lib/i18n";
 
 const SIZE_SHORT: Record<WidgetSize, string> = {
   small: "S",
@@ -52,6 +54,7 @@ function SortableWidget({
   onResize: (id: string, size: WidgetSize) => void;
   onHide: (id: string) => void;
 }) {
+  const { t } = useI18n();
   const {
     attributes,
     listeners,
@@ -63,6 +66,7 @@ function SortableWidget({
   } = useSortable({ id: item.id });
 
   const canResize = item.supportedSizes.length > 1;
+  const name = t(`widget.${item.id}` as MessageKey);
 
   return (
     <section
@@ -72,25 +76,25 @@ function SortableWidget({
         transition,
       }}
       className={`dash-widget size-${item.size} is-editing${isDragging ? " is-dragging" : ""}`}
-      aria-roledescription="Widget déplaçable"
+      aria-roledescription={t("edit.widgetRole")}
     >
       <div className="widget-edit-bar">
         <button
           type="button"
           ref={setActivatorNodeRef}
           className="widget-drag-handle"
-          aria-label={`Déplacer ${item.label}`}
+          aria-label={t("edit.drag", { name })}
           {...attributes}
           {...listeners}
         >
           <GripVertical size={16} strokeWidth={1.8} aria-hidden />
         </button>
-        <span className="widget-edit-name">{item.label}</span>
+        <span className="widget-edit-name">{name}</span>
         {canResize ? (
           <button
             type="button"
             className="widget-edit-btn"
-            aria-label={`Changer la taille de ${item.label} (actuelle : ${item.size})`}
+            aria-label={t("edit.resize", { name, size: item.size })}
             onClick={() => onResize(item.id, cycleWidgetSize(item.id, item.size))}
           >
             <Maximize2 size={14} strokeWidth={1.8} aria-hidden />
@@ -100,7 +104,7 @@ function SortableWidget({
         <button
           type="button"
           className="widget-edit-btn"
-          aria-label={`Masquer ${item.label}`}
+          aria-label={t("edit.hide", { name })}
           onClick={() => onHide(item.id)}
         >
           <EyeOff size={14} strokeWidth={1.8} aria-hidden />

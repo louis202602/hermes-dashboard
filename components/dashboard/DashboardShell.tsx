@@ -61,6 +61,7 @@ import {
   type WidgetSize,
 } from "@/lib/dashboard/widgets";
 import type { ContextBarModel } from "@/lib/dashboard/contextBar";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 // Edit mode pulls dnd-kit — loaded ONLY when the user enters edit mode, so the
 // normal dashboard bundle never carries the drag/drop code.
@@ -135,6 +136,7 @@ export default function DashboardShell({
   availableWidgets,
   contextSegments,
 }: DashboardShellProps) {
+  const { t, dir } = useI18n();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(behavior.sidebarCollapsed);
 
@@ -249,7 +251,7 @@ export default function DashboardShell({
     widgetNodes[id]?.() ?? null; // unknown id ⇒ nothing (safe)
 
   return (
-    <main className={`dashboard-shell${collapsed ? " is-collapsed" : ""}`}>
+    <main dir={dir} className={`dashboard-shell${collapsed ? " is-collapsed" : ""}`}>
       {/* DASH-4A: reconcile server-canonical appearance on load + keep the cookie
           mirror fresh (init script already applied it pre-paint). Renders nothing. */}
       <AppearanceSync
@@ -301,16 +303,16 @@ export default function DashboardShell({
             <div className="dashboard-intro-lead">
               <TenantBadge identity={tenant} />
               <div>
-                <span className="panel-eyebrow">COMMAND CENTER</span>
-                <h2>Poste de commande</h2>
+                <span className="panel-eyebrow">{t("intro.eyebrow")}</span>
+                <h2>{t("intro.title")}</h2>
               </div>
             </div>
 
             <div className="dashboard-intro-status">
               <span className="status-pulse" />
               <div>
-                <strong>Connecté à hermes_os</strong>
-                <span>Données réelles · aucune donnée fictive</span>
+                <strong>{t("intro.connected")}</strong>
+                <span>{t("intro.realData")}</span>
               </div>
             </div>
           </section>
@@ -333,18 +335,18 @@ export default function DashboardShell({
             >
               {editing ? (
                 <>
-                  <Check size={16} strokeWidth={1.9} aria-hidden /> Terminé
+                  <Check size={16} strokeWidth={1.9} aria-hidden /> {t("edit.done")}
                 </>
               ) : (
                 <>
-                  <Pencil size={15} strokeWidth={1.8} aria-hidden /> Modifier le
-                  dashboard
+                  <Pencil size={15} strokeWidth={1.8} aria-hidden />{" "}
+                  {t("edit.enter")}
                 </>
               )}
             </button>
             {editing ? (
               <span className="edit-hint" role="status">
-                Glissez pour réorganiser · redimensionnez (S/M/L) · masquez
+                {t("edit.hint")}
               </span>
             ) : null}
           </div>
