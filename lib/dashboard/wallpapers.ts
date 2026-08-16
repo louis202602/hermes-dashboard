@@ -56,6 +56,13 @@ export type WallpaperDef = {
   /** For kind:"image": per-image focal point (0..1) so the subject stays framed. */
   focalX?: number;
   focalY?: number;
+  /**
+   * OWNER_PROVIDED_ASSET marker: the source image carries inherent third-party/product
+   * branding (e.g. a Ducati badge, the « HERMÈS OS » emblem on an in-scene screen) that
+   * was present in the file the owner supplied — never added or removed by us. Flagged so
+   * these specific assets can be swapped for neutral versions later without hunting.
+   */
+  ownerBranded?: boolean;
 };
 
 /** Honest provenance for every owner-supplied photo (details in PROVENANCE.md). */
@@ -158,12 +165,14 @@ export const WALLPAPER_REGISTRY: WallpaperDef[] = [
   img("city-tokyo-neon-01", "ville", "city/city-tokyo-neon-01", 0.24, 0.5, 0.45),
   // --- Luxe (REAL photos — owner-provided) ---
   img("luxury-villa-01", "luxe", "luxury/luxury-villa-01", 0.3, 0.6, 0.5),
-  img("luxury-lounge-sunset-01", "luxe", "luxury/luxury-lounge-sunset-01", 0.3, 0.5, 0.5),
-  img("luxury-penthouse-01", "luxe", "luxury/luxury-penthouse-01", 0.26, 0.5, 0.5),
+  // ownerBranded: « HERMÈS OS » emblem on an in-scene screen (inherent to the source).
+  { ...img("luxury-lounge-sunset-01", "luxe", "luxury/luxury-lounge-sunset-01", 0.3, 0.5, 0.5), ownerBranded: true },
+  { ...img("luxury-penthouse-01", "luxe", "luxury/luxury-penthouse-01", 0.26, 0.5, 0.5), ownerBranded: true },
   // --- Automobile (REAL photo — owner-provided) ---
   img("supercar-01", "automobile", "automotive/supercar-01", 0.3, 0.5, 0.6),
   // --- Moto (REAL photo — owner-provided) ---
-  img("motorcycle-ducati-01", "moto", "motorcycle/motorcycle-ducati-01", 0.26, 0.5, 0.55),
+  // ownerBranded: Ducati badging inherent to the depicted motorcycle in the source.
+  { ...img("motorcycle-ducati-01", "moto", "motorcycle/motorcycle-ducati-01", 0.26, 0.5, 0.55), ownerBranded: true },
 ];
 
 /** The Hermès default wallpaper id when nothing is chosen (subtle, always readable). */

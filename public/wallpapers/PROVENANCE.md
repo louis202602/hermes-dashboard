@@ -14,9 +14,15 @@ re-encoded to WebP and downscaled for thumbnails — no content was altered, no 
 text was added or removed. Provenance is recorded honestly as owner-provided; it is
 never fabricated as third-party stock.
 
-Notes on content inherent to the owner-provided source images (not added by us):
-- `luxury/luxury-lounge-sunset-01.webp` and `luxury/luxury-penthouse-01.webp` show the
-  « HERMÈS OS » emblem on an in-scene screen — it is part of the owner's own product
-  branding and was present in the supplied file.
-- `motorcycle/motorcycle-ducati-01.webp` shows Ducati badging inherent to the depicted
-  motorcycle in the supplied file.
+### OWNER_PROVIDED_ASSET — flagged for easy future replacement
+
+Three assets carry inherent third-party / product branding present in the supplied file
+(never added or removed by us). They are marked `ownerBranded: true` in
+`WALLPAPER_REGISTRY` so they can be swapped for neutral versions later without hunting —
+drop a replacement WebP at the same path (+ its `-thumb.webp`) and the flag can be
+cleared:
+
+- `luxury/luxury-lounge-sunset-01.webp` — « HERMÈS OS » emblem on an in-scene screen
+  (the owner's own product branding).
+- `luxury/luxury-penthouse-01.webp` — « HERMÈS OS » emblem on an in-scene screen.
+- `motorcycle/motorcycle-ducati-01.webp` — Ducati badging inherent to the motorcycle.

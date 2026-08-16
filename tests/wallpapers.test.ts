@@ -197,6 +197,14 @@ test("isOwnedWallpaperPath: only the caller's own tenant/user prefix; rejects tr
   assert.ok(!isOwnedWallpaperPath("", T, U));
 });
 
+test("OWNER_PROVIDED_ASSET: brand-bearing images are flagged for easy replacement", () => {
+  const branded = WALLPAPER_REGISTRY.filter((w) => w.ownerBranded);
+  const ids = branded.map((w) => w.id).sort();
+  assert.deepEqual(ids, ["luxury-lounge-sunset-01", "luxury-penthouse-01", "motorcycle-ducati-01"]);
+  // The flag only ever rides on a real owner-provided image (never a gradient).
+  assert.ok(branded.every((w) => w.kind === "image"));
+});
+
 test("every registered image asset + thumbnail exists on disk under /public", () => {
   const pub = fileURLToPath(new URL("../public", import.meta.url));
   for (const w of WALLPAPER_REGISTRY.filter((x) => x.kind === "image")) {
