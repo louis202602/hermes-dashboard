@@ -34,11 +34,25 @@ import {
   type WallpaperFields,
 } from "@/lib/dashboard/wallpapers";
 
+/**
+ * DASH-4I — UNIVERSAL profile ids. Legacy ids (direction/commercial/chantier/finance/
+ * custom) are kept FIRST and unchanged so existing user preferences never break. The
+ * rest are generic/specialized profiles that light up per tenant capabilities — Hermès
+ * is NOT a BTP-only dashboard. Adding a vertical later = append one registry entry; no
+ * per-client code. All ids are persisted keys, so this list only ever grows.
+ */
 export const PROFILE_IDS = [
   "direction",
   "commercial",
+  "operations",
   "chantier",
+  "immobilier",
+  "restaurant",
+  "ecommerce",
+  "logistique",
   "finance",
+  "marketing",
+  "support",
   "custom",
 ] as const;
 export type ProfileId = (typeof PROFILE_IDS)[number];
@@ -52,27 +66,202 @@ export function isProfileId(v: unknown): v is ProfileId {
 }
 
 /**
- * Curated priority widgets per preset — the "focus" of each mode. These ids MUST
- * exist in the widget registry; unknown ids are dropped on build (fail-safe). Every
- * other registry widget is hidden by default in that mode (the user can re-add it).
- * `custom` has no priority list — it is the full standard dashboard.
+ * How a profile earns its place in a tenant's switcher:
+ * - "always"      → always offered (custom — the full, unfiltered dashboard).
+ * - "transversal" → offered when the tenant has ANY exploitable capability (Direction).
+ * - "capability"  → offered only when the tenant holds ≥1 of `requiredCapabilities`.
+ * CAPABILITY-FIRST: the vertical only *orients*; capabilities are the truth. No profile
+ * is gated on an industry/vertical field — there is no such branch anywhere.
  */
-const PRESET_PRIORITY: Record<Exclude<ProfileId, "custom">, string[]> = {
-  direction: ["system-health", "alerts", "cost", "agent-activity", "commercial", "agenda"],
-  commercial: ["commercial", "agenda", "alerts", "tasks", "conversations"],
-  chantier: ["chantiers-map", "agenda", "alerts", "projects", "tasks"],
-  finance: ["cost", "kpis", "commercial", "alerts", "system-health"],
+export type ProfileAvailability = "always" | "transversal" | "capability";
+export type ProfileKind = "generic" | "specialized";
+
+/**
+ * DASH-4I — extensible PROFILE REGISTRY (same philosophy as the widget registry). A
+ * ProfileDef is pure metadata: no business `if/else`. `requiredCapabilities` /
+ * `optionalCapabilities` are functional capability TOKENS (see CAPABILITY_TOKENS), not
+ * raw action keys, so a profile is portable across tenants and verticals. Unknown
+ * `recommendedWidgets` ids are dropped when the preset layout is built, and the
+ * per-tenant widget capability filter still applies on top (a listed widget the tenant
+ * can't use simply doesn't render).
+ */
+export type ProfileDef = {
+  id: ProfileId;
+  labelKey: string;
+  descriptionKey: string;
+  /** Lucide icon name (registry metadata; UI may render it). */
+  icon: string;
+  kind: ProfileKind;
+  availability: ProfileAvailability;
+  requiredCapabilities: string[];
+  optionalCapabilities: string[];
+  recommendedWidgets: string[];
+  /** Lower = shown earlier in the switcher. */
+  priority: number;
 };
 
-/** Build a preset layout: priority widgets first & visible, everything else hidden. */
-function presetLayout(priority: string[]): LayoutPreferences {
+export const PROFILE_REGISTRY: ProfileDef[] = [
+  {
+    id: "direction",
+    labelKey: "profile.direction",
+    descriptionKey: "profile.direction.desc",
+    icon: "LayoutDashboard",
+    kind: "generic",
+    availability: "transversal",
+    requiredCapabilities: [],
+    optionalCapabilities: [],
+    recommendedWidgets: ["system-health", "kpis", "alerts", "cost", "commercial", "agenda", "daily-summary"],
+    priority: 10,
+  },
+  {
+    id: "commercial",
+    labelKey: "profile.commercial",
+    descriptionKey: "profile.commercial.desc",
+    icon: "TrendingUp",
+    kind: "generic",
+    availability: "capability",
+    requiredCapabilities: ["crm", "sales", "leads", "pipeline", "quotes", "commerce", "ecommerce"],
+    optionalCapabilities: ["marketing", "appointments"],
+    recommendedWidgets: ["commercial", "agenda", "alerts", "tasks", "conversations", "quick-actions"],
+    priority: 20,
+  },
+  {
+    id: "operations",
+    labelKey: "profile.operations",
+    descriptionKey: "profile.operations.desc",
+    icon: "Settings2",
+    kind: "generic",
+    availability: "capability",
+    requiredCapabilities: ["operations", "worksites", "projects", "planning", "logistics", "fleet", "inventory", "purchasing", "production", "maintenance", "bookings"],
+    optionalCapabilities: ["suppliers"],
+    recommendedWidgets: ["agenda", "tasks", "alerts", "projects", "daily-summary", "recommended-actions"],
+    priority: 30,
+  },
+  {
+    id: "chantier",
+    labelKey: "profile.chantier",
+    descriptionKey: "profile.chantier.desc",
+    icon: "HardHat",
+    kind: "specialized",
+    availability: "capability",
+    requiredCapabilities: ["worksites", "field_operations"],
+    optionalCapabilities: ["projects", "planning"],
+    recommendedWidgets: ["chantiers-map", "projects", "agenda", "alerts", "tasks", "daily-summary"],
+    priority: 40,
+  },
+  {
+    id: "immobilier",
+    labelKey: "profile.immobilier",
+    descriptionKey: "profile.immobilier.desc",
+    icon: "Building2",
+    kind: "specialized",
+    availability: "capability",
+    requiredCapabilities: ["properties"],
+    optionalCapabilities: ["leads", "appointments", "sales"],
+    recommendedWidgets: ["commercial", "agenda", "alerts", "tasks", "conversations", "recommended-actions"],
+    priority: 50,
+  },
+  {
+    id: "restaurant",
+    labelKey: "profile.restaurant",
+    descriptionKey: "profile.restaurant.desc",
+    icon: "UtensilsCrossed",
+    kind: "specialized",
+    availability: "capability",
+    requiredCapabilities: ["restaurant", "bookings"],
+    optionalCapabilities: ["inventory", "purchasing"],
+    recommendedWidgets: ["agenda", "tasks", "alerts", "daily-summary", "recommended-actions", "quick-actions"],
+    priority: 60,
+  },
+  {
+    id: "ecommerce",
+    labelKey: "profile.ecommerce",
+    descriptionKey: "profile.ecommerce.desc",
+    icon: "ShoppingCart",
+    kind: "specialized",
+    availability: "capability",
+    requiredCapabilities: ["ecommerce", "commerce"],
+    optionalCapabilities: ["inventory", "orders", "analytics"],
+    recommendedWidgets: ["commercial", "kpis", "alerts", "tasks", "cost", "conversations"],
+    priority: 70,
+  },
+  {
+    id: "logistique",
+    labelKey: "profile.logistique",
+    descriptionKey: "profile.logistique.desc",
+    icon: "Truck",
+    kind: "specialized",
+    availability: "capability",
+    requiredCapabilities: ["logistics", "fleet"],
+    optionalCapabilities: ["operations", "inventory"],
+    recommendedWidgets: ["agenda", "tasks", "alerts", "projects", "daily-summary", "recommended-actions"],
+    priority: 80,
+  },
+  {
+    id: "finance",
+    labelKey: "profile.finance",
+    descriptionKey: "profile.finance.desc",
+    icon: "Wallet",
+    kind: "generic",
+    availability: "capability",
+    requiredCapabilities: ["finance", "invoicing", "accounting", "treasury", "quotes", "payments"],
+    optionalCapabilities: ["management"],
+    recommendedWidgets: ["cost", "kpis", "commercial", "alerts", "system-health"],
+    priority: 90,
+  },
+  {
+    id: "marketing",
+    labelKey: "profile.marketing",
+    descriptionKey: "profile.marketing.desc",
+    icon: "Megaphone",
+    kind: "generic",
+    availability: "capability",
+    requiredCapabilities: ["marketing", "social", "campaigns", "analytics"],
+    optionalCapabilities: ["leads"],
+    recommendedWidgets: ["commercial", "conversations", "agenda", "kpis", "recommended-actions"],
+    priority: 100,
+  },
+  {
+    id: "support",
+    labelKey: "profile.support",
+    descriptionKey: "profile.support.desc",
+    icon: "LifeBuoy",
+    kind: "generic",
+    availability: "capability",
+    requiredCapabilities: ["support", "sav", "tickets", "helpdesk", "appointments"],
+    optionalCapabilities: ["documents"],
+    recommendedWidgets: ["tasks", "alerts", "agenda", "conversations", "approvals", "quick-actions"],
+    priority: 110,
+  },
+  {
+    id: "custom",
+    labelKey: "profile.custom",
+    descriptionKey: "profile.custom.desc",
+    icon: "SlidersHorizontal",
+    kind: "generic",
+    availability: "always",
+    requiredCapabilities: [],
+    optionalCapabilities: [],
+    recommendedWidgets: [],
+    priority: 999,
+  },
+];
+
+const PROFILE_BY_ID = new Map<ProfileId, ProfileDef>(PROFILE_REGISTRY.map((p) => [p.id, p]));
+
+export function profileDef(id: ProfileId): ProfileDef | undefined {
+  return PROFILE_BY_ID.get(id);
+}
+
+/** Build a preset layout: recommended widgets first & visible, everything else hidden. */
+function presetLayout(recommended: string[]): LayoutPreferences {
   const ids = registryIds();
-  const known = priority.filter((id) => ids.includes(id));
+  const known = recommended.filter((id) => ids.includes(id));
   const seen = new Set(known);
   const rest = ids.filter((id) => !seen.has(id));
   return {
     order: [...known, ...rest],
-    hidden: rest, // focus mode: only the priority widgets are shown
+    hidden: rest, // focus mode: only the recommended widgets are shown
     sizes: {},
     context: {},
     schemaVersion: LAYOUT_SCHEMA_VERSION,
@@ -81,8 +270,123 @@ function presetLayout(priority: string[]): LayoutPreferences {
 
 /** The Hermès default layout for a profile that the user has never customized. */
 export function presetLayoutFor(id: ProfileId): LayoutPreferences {
-  if (id === "custom") return { ...DEFAULT_LAYOUT };
-  return presetLayout(PRESET_PRIORITY[id]);
+  const recommended = PROFILE_BY_ID.get(id)?.recommendedWidgets ?? [];
+  if (id === "custom" || recommended.length === 0) return { ...DEFAULT_LAYOUT };
+  return presetLayout(recommended);
+}
+
+// --- CAPABILITY MODEL --------------------------------------------------------
+
+/**
+ * Canonical vocabulary of FUNCTIONAL capability tokens the profile engine reasons about.
+ * These are business capabilities (not raw action keys), shared across every vertical.
+ * A tenant "has" a token when a granted capability derives it (CAPABILITY_TOKEN_RULES).
+ */
+export const CAPABILITY_TOKENS = [
+  "crm", "sales", "leads", "pipeline", "quotes", "commerce", "ecommerce", "orders",
+  "invoicing", "accounting", "treasury", "finance", "payments",
+  "projects", "worksites", "field_operations", "planning", "operations", "production", "maintenance",
+  "inventory", "purchasing", "suppliers", "logistics", "fleet",
+  "support", "sav", "tickets", "helpdesk", "marketing", "social", "campaigns", "analytics",
+  "appointments", "bookings", "documents", "hr", "recruitment", "properties", "restaurant", "management",
+] as const;
+export type CapabilityToken = (typeof CAPABILITY_TOKENS)[number];
+
+/**
+ * Bridge from REAL granted action keys → functional capability tokens. This is the ONLY
+ * place raw namespaces are mapped to capabilities — a single data table, not scattered
+ * `if/else`. Rules match by action-key PREFIX and their tokens are unioned; extend it as
+ * the capability catalog grows (a new `crm.*` domain automatically enables the tokens).
+ */
+export const CAPABILITY_TOKEN_RULES: { prefix: string; tokens: CapabilityToken[] }[] = [
+  // BTP / worksites (the catalog that exists today)
+  { prefix: "btp.qualification", tokens: ["leads", "sales", "quotes"] },
+  { prefix: "btp.planning", tokens: ["planning", "projects", "operations"] },
+  { prefix: "btp.suivi", tokens: ["worksites", "field_operations", "projects", "operations"] },
+  { prefix: "btp.", tokens: ["worksites", "projects", "planning", "operations"] },
+  // forward-looking vertical namespaces (light up automatically when granted)
+  { prefix: "immo.", tokens: ["properties", "leads", "sales", "appointments"] },
+  { prefix: "crm.", tokens: ["crm", "leads", "sales", "pipeline"] },
+  { prefix: "sales.", tokens: ["sales", "quotes", "pipeline"] },
+  { prefix: "finance.", tokens: ["finance", "accounting", "treasury"] },
+  { prefix: "invoicing.", tokens: ["invoicing", "finance"] },
+  { prefix: "accounting.", tokens: ["accounting", "finance"] },
+  { prefix: "resto.", tokens: ["restaurant", "bookings", "inventory"] },
+  { prefix: "restaurant.", tokens: ["restaurant", "bookings", "inventory"] },
+  { prefix: "booking", tokens: ["bookings", "appointments"] },
+  { prefix: "ecommerce.", tokens: ["ecommerce", "commerce", "inventory", "orders"] },
+  { prefix: "retail.", tokens: ["commerce", "inventory", "sales"] },
+  { prefix: "shop.", tokens: ["commerce", "ecommerce", "orders"] },
+  { prefix: "inventory.", tokens: ["inventory", "purchasing"] },
+  { prefix: "logistics.", tokens: ["logistics", "fleet", "operations"] },
+  { prefix: "fleet.", tokens: ["fleet", "logistics"] },
+  { prefix: "support.", tokens: ["support", "sav", "tickets"] },
+  { prefix: "sav.", tokens: ["sav", "support"] },
+  { prefix: "marketing.", tokens: ["marketing", "social", "campaigns"] },
+  { prefix: "hr.", tokens: ["hr", "recruitment"] },
+];
+
+const CAPABILITY_TOKEN_SET = new Set<string>(CAPABILITY_TOKENS);
+
+/**
+ * Derive the tenant's functional capability tokens from its granted action keys. Pure,
+ * deterministic, allocation-light. A key already equal to a known token is kept as-is
+ * (so callers/tests may pass tokens directly), and every prefix rule it matches unions
+ * its tokens. Unknown namespaces contribute nothing (safe, no crash).
+ */
+export function deriveCapabilityTokens(capabilityKeys: Iterable<string>): Set<string> {
+  const out = new Set<string>();
+  for (const raw of capabilityKeys) {
+    const key = String(raw);
+    if (CAPABILITY_TOKEN_SET.has(key)) out.add(key); // already a token
+    for (const rule of CAPABILITY_TOKEN_RULES) {
+      if (key.startsWith(rule.prefix)) for (const tk of rule.tokens) out.add(tk);
+    }
+  }
+  return out;
+}
+
+/** Is a single profile offered given the tenant's capability tokens? (pure, tenant-safe) */
+export function isProfileAvailable(def: ProfileDef, tokens: Set<string>): boolean {
+  switch (def.availability) {
+    case "always":
+      return true;
+    case "transversal":
+      return tokens.size > 0; // Direction: any exploitable capability
+    case "capability":
+      return def.requiredCapabilities.some((t) => tokens.has(t));
+  }
+}
+
+/**
+ * CAPABILITY-FIRST profile availability. Input is the tenant's functional capability
+ * TOKENS (derive them from granted action keys with `deriveCapabilityTokens`, or pass a
+ * token set directly). Returns the offered profile ids sorted by priority.
+ *
+ * - `custom` is always offered (the full dashboard).
+ * - Direction is offered whenever the tenant has any exploitable capability.
+ * - Every other profile is offered only when the tenant holds one of its required
+ *   capabilities — so a restaurant never sees a Chantier profile, an e-commerce never
+ *   sees a BTP one, etc. TENANT-SAFE: a profile a tenant can't use is never listed.
+ * - `capabilitiesKnown=false` (snapshot unavailable) ⇒ fail-open (offer all) so a
+ *   transient error never HIDES a profile.
+ */
+export function availableProfiles(
+  capabilityTokens: Iterable<string>,
+  capabilitiesKnown = true,
+): ProfileId[] {
+  const sorted = [...PROFILE_REGISTRY].sort((a, b) => a.priority - b.priority);
+  if (!capabilitiesKnown) return sorted.map((p) => p.id);
+  const tokens = capabilityTokens instanceof Set ? capabilityTokens : new Set(capabilityTokens);
+  return sorted.filter((p) => isProfileAvailable(p, tokens)).map((p) => p.id);
+}
+
+/** Ensure a candidate profile is currently available; else a deterministic fallback. */
+export function fallbackProfile(candidate: ProfileId, availableIds: ProfileId[]): ProfileId {
+  if (availableIds.includes(candidate)) return candidate;
+  if (availableIds.includes(DEFAULT_PROFILE)) return DEFAULT_PROFILE;
+  if (availableIds.includes("custom")) return "custom";
+  return availableIds[0] ?? DEFAULT_PROFILE;
 }
 
 export type ProfileConfig = {

@@ -138,6 +138,8 @@ type DashboardShellProps = {
   wallpaperUrls: Record<string, string>;
   // DASH-4G: enriched per-worksite weather (derived server-side from existing coords).
   worksiteWeather: WorksiteWeather[];
+  // DASH-4I: the profiles offered to THIS tenant (capability/vertical-filtered).
+  availableProfiles: ProfileId[];
 };
 
 export default function DashboardShell({
@@ -170,6 +172,7 @@ export default function DashboardShell({
   availableWidgets,
   profiles: initialProfiles,
   activeProfile: initialActiveProfile,
+  availableProfiles,
   wallpaperUrls,
   worksiteWeather,
 }: DashboardShellProps) {
@@ -486,6 +489,7 @@ export default function DashboardShell({
               persisted in the background through the same optimistic upsert. */}
           <ProfileSwitcher
             active={activeProfile}
+            available={availableProfiles}
             names={profileNames}
             onSelect={onSelectProfile}
           />

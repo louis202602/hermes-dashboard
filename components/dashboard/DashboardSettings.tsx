@@ -194,12 +194,16 @@ function ToggleRow({
 export default function DashboardSettings({
   initial,
   availableWidgets = [],
+  availableProfiles = PROFILE_IDS as unknown as ProfileId[],
   capabilities = [],
 }: {
   initial: DashboardPreferences;
   availableWidgets?: string[];
+  availableProfiles?: ProfileId[];
   capabilities?: { actionKey: string; label: string }[];
 }) {
+  // DASH-4I: only the profiles offered to this tenant are configurable / selectable.
+  const profileOptionIds = PROFILE_IDS.filter((id) => availableProfiles.includes(id));
   const { t } = useI18n();
   const router = useRouter();
   const [appearance, setAppearance] = useState<Appearance>(initial.appearance);
@@ -472,7 +476,7 @@ export default function DashboardSettings({
           <div className="settings-row settings-row-block">
             <span className="settings-row-label">{t("profile.settings.active")}</span>
             <div className="profile-switcher-chips" role="group" aria-label={t("profile.switcher.aria")}>
-              {PROFILE_IDS.map((id) => (
+              {profileOptionIds.map((id) => (
                 <button
                   key={id}
                   type="button"
@@ -656,7 +660,7 @@ export default function DashboardSettings({
             value={isValidDefaultHome(behavior.defaultHome) ? (behavior.defaultHome as string) : ""}
             options={[
               { value: "", label: t("settings.inherit") },
-              ...PROFILE_IDS.map((id) => ({ value: id, label: t(`profile.${id}` as MessageKey) })),
+              ...profileOptionIds.map((id) => ({ value: id, label: t(`profile.${id}` as MessageKey) })),
             ]}
             onChange={(v) => setB({ defaultHome: v || null })}
           />
