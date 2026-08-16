@@ -28,10 +28,19 @@ import {
   resolveWidgetLayout,
   setWidgetHidden,
   setWidgetSize,
+  WIDGET_REGISTRY,
   type ContextSegment,
   type LayoutPreferences,
   type WidgetSize,
 } from "@/lib/dashboard/widgets";
+import {
+  MAX_QUICK_ACTIONS,
+  NAV_SHORTCUTS,
+  favoriteNavRef,
+  favoriteWidgetRef,
+  isValidDefaultHome,
+  toggleFavorite,
+} from "@/lib/dashboard/shortcuts";
 import {
   PROFILE_IDS,
   clampProfiles,
@@ -105,6 +114,27 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+function ChipToggle({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`settings-chip${active ? " is-active" : ""}`}
+      aria-pressed={active}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
+}
+
 function SelectRow({
   label,
   value,
@@ -162,9 +192,11 @@ function ToggleRow({
 export default function DashboardSettings({
   initial,
   availableWidgets = [],
+  capabilities = [],
 }: {
   initial: DashboardPreferences;
   availableWidgets?: string[];
+  capabilities?: { actionKey: string; label: string }[];
 }) {
   const { t } = useI18n();
   const router = useRouter();
@@ -255,6 +287,17 @@ export default function DashboardSettings({
     setBehavior(next);
     persistPatch({ behavior: next });
   };
+  // DASH-4H — quick-actions selection (bounded) + favorites toggle (bounded helper).
+  const toggleQuickAction = (id: string) => {
+    const cur = behavior.quickActions;
+    const next = cur.includes(id)
+      ? cur.filter((x) => x !== id)
+      : cur.length >= MAX_QUICK_ACTIONS
+        ? cur
+        : [...cur, id];
+    setB({ quickActions: next });
+  };
+  const toggleFav = (ref: string) => setB({ favorites: toggleFavorite(behavior.favorites, ref) });
   const setR = (patch: Partial<RegionalOverride>) => {
     const next = { ...regional, ...patch };
     setRegional(next);
@@ -587,6 +630,70 @@ export default function DashboardSettings({
         <Section title={t("settings.section.behavior")}>
           <ToggleRow label={t("settings.row.sidebarCollapsed")} checked={behavior.sidebarCollapsed} onChange={(v) => setB({ sidebarCollapsed: v })} />
           <ToggleRow label={t("settings.row.animations")} checked={behavior.animations} onChange={(v) => setB({ animations: v })} />
+        </Section>
+
+        {/* DASH-4H — default opening screen (user-scoped, multi-device). */}
+        <Section title={t("settings.section.home")}>
+          <ToggleRow
+            label={t("settings.row.openLastMode")}
+            checked={behavior.openLastMode}
+            onChange={(v) => setB({ openLastMode: v })}
+          />
+          <SelectRow
+            label={t("settings.row.defaultHome")}
+            value={isValidDefaultHome(behavior.defaultHome) ? (behavior.defaultHome as string) : ""}
+            options={[
+              { value: "", label: t("settings.inherit") },
+              ...PROFILE_IDS.map((id) => ({ value: id, label: t(`profile.${id}` as MessageKey) })),
+            ]}
+            onChange={(v) => setB({ defaultHome: v || null })}
+          />
+        </Section>
+
+        {/* DASH-4H — customizable Quick Actions (nav shortcuts + granted capabilities). */}
+        <Section title={t("settings.section.quickActions")}>
+          <div className="settings-chips">
+            {NAV_SHORTCUTS.map((n) => (
+              <ChipToggle
+                key={n.id}
+                active={behavior.quickActions.includes(n.id)}
+                label={t(n.labelKey as MessageKey)}
+                onClick={() => toggleQuickAction(n.id)}
+              />
+            ))}
+            {capabilities.map((c) => (
+              <ChipToggle
+                key={c.actionKey}
+                active={behavior.quickActions.includes(c.actionKey)}
+                label={c.label}
+                onClick={() => toggleQuickAction(c.actionKey)}
+              />
+            ))}
+          </div>
+          <p className="settings-reset-note">{t("settings.quickActions.note")}</p>
+        </Section>
+
+        {/* DASH-4H — Favorites (pinned nav shortcuts + widgets). */}
+        <Section title={t("settings.section.favorites")}>
+          <div className="settings-chips">
+            {NAV_SHORTCUTS.map((n) => (
+              <ChipToggle
+                key={`nav:${n.id}`}
+                active={behavior.favorites.includes(favoriteNavRef(n.id))}
+                label={t(n.labelKey as MessageKey)}
+                onClick={() => toggleFav(favoriteNavRef(n.id))}
+              />
+            ))}
+            {WIDGET_REGISTRY.map((w) => (
+              <ChipToggle
+                key={`w:${w.id}`}
+                active={behavior.favorites.includes(favoriteWidgetRef(w.id))}
+                label={t(`widget.${w.id}` as MessageKey)}
+                onClick={() => toggleFav(favoriteWidgetRef(w.id))}
+              />
+            ))}
+          </div>
+          <p className="settings-reset-note">{t("settings.favorites.note")}</p>
         </Section>
 
         <Section title={t("settings.section.activeWidgets")}>

@@ -780,4 +780,20 @@ export const de: Messages = {
   "actions.tomorrow.reason": "Ein Baustellentermin ist morgen geplant",
   "actions.devis.title": "{count} Angebot(e) nachfassen",
   "actions.devis.reason": "{count} Angebot(e) warten auf Antwort",
+
+  // --- personal shortcuts (DASH-4H) ---
+  "shortcut.map": "Karte",
+  "shortcut.map.desc": "Baustellenkarte",
+  "shortcut.chat": "Hermès Chat",
+  "shortcut.chat.desc": "Hermès fragen",
+  "shortcut.settings": "Einstellungen",
+  "shortcut.settings.desc": "Dashboard-Einstellungen",
+  "favorites.title": "Favoriten",
+  "settings.section.home": "Startbildschirm",
+  "settings.section.quickActions": "Schnellaktionen",
+  "settings.section.favorites": "Favoriten",
+  "settings.row.openLastMode": "Letzten Modus fortsetzen",
+  "settings.row.defaultHome": "Standard-Startmodus",
+  "settings.quickActions.note": "Wählen Sie die in „Verfügbare Aktionen“ angezeigten Verknüpfungen. Leer = alle erlaubten Aktionen.",
+  "settings.favorites.note": "Pinnen Sie Ihre bevorzugten Widgets und Verknüpfungen (max. 8).",
 };

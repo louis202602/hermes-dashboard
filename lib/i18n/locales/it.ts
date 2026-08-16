@@ -780,4 +780,20 @@ export const it: Messages = {
   "actions.tomorrow.reason": "Un evento cantiere è previsto domani",
   "actions.devis.title": "Sollecitare {count} preventivo/i",
   "actions.devis.reason": "{count} preventivo/i in attesa di risposta",
+
+  // --- personal shortcuts (DASH-4H) ---
+  "shortcut.map": "Mappa",
+  "shortcut.map.desc": "Mappa cantieri",
+  "shortcut.chat": "Hermès Chat",
+  "shortcut.chat.desc": "Chiedi a Hermès",
+  "shortcut.settings": "Impostazioni",
+  "shortcut.settings.desc": "Impostazioni dashboard",
+  "favorites.title": "Preferiti",
+  "settings.section.home": "Schermata iniziale",
+  "settings.section.quickActions": "Azioni rapide",
+  "settings.section.favorites": "Preferiti",
+  "settings.row.openLastMode": "Riprendi l’ultima modalità",
+  "settings.row.defaultHome": "Modalità di apertura predefinita",
+  "settings.quickActions.note": "Scegli le scorciatoie mostrate in «Azioni disponibili». Vuoto = tutte le azioni consentite.",
+  "settings.favorites.note": "Fissa i tuoi widget e scorciatoie preferiti (max 8).",
 };

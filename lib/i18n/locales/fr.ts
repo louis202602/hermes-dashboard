@@ -797,6 +797,22 @@ export const fr = {
   "actions.tomorrow.reason": "Un événement chantier est prévu demain",
   "actions.devis.title": "Relancer {count} devis",
   "actions.devis.reason": "{count} devis en attente de réponse",
+
+  // --- personal shortcuts (DASH-4H) ---
+  "shortcut.map": "Carte",
+  "shortcut.map.desc": "Carte des chantiers",
+  "shortcut.chat": "Hermès Chat",
+  "shortcut.chat.desc": "Demander à Hermès",
+  "shortcut.settings": "Paramètres",
+  "shortcut.settings.desc": "Paramètres du dashboard",
+  "favorites.title": "Favoris",
+  "settings.section.home": "Écran d’ouverture",
+  "settings.section.quickActions": "Actions rapides",
+  "settings.section.favorites": "Favoris",
+  "settings.row.openLastMode": "Reprendre le dernier mode",
+  "settings.row.defaultHome": "Mode d’ouverture par défaut",
+  "settings.quickActions.note": "Choisissez les raccourcis affichés dans « Actions disponibles ». Vide = toutes les actions autorisées.",
+  "settings.favorites.note": "Épinglez vos widgets et raccourcis favoris (max 8).",
 };
 
 export type Messages = typeof fr;

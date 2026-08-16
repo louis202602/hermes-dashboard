@@ -780,4 +780,20 @@ export const en: Messages = {
   "actions.tomorrow.reason": "A worksite event is scheduled tomorrow",
   "actions.devis.title": "Follow up on {count} quote(s)",
   "actions.devis.reason": "{count} quote(s) awaiting a reply",
+
+  // --- personal shortcuts (DASH-4H) ---
+  "shortcut.map": "Map",
+  "shortcut.map.desc": "Worksite map",
+  "shortcut.chat": "Hermès Chat",
+  "shortcut.chat.desc": "Ask Hermès",
+  "shortcut.settings": "Settings",
+  "shortcut.settings.desc": "Dashboard settings",
+  "favorites.title": "Favorites",
+  "settings.section.home": "Opening screen",
+  "settings.section.quickActions": "Quick actions",
+  "settings.section.favorites": "Favorites",
+  "settings.row.openLastMode": "Resume the last mode",
+  "settings.row.defaultHome": "Default opening mode",
+  "settings.quickActions.note": "Choose the shortcuts shown in ‘Available actions’. Empty = all permitted actions.",
+  "settings.favorites.note": "Pin your favorite widgets and shortcuts (max 8).",
 };

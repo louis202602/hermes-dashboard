@@ -34,6 +34,11 @@ export default async function DashboardSettingsPage() {
       : [],
   );
   const available = [...availableWidgetIds(capabilityKeys)];
+  // DASH-4H: the granted capabilities (canonical) offered in the Quick-Actions picker.
+  const capabilityList =
+    capabilities.ok && capabilities.data.resolutionStatus === "OK"
+      ? capabilities.data.capabilities.map((c) => ({ actionKey: c.actionKey, label: c.displayName }))
+      : [];
   const lang = resolveLanguage(prefs.regional.language, prefs.regional.locale);
   const dir = getLanguageDef(lang).dir;
   const messages = getCatalog(lang);
@@ -41,7 +46,11 @@ export default async function DashboardSettingsPage() {
   return (
     <I18nProvider lang={lang} dir={dir} messages={messages}>
       <main className="settings-shell" dir={dir}>
-        <DashboardSettings initial={prefs} availableWidgets={available} />
+        <DashboardSettings
+          initial={prefs}
+          availableWidgets={available}
+          capabilities={capabilityList}
+        />
       </main>
     </I18nProvider>
   );

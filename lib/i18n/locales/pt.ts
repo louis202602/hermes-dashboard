@@ -780,4 +780,20 @@ export const pt: Messages = {
   "actions.tomorrow.reason": "Há um evento de obra amanhã",
   "actions.devis.title": "Acompanhar {count} orçamento(s)",
   "actions.devis.reason": "{count} orçamento(s) a aguardar resposta",
+
+  // --- personal shortcuts (DASH-4H) ---
+  "shortcut.map": "Mapa",
+  "shortcut.map.desc": "Mapa das obras",
+  "shortcut.chat": "Hermès Chat",
+  "shortcut.chat.desc": "Perguntar ao Hermès",
+  "shortcut.settings": "Definições",
+  "shortcut.settings.desc": "Definições do painel",
+  "favorites.title": "Favoritos",
+  "settings.section.home": "Ecrã de abertura",
+  "settings.section.quickActions": "Ações rápidas",
+  "settings.section.favorites": "Favoritos",
+  "settings.row.openLastMode": "Retomar o último modo",
+  "settings.row.defaultHome": "Modo de abertura padrão",
+  "settings.quickActions.note": "Escolha os atalhos mostrados em «Ações disponíveis». Vazio = todas as ações permitidas.",
+  "settings.favorites.note": "Fixe os seus widgets e atalhos favoritos (máx. 8).",
 };

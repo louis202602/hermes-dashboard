@@ -5175,3 +5175,60 @@ html[data-reduce-transparency="1"] .notif-panel {
   margin-top: 1px;
 }
 .action-link:hover { text-decoration: underline; }
+
+/* ============================================================================
+   DASH-4H — personal shortcuts: favorites bar + settings chip toggles.
+   Glass-friendly, semantic, responsive, RTL-safe (logical properties).
+   ============================================================================ */
+
+.favorites-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.favorites-bar-label {
+  display: inline-flex;
+  align-items: center;
+  color: var(--warning);
+}
+.favorite-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 550;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+.favorite-chip:hover { background: var(--surface-hover); color: var(--text-primary); }
+.favorite-chip.is-nav { color: var(--text-primary); }
+
+/* Settings chip multi-select (quick actions + favorites). */
+.settings-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0 2px;
+}
+.settings-chip {
+  font-size: 12.5px;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.settings-chip:hover { background: var(--surface-hover); }
+.settings-chip.is-active {
+  background: var(--accent-soft);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  font-weight: 600;
+}
