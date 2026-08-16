@@ -15,17 +15,30 @@
 
 export const WALLPAPER_CATEGORIES = [
   "hermes", // CSS gradient art — sober, premium (0 asset)
-  "abstrait", // CSS gradient art — atmospheres/ambiances (0 asset)
-  "montagne", // PHOTO category (real images)
-  "mer", // PHOTO category (real images)
-  "tropical", // PHOTO category (real images)
-  "espace", // PHOTO category (real images)
+  "abstrait", // CSS gradient art + real abstract photos (liquid glass / chrome / energy)
+  "paysage", // PHOTO — landscapes (montagne, forêt, plage, côte…)
+  "espace", // PHOTO — space (real planets, galaxy, Earth) incl. NASA public domain
+  "ville", // PHOTO — cityscapes
+  "luxe", // PHOTO — luxury interiors / villas
+  "yacht", // PHOTO — yachts (extensible; empty until provided)
+  "automobile", // PHOTO — cars
+  "moto", // PHOTO — motorcycles
+  "technologie", // PHOTO — technology (extensible; empty until provided)
   "user", // user uploads
 ] as const;
 export type WallpaperCategory = (typeof WALLPAPER_CATEGORIES)[number];
 
-/** Categories that must show REAL photographs (never CSS gradient art). */
-export const PHOTO_CATEGORIES: WallpaperCategory[] = ["montagne", "mer", "tropical", "espace"];
+/** Photo categories (real images, never CSS gradient art) in gallery display order. */
+export const PHOTO_CATEGORIES: WallpaperCategory[] = [
+  "paysage",
+  "espace",
+  "ville",
+  "luxe",
+  "yacht",
+  "automobile",
+  "moto",
+  "technologie",
+];
 
 export type WallpaperDef = {
   id: string;
@@ -40,19 +53,47 @@ export type WallpaperDef = {
   thumb?: string;
   /** For kind:"image": human-readable source + LICENCE (never fabricated). */
   provenance?: string;
+  /** For kind:"image": per-image focal point (0..1) so the subject stays framed. */
+  focalX?: number;
+  focalY?: number;
 };
+
+/** Honest provenance for every owner-supplied photo (details in PROVENANCE.md). */
+const OWNER_PROVENANCE = "Fourni par le propriétaire (Hermès OS)";
+
+/** Build a real-image WallpaperDef from a /public path base (no ".webp" suffix). */
+function img(
+  id: string,
+  category: WallpaperCategory,
+  pathBase: string,
+  defaultScrim: number,
+  focalX: number,
+  focalY: number,
+): WallpaperDef {
+  return {
+    id,
+    category,
+    kind: "image",
+    defaultScrim,
+    asset: `/wallpapers/${pathBase}.webp`,
+    thumb: `/wallpapers/${pathBase}-thumb.webp`,
+    provenance: OWNER_PROVENANCE,
+    focalX,
+    focalY,
+  };
+}
 
 /**
  * Wallpaper registry.
  *
  * - `hermes` / `abstrait`: pure-CSS gradient art (`.wallpaper-<id>`, 0 asset, 0 egress).
- *   The former "espace/montagne/mer/tropical" GRADIENTS are RECLASSIFIED here — they are
- *   stylised atmospheres, NOT photographs, so they are no longer presented as landscape
- *   photos (ids are kept stable so existing user prefs keep working).
- * - Photo categories (`montagne`/`mer`/`tropical`/`espace`) carry REAL images only
- *   (kind:"image"). `espace` ships real NASA public-domain photos. `montagne`/`mer`/
- *   `tropical` are prepared SLOTS — the exact files to provide are in
- *   docs/wallpaper-assets.md; provenance is NEVER fabricated.
+ *   The former "espace/montagne/mer/tropical" GRADIENTS are RECLASSIFIED under `abstrait`
+ *   — they are stylised atmospheres, NOT photographs (ids kept stable so existing user
+ *   prefs keep working).
+ * - Photo categories carry REAL images only (kind:"image"), each with an HD asset, a
+ *   lightweight thumbnail, an honest provenance (never fabricated) and a focal point.
+ *   `espace` also ships real NASA public-domain photos; every owner-provided asset is
+ *   recorded as owner-provided in public/wallpapers/PROVENANCE.md.
  */
 export const WALLPAPER_REGISTRY: WallpaperDef[] = [
   // --- Hermès (CSS, sober premium) ---
@@ -75,7 +116,18 @@ export const WALLPAPER_REGISTRY: WallpaperDef[] = [
   { id: "tropical-couchant", category: "abstrait", kind: "gradient", defaultScrim: 0.3 },
   { id: "tropical-palmiers", category: "abstrait", kind: "gradient", defaultScrim: 0.32 },
   { id: "tropical-plage", category: "abstrait", kind: "gradient", defaultScrim: 0.36 },
-  // --- Espace (REAL photos — NASA, public domain) ---
+  // --- Abstrait (REAL photos — owner-provided) ---
+  img("abstract-liquid-glass-01", "abstrait", "abstract/abstract-liquid-glass-01", 0.24, 0.5, 0.5),
+  img("abstract-chrome-01", "abstrait", "abstract/abstract-chrome-01", 0.32, 0.5, 0.5),
+  img("abstract-energy-01", "abstrait", "abstract/abstract-energy-01", 0.22, 0.5, 0.5),
+  // --- Paysage (REAL photos — owner-provided) ---
+  img("landscape-snow-peaks-01", "paysage", "landscape/landscape-snow-peaks-01", 0.4, 0.6, 0.5),
+  img("landscape-snow-valley-01", "paysage", "landscape/landscape-snow-valley-01", 0.4, 0.5, 0.5),
+  img("landscape-mountain-lake-01", "paysage", "landscape/landscape-mountain-lake-01", 0.38, 0.5, 0.45),
+  img("landscape-forest-stream-01", "paysage", "landscape/landscape-forest-stream-01", 0.34, 0.5, 0.5),
+  img("landscape-tropical-beach-01", "paysage", "landscape/landscape-tropical-beach-01", 0.4, 0.5, 0.5),
+  img("landscape-med-coast-01", "paysage", "landscape/landscape-med-coast-01", 0.4, 0.5, 0.5),
+  // --- Espace (REAL photos — NASA public domain + owner-provided) ---
   {
     id: "espace-terre",
     category: "espace",
@@ -84,6 +136,8 @@ export const WALLPAPER_REGISTRY: WallpaperDef[] = [
     asset: "/wallpapers/space/espace-terre.webp",
     thumb: "/wallpapers/space/espace-terre-thumb.webp",
     provenance: "NASA — Apollo 17 « Blue Marble » (AS17-148-22727) — domaine public",
+    focalX: 0.5,
+    focalY: 0.5,
   },
   {
     id: "espace-horizon",
@@ -93,7 +147,23 @@ export const WALLPAPER_REGISTRY: WallpaperDef[] = [
     asset: "/wallpapers/space/espace-horizon.webp",
     thumb: "/wallpapers/space/espace-horizon-thumb.webp",
     provenance: "NASA — ISS Expedition 43 (iss043e091794) — domaine public",
+    focalX: 0.5,
+    focalY: 0.45,
   },
+  img("space-ringed-planet-01", "espace", "space/space-ringed-planet-01", 0.22, 0.45, 0.45),
+  img("space-galaxy-01", "espace", "space/space-galaxy-01", 0.2, 0.5, 0.45),
+  img("space-earth-night-01", "espace", "space/space-earth-night-01", 0.22, 0.4, 0.55),
+  // --- Ville (REAL photos — owner-provided) ---
+  img("city-dubai-night-01", "ville", "city/city-dubai-night-01", 0.26, 0.5, 0.4),
+  img("city-tokyo-neon-01", "ville", "city/city-tokyo-neon-01", 0.24, 0.5, 0.45),
+  // --- Luxe (REAL photos — owner-provided) ---
+  img("luxury-villa-01", "luxe", "luxury/luxury-villa-01", 0.3, 0.6, 0.5),
+  img("luxury-lounge-sunset-01", "luxe", "luxury/luxury-lounge-sunset-01", 0.3, 0.5, 0.5),
+  img("luxury-penthouse-01", "luxe", "luxury/luxury-penthouse-01", 0.26, 0.5, 0.5),
+  // --- Automobile (REAL photo — owner-provided) ---
+  img("supercar-01", "automobile", "automotive/supercar-01", 0.3, 0.5, 0.6),
+  // --- Moto (REAL photo — owner-provided) ---
+  img("motorcycle-ducati-01", "moto", "motorcycle/motorcycle-ducati-01", 0.26, 0.5, 0.55),
 ];
 
 /** The Hermès default wallpaper id when nothing is chosen (subtle, always readable). */
@@ -125,7 +195,7 @@ export type WallpaperConfig = {
   ref: string | null; // null ⇒ no wallpaper (plain background)
   scrim: number; // 0..1 readability overlay
   position: WallpaperPosition;
-  focalX: number; // 0..1 (reserved; position covers V1)
+  focalX: number; // 0..1 focal point for kind:"image" (cover framing)
   focalY: number;
 };
 
@@ -159,8 +229,10 @@ export function clampWallpaper(input: unknown): WallpaperConfig {
     ref,
     scrim: num01(w.wallpaperScrim, def?.defaultScrim ?? 0.2),
     position,
-    focalX: num01(w.wallpaperFocalX, 0.5),
-    focalY: num01(w.wallpaperFocalY, 0.5),
+    // Fall back to the image's per-def focal point when the config sets none, so each
+    // real photo stays framed on its subject across viewports.
+    focalX: num01(w.wallpaperFocalX, def?.focalX ?? 0.5),
+    focalY: num01(w.wallpaperFocalY, def?.focalY ?? 0.5),
   };
 }
 
@@ -218,11 +290,16 @@ export function wallpapersByCategory(category: WallpaperCategory): WallpaperDef[
   return WALLPAPER_REGISTRY.filter((w) => w.category === category);
 }
 
-/** True when a PHOTO category still has no real image shipped (gallery shows a note). */
-export function photoCategoryPending(category: WallpaperCategory): boolean {
-  return (
-    PHOTO_CATEGORIES.includes(category) &&
-    WALLPAPER_REGISTRY.every((w) => w.category !== category || w.kind !== "image")
+/**
+ * Selectable categories, in canonical order, that actually hold at least one wallpaper.
+ * Drives the gallery tabs — empty/extensible categories (yacht, technologie until photos
+ * are provided) simply don't appear, so the taxonomy stays extensible with no dead tabs.
+ * `user` is excluded (uploads have their own control, not a gallery tab).
+ */
+export function populatedCategories(): Exclude<WallpaperCategory, "user">[] {
+  return WALLPAPER_CATEGORIES.filter(
+    (c): c is Exclude<WallpaperCategory, "user"> =>
+      c !== "user" && WALLPAPER_REGISTRY.some((w) => w.category === c),
   );
 }
 

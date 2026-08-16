@@ -56,7 +56,7 @@ import {
 import {
   WALLPAPER_POSITIONS,
   isUserWallpaperRef,
-  photoCategoryPending,
+  populatedCategories,
   wallpaperThumb,
   wallpapersByCategory,
   type WallpaperCategory,
@@ -527,7 +527,7 @@ export default function DashboardSettings({
             {t("wallpaper.activeNote", { profile: profileName(activeProfile) })}
           </p>
           <div className="wallpaper-cat-tabs" role="tablist" aria-label={t("settings.section.wallpaper")}>
-            {(["hermes", "abstrait", "espace", "montagne", "mer", "tropical"] as const).map((c) => (
+            {populatedCategories().map((c) => (
               <button
                 key={c}
                 type="button"
@@ -563,9 +563,6 @@ export default function DashboardSettings({
               );
             })}
           </div>
-          {photoCategoryPending(wpCat) ? (
-            <p className="settings-reset-note wallpaper-pending-note">{t("wallpaper.photoPending")}</p>
-          ) : null}
           <SelectRow
             label={t("wallpaper.position")}
             value={currentWpPos}
