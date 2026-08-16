@@ -156,11 +156,16 @@ export default function DashboardShell({
 
   // DASH-4D: the profiles state + active profile are client-driven so switching a
   // mode recomposes the dashboard from ALREADY-loaded snapshots — 0 extra fetch.
-  const [profiles, setProfiles] = useState<ProfilesState>(initialProfiles);
-  const [activeProfile, setActive] = useState<ProfileId>(initialActiveProfile);
+  const [profiles, setProfilesState] = useState<ProfilesState>(initialProfiles);
+  const [activeProfile, setActiveState] = useState<ProfileId>(initialActiveProfile);
   const [editing, setEditing] = useState(false);
   const versionRef = useRef<number>(preferencesVersion);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Refs mirror the latest state so an edit followed immediately by a profile switch
+  // (before React re-renders) reads the up-to-date profiles — no stale-closure race,
+  // no lost edit, no cross-profile write (see applyProfiles / commitLayout / switch).
+  const profilesRef = useRef<ProfilesState>(initialProfiles);
+  const activeRef = useRef<ProfileId>(initialActiveProfile);
 
   // Effective (active-profile) layout + appearance, derived client-side. Edits go
   // into THIS profile only (isolation); other profiles are untouched.
@@ -215,26 +220,37 @@ export default function DashboardShell({
     }, 500);
   }, []);
 
-  // Commit a layout edit into the ACTIVE profile (scoped isolation).
-  const commitLayout = useCallback(
-    (nextLayout: LayoutPreferences) => {
-      const next = setProfileLayout(profiles, activeProfile, nextLayout);
-      setProfiles(next);
+  // Single writer for the profiles state: updates ref + state + schedules the debounced
+  // persist. Always derives from `profilesRef.current`, so concurrent edit→switch never
+  // races on a stale closure.
+  const applyProfiles = useCallback(
+    (next: ProfilesState) => {
+      profilesRef.current = next;
+      setProfilesState(next);
       persistProfiles(next);
     },
-    [persistProfiles, profiles, activeProfile],
+    [persistProfiles],
+  );
+
+  // Commit a layout edit into the ACTIVE profile (scoped isolation). Reads the live refs
+  // so an edit made just before a switch is stored under the profile it belongs to.
+  const commitLayout = useCallback(
+    (nextLayout: LayoutPreferences) => {
+      applyProfiles(setProfileLayout(profilesRef.current, activeRef.current, nextLayout));
+    },
+    [applyProfiles],
   );
 
   // Switch mode: instant client recompose (no refetch), persisted in the background.
+  // Uses the latest profiles ref so a pending edit is preserved (not lost, not moved).
   const onSelectProfile = useCallback(
     (id: ProfileId) => {
-      if (id === activeProfile) return;
-      const next = setActiveProfile(profiles, id);
-      setProfiles(next);
-      setActive(id);
-      persistProfiles(next);
+      if (id === activeRef.current) return;
+      activeRef.current = id;
+      setActiveState(id);
+      applyProfiles(setActiveProfile(profilesRef.current, id));
     },
-    [persistProfiles, profiles, activeProfile],
+    [applyProfiles],
   );
 
   const onReorder = useCallback(

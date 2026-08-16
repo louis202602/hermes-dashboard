@@ -155,6 +155,24 @@ test("MULTI_DEVICE_PROFILE: state survives a DB JSONB round-trip unchanged", () 
   assert.equal(roundTripped.byId.custom?.name, "Mon tableau");
 });
 
+// --- Concurrency: edit A then switch B (mirrors the shell's ref-based writer) --
+test("PENDING_WRITE_SAFE / NO_CROSS_PROFILE_WRITE / NO_LOST_EDIT", () => {
+  const base = clampProfiles({ active: "direction" });
+  const editedLayout: LayoutPreferences = {
+    order: ["kpis"], hidden: [], sizes: {}, context: {}, schemaVersion: 1,
+  };
+  // Edit while A (direction) is active …
+  const afterEdit = setProfileLayout(base, "direction", editedLayout);
+  // … then immediately switch to B (commercial) from the POST-EDIT state (the shell
+  // reads profilesRef.current, so the switch always sees the just-made edit).
+  const afterSwitch = setActiveProfile(afterEdit, "commercial");
+  assert.equal(afterSwitch.active, "commercial", "switch applied");
+  assert.deepEqual(afterSwitch.byId.direction?.layout, editedLayout, "A's edit preserved under A");
+  assert.equal(afterSwitch.byId.commercial?.layout ?? null, null, "edit NOT written to B");
+  // The single merged object the debounce persists still yields A's edit for A.
+  assert.deepEqual(effectiveProfileLayout(afterSwitch, "direction", null), editedLayout);
+});
+
 // --- DASH-4E readiness: wallpaperRef reserved per profile, additive-safe ------
 test("WALLPAPER_REF_READY: per-profile wallpaperRef round-trips; unknown future fields are non-destructive", () => {
   // A wallpaper reference set on a profile survives clamp + JSONB round-trip.

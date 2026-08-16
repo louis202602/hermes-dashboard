@@ -10,6 +10,12 @@ import {
   type Appearance,
   type Behavior,
 } from "@/lib/dashboard/preferences";
+import {
+  clampProfiles,
+  effectiveProfileAppearance,
+  resolveActiveProfile,
+} from "@/lib/dashboard/profiles";
+import { clampLayout } from "@/lib/dashboard/widgets";
 import { APPEARANCE_COOKIE_NAME } from "@/lib/theme";
 import { getDashboardUserPreferences } from "@/services/hermes/preferences";
 
@@ -40,8 +46,21 @@ export async function resolveInitialAppearance(): Promise<{
   if (hasSession) {
     const result = await getDashboardUserPreferences();
     if (result.ok) {
+      // DASH-4D: stamp the ACTIVE profile's effective appearance (global appearance +
+      // that profile's partial override) onto <html> at first paint — so a profile
+      // theme/accent override has NO FOUC. Uses the same cache()-shared prefs read as
+      // the page (0 extra DB). theme:"auto" is carried through unchanged.
+      const profiles = clampProfiles(result.data.profiles);
+      const activeProfile = resolveActiveProfile(
+        profiles,
+        clampLayout(result.data.layout),
+      );
       return {
-        appearance: result.data.appearance,
+        appearance: effectiveProfileAppearance(
+          result.data.appearance,
+          profiles,
+          activeProfile,
+        ),
         behavior: result.data.behavior,
       };
     }
