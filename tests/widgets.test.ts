@@ -104,9 +104,17 @@ test("CAPABILITY_FILTER: unavailable widgets are excluded + marked", () => {
   assert.ok(!r.visible.includes("cost"));
   const item = r.items.find((i) => i.id === "cost");
   assert.equal(item?.available, false);
-  // availableWidgetIds: a required capability gates the id; none required ⇒ all in.
+  // availableWidgetIds: a required capability OR capability-prefix gates the id.
   const ids = availableWidgetIds(new Set());
-  assert.equal(ids.size, WIDGET_REGISTRY.filter((w) => !w.requiredCapability).length);
+  assert.equal(
+    ids.size,
+    WIDGET_REGISTRY.filter((w) => !w.requiredCapability && !w.requiredCapabilityPrefix).length,
+  );
+  // DASH-4I: BTP-gated widgets appear only when the tenant holds a btp.* capability.
+  assert.ok(!availableWidgetIds(new Set()).has("projects"), "no btp ⇒ no projects");
+  assert.ok(!availableWidgetIds(new Set()).has("chantiers-map"), "no btp ⇒ no chantiers-map");
+  const btp = availableWidgetIds(new Set(["btp.suivi.progress.report"]));
+  assert.ok(btp.has("projects") && btp.has("chantiers-map"), "btp.* ⇒ BTP widgets available");
 });
 
 // --- UNKNOWN_WIDGET_IGNORED -------------------------------------------------

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import DashboardSettings from "@/components/dashboard/DashboardSettings";
 import { HERMES_DEFAULT_PREFERENCES } from "@/lib/dashboard/preferences";
+import { availableProfileIds } from "@/lib/dashboard/profiles";
 import { availableWidgetIds } from "@/lib/dashboard/widgets";
 import { getCatalog, getLanguageDef, resolveLanguage } from "@/lib/i18n";
 import { I18nProvider } from "@/lib/i18n/I18nProvider";
@@ -34,6 +35,11 @@ export default async function DashboardSettingsPage() {
       : [],
   );
   const available = [...availableWidgetIds(capabilityKeys)];
+  // DASH-4I: only the profiles offered to this tenant (capability/vertical-filtered).
+  const availableProfiles = availableProfileIds(
+    capabilityKeys,
+    capabilities.ok && capabilities.data.resolutionStatus === "OK",
+  );
   // DASH-4H: the granted capabilities (canonical) offered in the Quick-Actions picker.
   const capabilityList =
     capabilities.ok && capabilities.data.resolutionStatus === "OK"
@@ -49,6 +55,7 @@ export default async function DashboardSettingsPage() {
         <DashboardSettings
           initial={prefs}
           availableWidgets={available}
+          availableProfiles={availableProfiles}
           capabilities={capabilityList}
         />
       </main>

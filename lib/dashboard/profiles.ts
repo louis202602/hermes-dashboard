@@ -52,17 +52,31 @@ export function isProfileId(v: unknown): v is ProfileId {
 }
 
 /**
- * Curated priority widgets per preset — the "focus" of each mode. These ids MUST
- * exist in the widget registry; unknown ids are dropped on build (fail-safe). Every
- * other registry widget is hidden by default in that mode (the user can re-add it).
- * `custom` has no priority list — it is the full standard dashboard.
+ * DASH-4I — extensible PROFILE REGISTRY. Each profile declares its priority widgets
+ * (its "focus"; ids MUST exist in the widget registry — unknown are dropped on build)
+ * and the capability DOMAINS it requires. A profile is offered to a tenant only when it
+ * is generic (no required domain) OR the tenant actually holds a capability in one of
+ * its domains — derived from the real capability action-key namespace (e.g. `btp.*`).
+ * No vertical/industry field exists in the tenant model, so capabilities are the single
+ * source of truth. Adding a vertical's profiles later = append entries here (like the
+ * widget registry); no dashboard code change per client. `custom` = the full dashboard.
  */
-const PRESET_PRIORITY: Record<Exclude<ProfileId, "custom">, string[]> = {
-  direction: ["system-health", "alerts", "cost", "agent-activity", "commercial", "agenda"],
-  commercial: ["commercial", "agenda", "alerts", "tasks", "conversations"],
-  chantier: ["chantiers-map", "agenda", "alerts", "projects", "tasks"],
-  finance: ["cost", "kpis", "commercial", "alerts", "system-health"],
+export type ProfileDef = {
+  id: ProfileId;
+  labelKey: string;
+  priorityWidgets: string[];
+  requiredDomains: string[];
 };
+
+export const PROFILE_REGISTRY: ProfileDef[] = [
+  { id: "direction", labelKey: "profile.direction", priorityWidgets: ["system-health", "alerts", "cost", "agent-activity", "commercial", "agenda"], requiredDomains: [] },
+  { id: "commercial", labelKey: "profile.commercial", priorityWidgets: ["commercial", "agenda", "alerts", "tasks", "conversations"], requiredDomains: [] },
+  { id: "chantier", labelKey: "profile.chantier", priorityWidgets: ["chantiers-map", "agenda", "alerts", "projects", "tasks"], requiredDomains: ["btp"] },
+  { id: "finance", labelKey: "profile.finance", priorityWidgets: ["cost", "kpis", "commercial", "alerts", "system-health"], requiredDomains: [] },
+  { id: "custom", labelKey: "profile.custom", priorityWidgets: [], requiredDomains: [] },
+];
+
+const PROFILE_BY_ID = new Map<ProfileId, ProfileDef>(PROFILE_REGISTRY.map((p) => [p.id, p]));
 
 /** Build a preset layout: priority widgets first & visible, everything else hidden. */
 function presetLayout(priority: string[]): LayoutPreferences {
@@ -81,8 +95,44 @@ function presetLayout(priority: string[]): LayoutPreferences {
 
 /** The Hermès default layout for a profile that the user has never customized. */
 export function presetLayoutFor(id: ProfileId): LayoutPreferences {
-  if (id === "custom") return { ...DEFAULT_LAYOUT };
-  return presetLayout(PRESET_PRIORITY[id]);
+  const priority = PROFILE_BY_ID.get(id)?.priorityWidgets ?? [];
+  if (id === "custom" || priority.length === 0) return { ...DEFAULT_LAYOUT };
+  return presetLayout(priority);
+}
+
+/** First-segment domain of each capability action-key ("btp.suivi.x" → "btp"). Pure. */
+export function deriveCapabilityDomains(capabilityKeys: Iterable<string>): Set<string> {
+  const out = new Set<string>();
+  for (const k of capabilityKeys) {
+    const seg = String(k).split(".")[0];
+    if (seg) out.add(seg);
+  }
+  return out;
+}
+
+/**
+ * Profiles offered to a tenant: generic ones always; a domain-gated profile only when
+ * the tenant holds a capability in that domain. `capabilitiesKnown=false` (snapshot
+ * unavailable) ⇒ fail-open (offer all) so a transient error never hides a profile.
+ * Order follows the registry; `custom` (generic) is always included.
+ */
+export function availableProfileIds(
+  capabilityKeys: Iterable<string>,
+  capabilitiesKnown = true,
+): ProfileId[] {
+  if (!capabilitiesKnown) return PROFILE_REGISTRY.map((p) => p.id);
+  const domains = deriveCapabilityDomains(capabilityKeys);
+  return PROFILE_REGISTRY.filter(
+    (p) => p.requiredDomains.length === 0 || p.requiredDomains.some((d) => domains.has(d)),
+  ).map((p) => p.id);
+}
+
+/** Ensure a candidate profile is currently available; else a deterministic fallback. */
+export function fallbackProfile(candidate: ProfileId, availableIds: ProfileId[]): ProfileId {
+  if (availableIds.includes(candidate)) return candidate;
+  if (availableIds.includes(DEFAULT_PROFILE)) return DEFAULT_PROFILE;
+  if (availableIds.includes("custom")) return "custom";
+  return availableIds[0] ?? DEFAULT_PROFILE;
 }
 
 export type ProfileConfig = {

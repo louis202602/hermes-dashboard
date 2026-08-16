@@ -40,6 +40,12 @@ export type WidgetDef = {
   span: "half" | "full";
   /** Optional capability (canonical action key). Absent ⇒ always available. */
   requiredCapability?: string;
+  /**
+   * DASH-4I — optional capability-DOMAIN gate (action-key prefix, e.g. "btp."). The
+   * widget is available when the tenant holds ANY capability starting with it — so
+   * vertical-specific widgets vanish for tenants of another vertical. Absent ⇒ no gate.
+   */
+  requiredCapabilityPrefix?: string;
   /** Shared snapshots this widget reads (doc + no-extra-fetch contract). */
   snapshotKeys: string[];
   /** Hidden by default (opt-in via the gallery) — e.g. heavy/self-fetching widgets. */
@@ -64,7 +70,7 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: "approvals", label: "Approbations à traiter", category: "alerts", supportedSizes: ["small", "medium"], defaultSize: "medium", span: "half", snapshotKeys: [] },
   { id: "tasks", label: "Priorités opérationnelles", category: "alerts", supportedSizes: ["small", "medium"], defaultSize: "medium", span: "half", snapshotKeys: ["priorities"] },
   { id: "conversations", label: "Activité récente", category: "general", supportedSizes: ["medium", "large"], defaultSize: "large", span: "full", snapshotKeys: ["conversations"] },
-  { id: "projects", label: "Portefeuille projets", category: "btp", supportedSizes: ["large"], defaultSize: "large", span: "full", snapshotKeys: ["projects"] },
+  { id: "projects", label: "Portefeuille projets", category: "btp", supportedSizes: ["large"], defaultSize: "large", span: "full", snapshotKeys: ["projects"], requiredCapabilityPrefix: "btp." },
   { id: "commercial", label: "Activité commerciale", category: "commercial", supportedSizes: ["medium", "large"], defaultSize: "large", span: "full", snapshotKeys: ["commercial"] },
   { id: "quick-actions", label: "Actions disponibles", category: "general", supportedSizes: ["medium", "large"], defaultSize: "large", span: "full", snapshotKeys: ["capabilities"] },
   { id: "system-status", label: "Observabilité", category: "system", supportedSizes: ["medium", "large"], defaultSize: "large", span: "full", snapshotKeys: ["observability"] },
@@ -74,7 +80,7 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: "cost", label: "Coûts & gouvernance", category: "finance", supportedSizes: ["medium", "large"], defaultSize: "large", span: "full", snapshotKeys: ["cost"] },
   // CARTE-1: opt-in (default hidden) — it lazy-loads MapLibre + self-fetches its data,
   // so it costs nothing on the dashboard until a user adds it from the gallery.
-  { id: "chantiers-map", label: "Carte des chantiers", category: "chantiers", supportedSizes: ["medium", "large"], defaultSize: "large", span: "full", snapshotKeys: ["chantiersMap"], defaultHidden: true },
+  { id: "chantiers-map", label: "Carte des chantiers", category: "chantiers", supportedSizes: ["medium", "large"], defaultSize: "large", span: "full", snapshotKeys: ["chantiersMap"], defaultHidden: true, requiredCapabilityPrefix: "btp." },
 ];
 
 export const LAYOUT_SCHEMA_VERSION = 1;
@@ -164,9 +170,14 @@ export function clampWidgetSize(def: WidgetDef, size: unknown): WidgetSize {
 
 /** Ids available to this tenant = capability satisfied (or no capability required). */
 export function availableWidgetIds(capabilityKeys: Set<string>): Set<string> {
+  const keys = [...capabilityKeys];
   const out = new Set<string>();
   for (const w of WIDGET_REGISTRY) {
-    if (!w.requiredCapability || capabilityKeys.has(w.requiredCapability)) out.add(w.id);
+    const exactOk = !w.requiredCapability || capabilityKeys.has(w.requiredCapability);
+    const prefixOk =
+      !w.requiredCapabilityPrefix ||
+      keys.some((k) => k.startsWith(w.requiredCapabilityPrefix as string));
+    if (exactOk && prefixOk) out.add(w.id);
   }
   return out;
 }

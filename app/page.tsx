@@ -24,8 +24,10 @@ import {
 } from "@/lib/dashboard/widgets";
 import {
   PROFILE_IDS,
+  availableProfileIds,
   clampProfiles,
   effectiveProfileLayout,
+  fallbackProfile,
   profileWallpaperFields,
 } from "@/lib/dashboard/profiles";
 import { resolveHomeProfile } from "@/lib/dashboard/shortcuts";
@@ -143,9 +145,20 @@ export default async function HomePage() {
   // profile only SELECTS/orders existing widgets — the capability filter still applies.
   const globalLayout = clampLayout(prefs.layout);
   const profiles = clampProfiles(prefs.profiles);
-  // DASH-4H: the opening screen — resume the last-used mode (openLastMode) or a fixed
-  // default profile (user-scoped, multi-device via the prefs row).
-  const activeProfile = resolveHomeProfile(prefs.behavior, profiles, globalLayout);
+  // DASH-4I: capability-derived vertical → the PROFILES offered to this tenant. A
+  // domain-gated profile (e.g. Chantier / btp.*) is hidden when the tenant lacks that
+  // capability domain; generic + custom always. Fail-open when capabilities are unknown.
+  const capabilityKeys = new Set(
+    capabilities.ok ? capabilities.data.capabilities.map((c) => c.actionKey) : [],
+  );
+  const capabilitiesKnown = capabilities.ok && capabilities.data.resolutionStatus === "OK";
+  const availableProfiles = availableProfileIds(capabilityKeys, capabilitiesKnown);
+  // DASH-4H opening screen (last mode / fixed profile) + DASH-4I fallback: never open a
+  // profile that isn't offered to this tenant (clean fallback → preferred → custom).
+  const activeProfile = fallbackProfile(
+    resolveHomeProfile(prefs.behavior, profiles, globalLayout),
+    availableProfiles,
+  );
   const layout = effectiveProfileLayout(profiles, activeProfile, globalLayout);
   // DASH-4E: sign every profile's user-image wallpaper server-side (short-TTL signed
   // URL, ownership re-checked) so switching profiles shows the right fond instantly.
@@ -161,11 +174,6 @@ export default async function HomePage() {
       const url = await signUserWallpaper(ref);
       if (url) wallpaperUrls[id] = url;
     }),
-  );
-  const capabilityKeys = new Set(
-    capabilities.ok
-      ? capabilities.data.capabilities.map((c) => c.actionKey)
-      : [],
   );
   const available = availableWidgetIds(capabilityKeys);
   // DASH-4G COST-FIRST: only fetch enriched worksite weather when a widget that
@@ -278,6 +286,7 @@ export default async function HomePage() {
       availableWidgets={[...available]}
       profiles={profiles}
       activeProfile={activeProfile}
+      availableProfiles={availableProfiles}
       wallpaperUrls={wallpaperUrls}
       worksiteWeather={worksiteWeather}
     />
