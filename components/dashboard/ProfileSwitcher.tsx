@@ -2,7 +2,7 @@
 
 import { LayoutGrid } from "lucide-react";
 
-import { PROFILE_IDS, type ProfileId } from "@/lib/dashboard/profiles";
+import { PROFILE_IDS, profileDef, type ProfileId } from "@/lib/dashboard/profiles";
 import type { MessageKey } from "@/lib/i18n/languages";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -37,6 +37,7 @@ export default function ProfileSwitcher({
       <div className="profile-switcher-chips">
         {shown.map((id) => {
           const label = names[id]?.trim() || t(`profile.${id}` as MessageKey);
+          const descKey = profileDef(id)?.descriptionKey;
           const isActive = id === active;
           return (
             <button
@@ -44,6 +45,7 @@ export default function ProfileSwitcher({
               type="button"
               className={`profile-chip${isActive ? " is-active" : ""}`}
               aria-pressed={isActive}
+              title={descKey ? t(descKey as MessageKey) : undefined}
               onClick={() => onSelect(id)}
             >
               {label}

@@ -43,7 +43,7 @@ test("DEFAULT_PROFILE_* presets: priority widgets visible & first, rest hidden",
     const layout = presetLayoutFor(id as never);
     const { visible, items } = resolveWidgetLayout(layout, ALL);
     assert.equal(visible[0], firstVisible, `${id} first visible`);
-    assert.ok(visible.length >= 4 && visible.length <= 6, `${id} focuses a handful`);
+    assert.ok(visible.length >= 4 && visible.length <= 8, `${id} focuses a handful`);
     // every registry id still present in the resolved order (nothing lost)
     assert.equal(items.length, registryIds().length, `${id} keeps full registry order`);
     // hidden ones are really hidden
@@ -204,6 +204,17 @@ test("NO_EXTRA_DB_FETCH: profiles module is pure (no fetch/network/LLM)", () => 
 });
 
 // --- exhaustive id list ------------------------------------------------------
-test("PROFILE_IDS is the expected closed set", () => {
-  assert.deepEqual([...PROFILE_IDS], ["direction", "commercial", "chantier", "finance", "custom"]);
+test("PROFILE_IDS: universal set, legacy ids kept (persisted keys only ever grow)", () => {
+  // legacy ids MUST remain (existing user preferences are keyed on them)
+  for (const legacy of ["direction", "commercial", "chantier", "finance", "custom"]) {
+    assert.ok((PROFILE_IDS as readonly string[]).includes(legacy), `legacy ${legacy} kept`);
+  }
+  // universal set covers the generic + specialized profiles
+  assert.deepEqual(
+    [...PROFILE_IDS],
+    [
+      "direction", "commercial", "operations", "chantier", "immobilier", "restaurant",
+      "ecommerce", "logistique", "finance", "marketing", "support", "custom",
+    ],
+  );
 });

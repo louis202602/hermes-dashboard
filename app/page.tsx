@@ -24,8 +24,9 @@ import {
 } from "@/lib/dashboard/widgets";
 import {
   PROFILE_IDS,
-  availableProfileIds,
+  availableProfiles,
   clampProfiles,
+  deriveCapabilityTokens,
   effectiveProfileLayout,
   fallbackProfile,
   profileWallpaperFields,
@@ -145,19 +146,22 @@ export default async function HomePage() {
   // profile only SELECTS/orders existing widgets — the capability filter still applies.
   const globalLayout = clampLayout(prefs.layout);
   const profiles = clampProfiles(prefs.profiles);
-  // DASH-4I: capability-derived vertical → the PROFILES offered to this tenant. A
-  // domain-gated profile (e.g. Chantier / btp.*) is hidden when the tenant lacks that
-  // capability domain; generic + custom always. Fail-open when capabilities are unknown.
+  // DASH-4I: CAPABILITY-FIRST — the tenant's granted action keys derive functional
+  // capability tokens (worksites/sales/finance/…), and the profiles offered follow from
+  // those tokens (no vertical `if/else`). A profile a tenant can't use is never listed;
+  // generic Direction needs any exploitable capability; custom is always offered.
+  // Fail-open when capabilities are unknown so a transient error never hides a profile.
   const capabilityKeys = new Set(
     capabilities.ok ? capabilities.data.capabilities.map((c) => c.actionKey) : [],
   );
   const capabilitiesKnown = capabilities.ok && capabilities.data.resolutionStatus === "OK";
-  const availableProfiles = availableProfileIds(capabilityKeys, capabilitiesKnown);
+  const capabilityTokens = deriveCapabilityTokens(capabilityKeys);
+  const offeredProfiles = availableProfiles(capabilityTokens, capabilitiesKnown);
   // DASH-4H opening screen (last mode / fixed profile) + DASH-4I fallback: never open a
   // profile that isn't offered to this tenant (clean fallback → preferred → custom).
   const activeProfile = fallbackProfile(
     resolveHomeProfile(prefs.behavior, profiles, globalLayout),
-    availableProfiles,
+    offeredProfiles,
   );
   const layout = effectiveProfileLayout(profiles, activeProfile, globalLayout);
   // DASH-4E: sign every profile's user-image wallpaper server-side (short-TTL signed
@@ -286,7 +290,7 @@ export default async function HomePage() {
       availableWidgets={[...available]}
       profiles={profiles}
       activeProfile={activeProfile}
-      availableProfiles={availableProfiles}
+      availableProfiles={offeredProfiles}
       wallpaperUrls={wallpaperUrls}
       worksiteWeather={worksiteWeather}
     />

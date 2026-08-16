@@ -4665,7 +4665,9 @@ html[data-reduce-transparency="1"] .context-bar { backdrop-filter: none; backgro
   font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase;
   color: var(--text-secondary);
 }
-.profile-switcher-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+/* min-width:0 + flex-grow lets the chip row shrink to the available width and WRAP
+   (instead of overflowing) when many profiles are offered on a narrow screen. */
+.profile-switcher-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; flex: 1 1 auto; }
 .profile-chip {
   padding: 6px 14px; border-radius: var(--radius-pill);
   border: 1px solid var(--border); background: var(--surface-soft);
