@@ -1,8 +1,8 @@
 import "server-only";
 
-import { isActiveStatus } from "@/lib/dashboard/agenda";
 import {
   classifyWorksiteWeather,
+  selectWorksitesForWeather,
   type WorksiteWeather,
 } from "@/lib/dashboard/worksiteWeather";
 import { getChantiersMap } from "@/services/hermes/chantierMap";
@@ -15,10 +15,10 @@ import { getCurrentWeather } from "@/services/hermes/contextBar";
  *
  * COST-FIRST: exactly ONE new DB read (the chantier-geo RPC); upstream weather is
  * fetched once per UNIQUE coordinate (deduped, cached, shared across worksites and
- * viewers) — no polling, no schedule. Only ACTIVE worksites are considered, capped.
+ * viewers) — no polling, no schedule. Only ACTIVE worksites are considered, prioritised
+ * by imminence and capped (`selectWorksitesForWeather`). No active geocoded worksite ⇒
+ * ZERO Open-Meteo calls. Any upstream failure is skipped (never fabricated, no retry).
  */
-
-const MAX_ACTIVE_WORKSITES = 16;
 
 /** ~1 km bucket so nearby worksites share one cached upstream call. */
 function coordKey(lat: number, lng: number): string {
@@ -29,9 +29,7 @@ export async function getWorksiteWeather(): Promise<WorksiteWeather[]> {
   const map = await getChantiersMap();
   if (!map.ok || map.data.resolutionStatus !== "OK") return [];
 
-  const active = map.data.points
-    .filter((p) => isActiveStatus(p.status))
-    .slice(0, MAX_ACTIVE_WORKSITES);
+  const active = selectWorksitesForWeather(map.data.points);
   if (active.length === 0) return [];
 
   // One upstream weather call per UNIQUE coordinate (deduped, cached).

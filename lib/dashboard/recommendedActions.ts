@@ -220,7 +220,10 @@ export function buildRecommendedActions(
     }
   }
 
-  // Devis à relancer (aggregate count — no per-devis list exists) ----------
+  // Devis à relancer — CANONICAL server rule (get_dashboard_commercial.to_follow_up):
+  // sent (sent_date not null) AND no reply (response_date null) AND validity expired
+  // (date_validite_fin < tenant-today). We reuse that count; no client-side day
+  // threshold, no hidden assumption. -------------------------------------------------
   if (commercial && commercial.toFollowUp > 0) {
     out.push({
       id: "devis-followup",

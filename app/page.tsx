@@ -20,6 +20,7 @@ import {
   clampLayout,
   needsWeather,
   resolveContextConfig,
+  resolveWidgetLayout,
 } from "@/lib/dashboard/widgets";
 import {
   PROFILE_IDS,
@@ -92,7 +93,6 @@ export default async function HomePage() {
     actionStats,
     commercial,
     preferencesResult,
-    worksiteWeather,
   ] = await Promise.all([
     getActiveTenantIdentity(),
     getPublicKpis(),
@@ -112,9 +112,6 @@ export default async function HomePage() {
     getAgentActionStats(),
     getDashboardCommercial(),
     getDashboardUserPreferences(),
-    // DASH-4G: enriched per-worksite weather — reuses existing geocoded coords +
-    // the cached free Open-Meteo integration (1 geo read; weather deduped & cached).
-    getWorksiteWeather(),
   ]);
 
   // --- DASH-1 context bar assembly (deterministic clock + cached weather) ---
@@ -169,6 +166,18 @@ export default async function HomePage() {
       : [],
   );
   const available = availableWidgetIds(capabilityKeys);
+  // DASH-4G COST-FIRST: only fetch enriched worksite weather when a widget that
+  // consumes it is actually visible in the active profile. If both the daily summary
+  // and the recommended actions are hidden, we skip the geo read AND every Open-Meteo
+  // call — no network cost for data nothing would display.
+  const resolvedWidgets = resolveWidgetLayout(layout, available);
+  const weatherWidgetsVisible = resolvedWidgets.items.some(
+    (it) =>
+      (it.id === "daily-summary" || it.id === "recommended-actions") &&
+      it.available &&
+      !it.hidden,
+  );
+  const worksiteWeather = weatherWidgetsVisible ? await getWorksiteWeather() : [];
   const contextConfig = resolveContextConfig(layout.context);
   // DASH i18n: active UI language from the canonical user preference (→ tenant → default).
   const lang = resolveLanguage(reg.language, tenantSettings.locale);

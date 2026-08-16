@@ -13,6 +13,8 @@ import type {
 import {
   atRiskWorksites,
   classifyWorksiteWeather,
+  MAX_WORKSITE_WEATHER_LOCATIONS,
+  selectWorksitesForWeather,
   worksiteRiskLevel,
   WORKSITE_WEATHER_THRESHOLDS,
   type WorksiteWeather,
@@ -98,6 +100,22 @@ test("worksiteRiskLevel + atRiskWorksites: HIGH dominates, sorted HIGH first", (
   assert.deepEqual(at.map((w) => w.chantierId), ["windy", "warm"], "at-risk only, HIGH first");
 });
 
+test("selectWorksitesForWeather: active-only, imminence-sorted, capped", () => {
+  const pts = [
+    { status: "TERMINE", dateDebut: null, dateFin: "2026-08-10" },
+    { status: "EN_COURS", dateDebut: "2026-08-01", dateFin: "2026-08-20" },
+    { status: "EN_COURS", dateDebut: "2026-08-05", dateFin: "2026-08-12" },
+    { status: "ANNULE", dateDebut: null, dateFin: "2026-08-11" },
+    { status: null, dateDebut: null, dateFin: null }, // active (null status), no dates ⇒ last
+  ];
+  const sel = selectWorksitesForWeather(pts);
+  assert.equal(sel.length, 3, "TERMINE + ANNULE excluded");
+  assert.deepEqual(sel.map((p) => p.dateFin), ["2026-08-12", "2026-08-20", null], "soonest end first, nulls last");
+  // cap
+  const many = Array.from({ length: 40 }, (_, i) => ({ status: "EN_COURS", dateDebut: null, dateFin: `2026-09-${String((i % 28) + 1).padStart(2, "0")}` }));
+  assert.equal(selectWorksitesForWeather(many).length, MAX_WORKSITE_WEATHER_LOCATIONS);
+});
+
 // ============================ DAILY SUMMARY ================================
 test("buildDailySummary: synthesises counts, next event, weather", () => {
   const s = buildDailySummary({
@@ -175,6 +193,27 @@ test("buildRecommendedActions: deterministic rules, priority-sorted, with reason
   assert.equal(actions[0].priority, "CRITICAL");
   const ranks = actions.map((a) => ["CRITICAL", "HIGH", "MEDIUM", "LOW"].indexOf(a.priority));
   assert.deepEqual(ranks, [...ranks].sort((x, y) => x - y), "sorted by priority");
+});
+
+test("RECOMMENDATION_PRIORITY: every CRITICAL precedes every HIGH (stable, deterministic)", () => {
+  // Only a HIGH source (approvals) + a CRITICAL source (budget hard) → CRITICAL first.
+  const a = buildRecommendedActions({
+    agenda: null,
+    priorities: priorities({ pendingApprovals: 1 }),
+    alerts: null,
+    cost: cost("HARD_LIMIT"),
+    commercial: null,
+    worksiteWeather: null,
+  });
+  const firstHigh = a.findIndex((x) => x.priority === "HIGH");
+  const lastCritical = a.map((x) => x.priority).lastIndexOf("CRITICAL");
+  assert.ok(lastCritical < firstHigh, "all CRITICAL before any HIGH");
+  // determinism: same input ⇒ identical order
+  const b = buildRecommendedActions({
+    agenda: null, priorities: priorities({ pendingApprovals: 1 }), alerts: null,
+    cost: cost("HARD_LIMIT"), commercial: null, worksiteWeather: null,
+  });
+  assert.deepEqual(a.map((x) => x.id), b.map((x) => x.id), "stable order");
 });
 
 test("buildRecommendedActions: budget state → priority; empty inputs ⇒ no actions", () => {

@@ -7,13 +7,52 @@
  * EXPLICIT, documented thresholds relevant to BTP outdoor work.
  */
 
-/** Documented thresholds (BTP outdoor-work relevance). Tune here, single source. */
+import { isActiveStatus } from "@/lib/dashboard/agenda";
+
+/**
+ * Documented thresholds (BTP outdoor-work relevance) in CANONICAL internal units
+ * (°C, km/h, mm) — the SAME units `getCurrentWeather` returns (Open-Meteo defaults).
+ * Business rules ALWAYS compare in these units; any °F / mph display conversion happens
+ * only at render, never before this check. Tune here — single source of truth.
+ */
 export const WORKSITE_WEATHER_THRESHOLDS = {
   heavyRainMm: 4, // ≥ 4 mm current precipitation — disrupts outdoor work
   strongWindKph: 40, // ≥ 40 km/h — crane / scaffold / lifting safety
   heatC: 33, // ≥ 33 °C — heat stress
   frostC: 0, // ≤ 0 °C — frost halts concrete / masonry
 } as const;
+
+/** Hard ceiling on distinct worksites we fetch weather for (bounds a big tenant). */
+export const MAX_WORKSITE_WEATHER_LOCATIONS = 16;
+
+export type WorksiteSelectable = {
+  status: string | null;
+  dateDebut: string | null;
+  dateFin: string | null;
+};
+
+/**
+ * ACTIVE_WORKSITE_RULE — a worksite qualifies for weather when its status is ACTIVE
+ * (`isActiveStatus`: not DONE / TERMINÉ / ANNULÉ / REFUSÉ …). Invalid/0,0 coordinates
+ * are already dropped upstream by `parseChantiersMap`. Among the actives we prioritise
+ * the most time-relevant (soonest end date first, nulls last, then soonest start) and
+ * cap at `max`, so a large tenant never triggers hundreds of weather calls.
+ */
+export function selectWorksitesForWeather<T extends WorksiteSelectable>(
+  points: T[],
+  max: number = MAX_WORKSITE_WEATHER_LOCATIONS,
+): T[] {
+  const cmp = (a: string | null, b: string | null): number => {
+    if (a === b) return 0;
+    if (!a) return 1; // nulls last
+    if (!b) return -1;
+    return a < b ? -1 : 1;
+  };
+  return points
+    .filter((p) => isActiveStatus(p.status))
+    .sort((a, b) => cmp(a.dateFin, b.dateFin) || cmp(a.dateDebut, b.dateDebut))
+    .slice(0, Math.max(0, max));
+}
 
 export type WeatherRiskKind = "PLUIE_FORTE" | "VENT_FORT" | "CHALEUR" | "FROID";
 export type WeatherRiskLevel = "WARNING" | "HIGH";
