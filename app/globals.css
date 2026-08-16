@@ -4860,3 +4860,212 @@ html[data-reduce-transparency="1"] .context-bar { backdrop-filter: none; backgro
 
 .settings-wp-upload { display: inline-block; cursor: pointer; }
 .settings-wp-upload input { display: none; }
+
+/* ============================================================================
+   DASH-4F — Notification center. Glass surface readable over ANY wallpaper /
+   theme (opaque-leaning --surface-strong + blur); severity colours stay
+   semantic (never derived from the wallpaper). Popover on desktop/tablet,
+   full-screen sheet on mobile. RTL-safe via logical properties. No animation
+   beyond a guarded fade (reduced-motion safe).
+   ============================================================================ */
+
+/* Bell badge (header). */
+.hos-notif-btn { position: relative; }
+.hos-notif-badge {
+  position: absolute;
+  top: 1px;
+  inset-inline-end: 1px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  background: var(--danger);
+  border-radius: var(--radius-pill);
+  border: 1.5px solid var(--bg-primary);
+  pointer-events: none;
+}
+
+/* Overlay + panel. */
+.notif-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+  padding: 62px 18px 18px;
+  background: rgba(3, 8, 16, 0.32);
+}
+.notif-panel {
+  width: min(400px, 100%);
+  max-height: min(78vh, 660px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-strong);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.34);
+  color: var(--text-primary);
+  overflow: hidden;
+  animation: notif-in 160ms ease-out;
+}
+@keyframes notif-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.notif-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.notif-head h2 { margin: 0; font-size: 15px; font-weight: 650; }
+.notif-head-actions { display: flex; align-items: center; gap: 6px; }
+.notif-markall {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+}
+.notif-markall:hover:not(:disabled) { background: var(--surface-hover); }
+.notif-markall:disabled { color: var(--text-muted); cursor: default; }
+
+.notif-filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.notif-filter {
+  font-size: 12px;
+  padding: 5px 11px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.notif-filter:hover { background: var(--surface-hover); }
+.notif-filter.is-active {
+  background: var(--accent-soft);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.notif-empty {
+  padding: 34px 18px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.notif-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+.notif-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 11px 12px;
+  border-radius: var(--radius-md);
+}
+.notif-item + .notif-item { margin-top: 2px; }
+.notif-item:hover { background: var(--surface-hover); }
+.notif-item.is-read { opacity: 0.6; }
+.notif-sev { flex: 0 0 auto; margin-top: 1px; color: var(--accent); }
+.notif-item.is-critical .notif-sev { color: var(--danger); }
+.notif-item.is-high .notif-sev { color: color-mix(in srgb, var(--danger) 55%, var(--warning)); }
+.notif-item.is-warning .notif-sev { color: var(--warning); }
+.notif-item.is-info .notif-sev { color: var(--accent); }
+.notif-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.notif-item-top { display: flex; align-items: center; gap: 8px; }
+.notif-item-title { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.notif-unread-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+}
+.notif-detail { font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.notif-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.notif-cat { text-transform: uppercase; letter-spacing: 0.04em; }
+.notif-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.notif-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.notif-link:hover { text-decoration: underline; }
+.notif-read-btn {
+  display: inline-flex;
+  padding: 4px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.notif-read-btn:hover { color: var(--accent); background: var(--surface-hover); }
+
+/* Mobile: full-screen sheet. The mark-all button collapses to its icon so the
+   close (X) always stays on screen. */
+@media (max-width: 640px) {
+  .notif-overlay { padding: 0; align-items: stretch; justify-content: stretch; }
+  .notif-panel {
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border: none;
+    border-radius: 0;
+  }
+  .notif-head h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .notif-markall-label { display: none; }
+}
+
+/* Respect reduced motion / the reduce-transparency preference. */
+html[data-reduce-motion="1"] .notif-panel { animation: none; }
+html[data-reduce-transparency="1"] .notif-panel {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--bg-primary);
+}

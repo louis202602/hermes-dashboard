@@ -71,11 +71,30 @@ export type Appearance = {
   reduceTransparency: boolean;
 };
 
+/**
+ * DASH-4F — per-user notification read-state cursor. A watermark (`lastSeenAt`) marks
+ * everything up to that instant as read; `readIds` is a BOUNDED set for individually
+ * marked items and for signals without a timestamp (never an unbounded history). Lives
+ * inside the existing `behavior` JSONB — no new table, no new column, no new RPC.
+ */
+export type NotificationCursor = {
+  lastSeenAt: string | null; // ISO instant; notifications with ts <= this are read
+  readIds: string[]; // bounded list of canonical ids marked read individually
+};
+
+export const MAX_NOTIFICATION_READ_IDS = 200;
+
+export const EMPTY_NOTIFICATION_CURSOR: NotificationCursor = {
+  lastSeenAt: null,
+  readIds: [],
+};
+
 export type Behavior = {
   sidebarCollapsed: boolean;
   animations: boolean;
   openLastMode: boolean;
   defaultWidget: string | null;
+  notifications: NotificationCursor;
 };
 
 /** User overrides of the DASH-1 regional axes. `null` ⇒ inherit tenant default. */
@@ -129,6 +148,7 @@ export const HERMES_DEFAULT_BEHAVIOR: Behavior = {
   animations: true,
   openLastMode: false,
   defaultWidget: null,
+  notifications: { lastSeenAt: null, readIds: [] },
 };
 
 export const HERMES_DEFAULT_REGIONAL: RegionalOverride = {
@@ -237,6 +257,32 @@ export function clampAppearance(input: unknown): Appearance {
   };
 }
 
+/**
+ * Fail-safe clamp for the notification cursor: a valid ISO-ish `lastSeenAt` (or null)
+ * and a de-duplicated, length-bounded `readIds` (garbage / oversized ids dropped). The
+ * bound guarantees the stored JSONB can never grow without limit.
+ */
+export function clampNotificationCursor(input: unknown): NotificationCursor {
+  const c = (input ?? {}) as Record<string, unknown>;
+  const lastSeenAt =
+    typeof c.lastSeenAt === "string" &&
+    c.lastSeenAt.length > 0 &&
+    c.lastSeenAt.length <= 40
+      ? c.lastSeenAt
+      : null;
+  const raw = Array.isArray(c.readIds) ? c.readIds : [];
+  const readIds: string[] = [];
+  const seen = new Set<string>();
+  for (const v of raw) {
+    if (typeof v !== "string" || v.length === 0 || v.length > 200) continue;
+    if (seen.has(v)) continue;
+    seen.add(v);
+    readIds.push(v);
+    if (readIds.length >= MAX_NOTIFICATION_READ_IDS) break;
+  }
+  return { lastSeenAt, readIds };
+}
+
 export function clampBehavior(input: unknown): Behavior {
   const b = (input ?? {}) as Record<string, unknown>;
   const d = HERMES_DEFAULT_BEHAVIOR;
@@ -245,6 +291,7 @@ export function clampBehavior(input: unknown): Behavior {
     animations: bool(b.animations, d.animations),
     openLastMode: bool(b.openLastMode, d.openLastMode),
     defaultWidget: strOrNull(b.defaultWidget),
+    notifications: clampNotificationCursor(b.notifications),
   };
 }
 

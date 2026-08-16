@@ -6,12 +6,14 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 import { HermesLogoSymbol } from "@/components/common/HermesLogo";
+import NotificationCenter from "@/components/dashboard/NotificationCenter";
 import { saveDashboardPreferencesAction } from "@/app/actions/dashboard-preferences";
 import {
   applyAppearance,
   resolveThemeAttr,
   writeAppearanceCookie,
 } from "@/lib/dashboard/applyAppearance";
+import { badgeText, unreadCount, type Notification } from "@/lib/dashboard/notifications";
 import {
   HERMES_DEFAULT_APPEARANCE,
   PREFERENCES_SCHEMA_VERSION,
@@ -24,6 +26,12 @@ type HeaderProps = {
   userEmail?: string;
   appearance?: Appearance;
   preferencesVersion?: number;
+  // DASH-4F — notification center (derived client-side from already-loaded alerts).
+  notifications?: Notification[];
+  visibleWidgetIds?: string[];
+  locale?: string;
+  onMarkAllRead?: () => void;
+  onMarkRead?: (id: string) => void;
 };
 
 function initials(email: string): string {
@@ -38,12 +46,20 @@ export default function Header({
   userEmail,
   appearance = HERMES_DEFAULT_APPEARANCE,
   preferencesVersion = 0,
+  notifications = [],
+  visibleWidgetIds = [],
+  locale = "fr-FR",
+  onMarkAllRead,
+  onMarkRead,
 }: HeaderProps) {
   const email = userEmail ?? "";
   const { t } = useI18n();
   const router = useRouter();
   const [appr, setAppr] = useState<Appearance>(appearance);
+  const [notifOpen, setNotifOpen] = useState(false);
   const versionRef = useRef<number>(preferencesVersion);
+  const unread = unreadCount(notifications);
+  const badge = badgeText(unread);
   // Effective light/dark for the icon (resolves auto/named themes at click time).
   const isLight = resolveThemeAttr(appr.theme) === "light";
 
@@ -110,18 +126,41 @@ export default function Header({
 
         <button
           type="button"
-          className="hos-icon-btn"
-          aria-label={t("header.notifications")}
-          disabled
-          title={t("header.notifications.soon")}
+          className="hos-icon-btn hos-notif-btn"
+          aria-label={
+            unread > 0
+              ? t("notifications.badgeAria", { count: String(unread) })
+              : t("header.notifications")
+          }
+          aria-haspopup="dialog"
+          aria-expanded={notifOpen}
+          onClick={() => setNotifOpen((v) => !v)}
         >
           <Bell size={19} strokeWidth={1.8} />
+          {badge ? (
+            <span className="hos-notif-badge" aria-hidden>
+              {badge}
+            </span>
+          ) : null}
         </button>
 
         <span className="hos-userchip" title={email || undefined}>
           <span className="hos-avatar sm">{email ? initials(email) : "?"}</span>
         </span>
       </div>
+
+      {notifOpen ? (
+        <NotificationCenter
+          notifications={notifications}
+          visibleWidgetIds={visibleWidgetIds}
+          locale={locale}
+          onClose={() => setNotifOpen(false)}
+          onMarkAllRead={() => {
+            onMarkAllRead?.();
+          }}
+          onMarkRead={(id) => onMarkRead?.(id)}
+        />
+      ) : null}
     </header>
   );
 }
