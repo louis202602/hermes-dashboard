@@ -1,3 +1,5 @@
+"use client";
+
 import { CalendarClock, CalendarX2, Clock } from "lucide-react";
 
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
@@ -7,6 +9,7 @@ import {
   type AgendaEvent,
   type DashboardAgenda,
 } from "@/lib/dashboard/agenda";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { ServiceResult } from "@/types/hermes";
 
 type Props = {
@@ -15,12 +18,13 @@ type Props = {
 };
 
 function Frame({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   return (
     <section className="dashboard-card agenda-card">
       <div className="dashboard-card-header">
         <div>
-          <span className="panel-eyebrow">AGENDA</span>
-          <h3>Agenda du jour</h3>
+          <span className="panel-eyebrow">{t("agenda.eyebrow")}</span>
+          <h3>{t("agenda.title")}</h3>
         </div>
         <ProvenanceBadge provenance="REAL" />
       </div>
@@ -47,12 +51,12 @@ function eventTime(
 }
 
 export default function AgendaPanel({ agenda, locale }: Props) {
+  const { t } = useI18n();
+
   if (!agenda.ok || agenda.data.resolutionStatus !== "OK") {
     return (
       <Frame>
-        <p className="agenda-empty">
-          L’agenda est indisponible pour le moment.
-        </p>
+        <p className="agenda-empty">{t("agenda.unavailable")}</p>
       </Frame>
     );
   }
@@ -66,20 +70,20 @@ export default function AgendaPanel({ agenda, locale }: Props) {
       <div className="agenda-summary">
         <div>
           <strong>{summary.today}</strong>
-          <span>aujourd’hui</span>
+          <span>{t("agenda.today")}</span>
         </div>
         <div>
           <strong>{summary.total}</strong>
-          <span>à venir</span>
+          <span>{t("agenda.upcoming")}</span>
         </div>
         <div className={summary.overdue > 0 ? "is-overdue" : undefined}>
           <strong>{summary.overdue}</strong>
-          <span>en retard</span>
+          <span>{t("agenda.overdue")}</span>
         </div>
       </div>
 
       {shown.length === 0 ? (
-        <p className="agenda-empty">Aucun événement planifié à venir.</p>
+        <p className="agenda-empty">{t("agenda.empty")}</p>
       ) : (
         <div className="agenda-list">
           {shown.map((ev) => {
@@ -97,11 +101,11 @@ export default function AgendaPanel({ agenda, locale }: Props) {
                   ) : (
                     <CalendarClock size={15} strokeWidth={1.9} />
                   )}
-                  <span>{time ?? when ?? "—"}</span>
+                  <span>{time ?? when ?? t("common.none")}</span>
                 </span>
                 <span className="agenda-copy">
                   <strong>{ev.title}</strong>
-                  <span>{ev.subtitle ?? "—"}</span>
+                  <span>{ev.subtitle ?? t("common.none")}</span>
                 </span>
                 {when ? <span className="agenda-rel">{when}</span> : null}
               </div>
@@ -112,7 +116,7 @@ export default function AgendaPanel({ agenda, locale }: Props) {
 
       {unavailable.length > 0 ? (
         <p className="agenda-footer-note">
-          Sources partiellement indisponibles : {unavailable.join(", ")}.
+          {t("agenda.partialSources", { sources: unavailable.join(", ") })}
         </p>
       ) : null}
     </Frame>

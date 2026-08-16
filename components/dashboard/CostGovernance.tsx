@@ -1,3 +1,5 @@
+"use client";
+
 import {
   AlertOctagon,
   Ban,
@@ -9,6 +11,8 @@ import {
 } from "lucide-react";
 
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/locales/fr";
 import type {
   CostGovernanceSnapshot,
   CostLimitState,
@@ -18,14 +22,6 @@ import type {
 
 type CostGovernanceProps = {
   cost: ServiceResult<CostGovernanceSnapshot>;
-};
-
-const STATE_LABEL: Record<CostLimitState, string> = {
-  NORMAL: "Normal",
-  WARNING: "Alerte",
-  SOFT_LIMIT: "Dépassement (souple)",
-  HARD_LIMIT: "Bloqué (budget)",
-  BLOCKED: "Bloqué (quota)",
 };
 
 function stateTone(state: CostLimitState): string {
@@ -66,16 +62,17 @@ function Frame({
   state?: CostLimitState;
   children: React.ReactNode;
 }) {
+  const { t } = useI18n();
   return (
     <section className="dashboard-card system-status-card">
       <div className="dashboard-card-header">
         <div>
-          <span className="panel-eyebrow">GOUVERNANCE COÛTS</span>
-          <h3>Budgets, quotas &amp; consommation</h3>
+          <span className="panel-eyebrow">{t("cost.eyebrow")}</span>
+          <h3>{t("cost.heading")}</h3>
         </div>
         {state ? (
           <span className={`cost-state-pill is-${stateTone(state)}`}>
-            {STATE_LABEL[state]}
+            {t(`cost.state.${state}` as MessageKey)}
           </span>
         ) : (
           <ProvenanceBadge provenance="REAL" />
@@ -87,25 +84,30 @@ function Frame({
 }
 
 function PeriodCard({ label, period }: { label: string; period: CostPeriod }) {
+  const { t } = useI18n();
   const configured = period.provenance === "REAL";
   return (
     <div className="system-metric">
       <Wallet size={17} strokeWidth={1.8} />
       <div>
         <span>
-          {label} · {STATE_LABEL[period.limitState]}
+          {label} · {t(`cost.state.${period.limitState}` as MessageKey)}
         </span>
         <strong>
           {fmtUsd(period.exposureUsd)}
-          {configured ? ` / ${fmtUsd(period.budgetUsd)}` : " (sans budget)"}
+          {configured
+            ? ` / ${fmtUsd(period.budgetUsd)}`
+            : ` ${t("cost.withoutBudget")}`}
         </strong>
         {configured ? (
           <small className="cost-sub">
-            Reste {fmtUsd(period.remainingUsd)} · {fmtRatio(period.usageRatio)}{" "}
-            utilisé
+            {t("cost.remainingUsed", {
+              amount: fmtUsd(period.remainingUsd),
+              ratio: fmtRatio(period.usageRatio),
+            })}
           </small>
         ) : (
-          <small className="cost-sub">Budget non configuré</small>
+          <small className="cost-sub">{t("cost.budgetNotConfigured")}</small>
         )}
       </div>
     </div>
@@ -113,12 +115,12 @@ function PeriodCard({ label, period }: { label: string; period: CostPeriod }) {
 }
 
 export default function CostGovernance({ cost }: CostGovernanceProps) {
+  const { t } = useI18n();
+
   if (!cost.ok || cost.data.resolutionStatus !== "OK") {
     return (
       <Frame>
-        <p className="system-empty">
-          La gouvernance des coûts est indisponible pour le moment.
-        </p>
+        <p className="system-empty">{t("cost.unavailableMessage")}</p>
       </Frame>
     );
   }
@@ -130,35 +132,39 @@ export default function CostGovernance({ cost }: CostGovernanceProps) {
     <Frame state={governanceState}>
       {/* Budget exposure per period (REAL from the SW23 ledger, or NOT_CONFIGURED). */}
       <div className="system-metrics">
-        <PeriodCard label="Jour" period={period.day} />
-        <PeriodCard label="Mois" period={period.month} />
+        <PeriodCard label={t("cost.period.day")} period={period.day} />
+        <PeriodCard label={t("cost.period.month")} period={period.month} />
         <div className="system-metric">
           <Gauge size={17} strokeWidth={1.8} />
           <div>
-            <span>Appels providers (période enregistrée)</span>
+            <span>{t("cost.providerCalls")}</span>
             <strong>{quota.totalCalls.toLocaleString("fr-FR")}</strong>
             <small className="cost-sub">
-              Coût cumulé {fmtUsd(quota.totalCostAccumulated)} · blocages
-              aujourd’hui {quota.blocksToday}
+              {t("cost.accumulatedBlocks", {
+                amount: fmtUsd(quota.totalCostAccumulated),
+                count: quota.blocksToday,
+              })}
             </small>
           </div>
         </div>
         <div className="system-metric">
           <Coins size={17} strokeWidth={1.8} />
           <div>
-            <span>Budget configuré</span>
+            <span>{t("cost.budgetConfigured")}</span>
             <strong>
-              {budget.provenance === "REAL" ? "Oui" : "Non configuré"}
+              {budget.provenance === "REAL" ? t("cost.yes") : t("cost.notConfigured")}
             </strong>
             {budget.provenance === "REAL" ? (
               <small className="cost-sub">
-                Jour {fmtUsd(budget.dailyBudgetUsd)} · Mois{" "}
-                {fmtUsd(budget.monthlyBudgetUsd)} · Alerte{" "}
-                {budget.alertThresholdPct ?? "—"}% ·{" "}
-                {budget.hardStop ? "hard-stop" : "souple"}
+                {t("cost.budgetDetail", {
+                  daily: fmtUsd(budget.dailyBudgetUsd),
+                  monthly: fmtUsd(budget.monthlyBudgetUsd),
+                  pct: budget.alertThresholdPct ?? t("common.none"),
+                  mode: budget.hardStop ? "hard-stop" : t("cost.soft"),
+                })}
               </small>
             ) : (
-              <small className="cost-sub">Aucun budget pour ce tenant</small>
+              <small className="cost-sub">{t("cost.noBudgetTenant")}</small>
             )}
           </div>
         </div>
@@ -168,11 +174,11 @@ export default function CostGovernance({ cost }: CostGovernanceProps) {
       <div className="system-subsection">
         <div className="system-subsection-head">
           <Gauge size={15} strokeWidth={1.9} />
-          <span>Consommation par provider</span>
+          <span>{t("cost.consumptionByProvider")}</span>
           <ProvenanceBadge provenance="REAL" />
         </div>
         {quota.byProvider.length === 0 ? (
-          <p className="system-line-empty">Aucun compteur enregistré.</p>
+          <p className="system-line-empty">{t("cost.noCounters")}</p>
         ) : (
           <ul className="system-line-list">
             {quota.byProvider.slice(0, 6).map((q, idx) => (
@@ -181,8 +187,10 @@ export default function CostGovernance({ cost }: CostGovernanceProps) {
                   {q.provider} · {q.service}
                 </strong>
                 <span>
-                  {q.calls.toLocaleString("fr-FR")} appels ·{" "}
-                  {fmtUsd(q.costAccumulated)}
+                  {t("cost.providerUsage", {
+                    calls: q.calls.toLocaleString("fr-FR"),
+                    amount: fmtUsd(q.costAccumulated),
+                  })}
                 </span>
               </li>
             ))}
@@ -194,11 +202,11 @@ export default function CostGovernance({ cost }: CostGovernanceProps) {
       <div className="system-subsection">
         <div className="system-subsection-head">
           <Ban size={15} strokeWidth={1.9} />
-          <span>Blocages quota récents</span>
+          <span>{t("cost.recentQuotaBlocks")}</span>
           <ProvenanceBadge provenance="REAL" />
         </div>
         {quota.recentBlocks.length === 0 ? (
-          <p className="system-line-empty">Aucun blocage récent.</p>
+          <p className="system-line-empty">{t("cost.noRecentBlocks")}</p>
         ) : (
           <ul className="system-line-list">
             {quota.recentBlocks.slice(0, 4).map((b, idx) => (
@@ -219,11 +227,11 @@ export default function CostGovernance({ cost }: CostGovernanceProps) {
       <div className="system-subsection">
         <div className="system-subsection-head">
           <Cpu size={15} strokeWidth={1.9} />
-          <span>Catalogue modèles (tarifs)</span>
+          <span>{t("cost.modelCatalog")}</span>
           <ProvenanceBadge provenance="REAL" />
         </div>
         {models.length === 0 ? (
-          <p className="system-line-empty">Aucun modèle au catalogue.</p>
+          <p className="system-line-empty">{t("cost.noModels")}</p>
         ) : (
           <ul className="system-line-list">
             {models.slice(0, 6).map((m, idx) => (
@@ -237,8 +245,8 @@ export default function CostGovernance({ cost }: CostGovernanceProps) {
                 <span>
                   {m.costStatus === "real" && m.inputCost !== null
                     ? `in ${m.inputCost} / out ${m.outputCost} ${m.currency} ${m.pricingUnit ?? ""}`
-                    : "tarif indisponible"}
-                  {m.enabled ? "" : " · désactivé"}
+                    : t("cost.priceUnavailable")}
+                  {m.enabled ? "" : ` · ${t("cost.disabled")}`}
                 </span>
               </li>
             ))}
@@ -250,7 +258,7 @@ export default function CostGovernance({ cost }: CostGovernanceProps) {
       <div className="system-subsection">
         <div className="system-subsection-head">
           <CircleSlash size={15} strokeWidth={1.9} />
-          <span>Coût réel par requête</span>
+          <span>{t("cost.realCostPerRequest")}</span>
           <ProvenanceBadge
             provenance={costEvents.provenance === "REAL" ? "REAL" : "UNAVAILABLE"}
           />
@@ -260,20 +268,17 @@ export default function CostGovernance({ cost }: CostGovernanceProps) {
             {costEvents.byProvider.slice(0, 5).map((c, idx) => (
               <li key={`ce-${idx}`} className="system-line is-normal">
                 <strong>
-                  {c.provider} · {c.modelOrService ?? "—"}
+                  {c.provider} · {c.modelOrService ?? t("common.none")}
                 </strong>
                 <span>
                   {fmtUsd(c.totalUsd)} · {c.requests} req ·{" "}
-                  {c.measurementStatus ?? "—"}
+                  {c.measurementStatus ?? t("common.none")}
                 </span>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="system-line-empty">
-            Aucun événement de coût par requête enregistré (mesure non
-            instrumentée) — affiché « Indisponible » plutôt qu’estimé.
-          </p>
+          <p className="system-line-empty">{t("cost.noCostEvents")}</p>
         )}
       </div>
 
@@ -282,14 +287,14 @@ export default function CostGovernance({ cost }: CostGovernanceProps) {
         <div className="system-subsection">
           <div className="system-subsection-head">
             <AlertOctagon size={15} strokeWidth={1.9} />
-            <span>Métriques non disponibles</span>
+            <span>{t("cost.unavailableMetrics")}</span>
             <ProvenanceBadge provenance="UNAVAILABLE" />
           </div>
           <ul className="system-line-list">
             {unavailable.map((u) => (
               <li key={u} className="system-line is-unavailable">
                 <strong>{u}</strong>
-                <span>Non mesuré</span>
+                <span>{t("cost.notMeasured")}</span>
               </li>
             ))}
           </ul>

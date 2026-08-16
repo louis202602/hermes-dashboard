@@ -9,42 +9,54 @@ import {
   rejectAgentActionAction,
 } from "@/app/actions/agent-actions";
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { TranslateFn } from "@/lib/i18n/languages";
+import type { MessageKey } from "@/lib/i18n/locales/fr";
 import { TERMINAL_RESULT_STATUSES, type PendingApproval } from "@/types/agent-actions";
 
 type Banner = { tone: "ok" | "bad"; text: string } | null;
 type ResumptionLog = { requestId: string; summary: string; status: string };
 
-const RESULT_LABELS: Record<string, string> = {
-  QUEUED: "En file",
-  RUNNING: "En cours",
-  SUCCEEDED: "Terminé",
-  FAILED: "Échec",
-  POLICY_DENIED: "Refusé (SW15)",
-  REJECTED: "Refusé",
-};
+const RESULT_STATUSES = new Set([
+  "QUEUED",
+  "RUNNING",
+  "SUCCEEDED",
+  "FAILED",
+  "POLICY_DENIED",
+  "REJECTED",
+]);
 
-function decisionMessage(status: string, currentStatus?: string | null, msg?: string): Banner {
+function decisionMessage(
+  t: TranslateFn,
+  status: string,
+  currentStatus?: string | null,
+  msg?: string,
+): Banner {
   switch (status) {
     case "APPROVED":
-      return { tone: "ok", text: "Demande approuvée — reprise de l’exécution." };
+      return { tone: "ok", text: t("appr.decision.approved") };
     case "REJECTED":
-      return { tone: "ok", text: "Demande refusée." };
+      return { tone: "ok", text: t("appr.decision.rejected") };
     case "UNAUTHORIZED":
-      return { tone: "bad", text: "Droit d’approbation requis (tenant.admin)." };
+      return { tone: "bad", text: t("appr.decision.unauthorized") };
     case "ALREADY_DECIDED":
-      return { tone: "bad", text: `Demande déjà traitée (${currentStatus ?? "?"}).` };
+      return {
+        tone: "bad",
+        text: t("appr.decision.alreadyDecided", { status: currentStatus ?? "?" }),
+      };
     case "EXPIRED":
-      return { tone: "bad", text: "Demande expirée — refusée automatiquement." };
+      return { tone: "bad", text: t("appr.decision.expired") };
     case "NOT_FOUND":
-      return { tone: "bad", text: "Demande introuvable pour votre tenant." };
+      return { tone: "bad", text: t("appr.decision.notFound") };
     case "VALIDATION_FAILED":
-      return { tone: "bad", text: msg ?? "Motif de refus requis." };
+      return { tone: "bad", text: msg ?? t("appr.decision.reasonRequired") };
     default:
-      return { tone: "bad", text: "Action impossible pour le moment." };
+      return { tone: "bad", text: t("appr.decision.actionFailed") };
   }
 }
 
 export default function ApprovalsPanel() {
+  const { t } = useI18n();
   const [approvals, setApprovals] = useState<PendingApproval[]>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<Banner>(null);
@@ -60,9 +72,9 @@ export default function ApprovalsPanel() {
     if (r.ok) {
       setApprovals(r.approvals);
     } else {
-      setBanner({ tone: "bad", text: `Liste indisponible (${r.status}).` });
+      setBanner({ tone: "bad", text: t("appr.listUnavailable", { status: r.status }) });
     }
-  }, []);
+  }, [t]);
 
   // Initial load. State is only set after the await, so nothing runs
   // synchronously inside the effect body.
@@ -78,7 +90,7 @@ export default function ApprovalsPanel() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [t]);
 
   // Keep the list current so approvals created after mount (e.g. from a Command
   // Center action that hits REQUIRE_APPROVAL) appear without a manual reload.
@@ -108,7 +120,7 @@ export default function ApprovalsPanel() {
   async function onApprove(a: PendingApproval) {
     setBusyId(a.requestId);
     const r = await approveAgentActionAction(a.requestId);
-    setBanner(decisionMessage(r.status, r.currentStatus, r.error?.message));
+    setBanner(decisionMessage(t, r.status, r.currentStatus, r.error?.message));
     if (r.status === "APPROVED") trackResumption(a.requestId, a.summary);
     setBusyId(null);
     await refresh();
@@ -117,7 +129,7 @@ export default function ApprovalsPanel() {
   async function onReject(a: PendingApproval) {
     setBusyId(a.requestId);
     const r = await rejectAgentActionAction(a.requestId, reason);
-    setBanner(decisionMessage(r.status, r.currentStatus, r.error?.message));
+    setBanner(decisionMessage(t, r.status, r.currentStatus, r.error?.message));
     setBusyId(null);
     if (r.status === "REJECTED" || r.ok) {
       setRejectFor(null);
@@ -130,8 +142,8 @@ export default function ApprovalsPanel() {
     <section className="dashboard-card approvals-card">
       <div className="dashboard-card-header">
         <div>
-          <span className="panel-eyebrow">GOUVERNANCE</span>
-          <h3>Approbations en attente</h3>
+          <span className="panel-eyebrow">{t("appr.eyebrow")}</span>
+          <h3>{t("appr.title")}</h3>
         </div>
         <ProvenanceBadge provenance="REAL" />
       </div>
@@ -143,9 +155,9 @@ export default function ApprovalsPanel() {
       ) : null}
 
       {loading ? (
-        <p className="projects-empty">Chargement…</p>
+        <p className="projects-empty">{t("common.loading")}</p>
       ) : approvals.length === 0 ? (
-        <p className="projects-empty">Aucune approbation en attente.</p>
+        <p className="projects-empty">{t("appr.empty")}</p>
       ) : (
         <ul className="approvals-list">
           {approvals.map((a) => (
@@ -156,7 +168,7 @@ export default function ApprovalsPanel() {
                   {a.actionKey}
                   {a.policyReason ? ` · ${a.policyReason}` : ""}
                 </span>
-                <span className="agent-req">Réf. {a.requestId}</span>
+                <span className="agent-req">{t("appr.ref", { id: a.requestId })}</span>
               </div>
 
               {rejectFor === a.requestId ? (
@@ -165,8 +177,8 @@ export default function ApprovalsPanel() {
                     type="text"
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
-                    placeholder="Motif du refus (requis)"
-                    aria-label="Motif du refus"
+                    placeholder={t("appr.reasonPlaceholder")}
+                    aria-label={t("appr.reasonLabel")}
                   />
                   <div className="approval-actions">
                     <button
@@ -175,7 +187,7 @@ export default function ApprovalsPanel() {
                       disabled={busyId === a.requestId || reason.trim().length === 0}
                       onClick={() => onReject(a)}
                     >
-                      Confirmer le refus
+                      {t("appr.confirmReject")}
                     </button>
                     <button
                       type="button"
@@ -185,7 +197,7 @@ export default function ApprovalsPanel() {
                         setReason("");
                       }}
                     >
-                      Annuler
+                      {t("common.cancel")}
                     </button>
                   </div>
                 </div>
@@ -197,7 +209,7 @@ export default function ApprovalsPanel() {
                     disabled={busyId === a.requestId}
                     onClick={() => onApprove(a)}
                   >
-                    Approuver
+                    {t("appr.approve")}
                   </button>
                   <button
                     type="button"
@@ -208,7 +220,7 @@ export default function ApprovalsPanel() {
                       setReason("");
                     }}
                   >
-                    Refuser
+                    {t("appr.reject")}
                   </button>
                 </div>
               )}
@@ -219,11 +231,16 @@ export default function ApprovalsPanel() {
 
       {resumptions.length > 0 ? (
         <div className="approval-resumptions">
-          <span className="kpi-subtle">Reprise après approbation</span>
+          <span className="kpi-subtle">{t("appr.resumptionTitle")}</span>
           <ul>
             {resumptions.map((r) => (
               <li key={r.requestId}>
-                {r.summary} — <strong>{RESULT_LABELS[r.status] ?? r.status}</strong>
+                {r.summary} —{" "}
+                <strong>
+                  {RESULT_STATUSES.has(r.status)
+                    ? t(`appr.result.${r.status}` as MessageKey)
+                    : r.status}
+                </strong>
               </li>
             ))}
           </ul>

@@ -1,3 +1,5 @@
+"use client";
+
 import { AlertOctagon, AlertTriangle, Bell, ShieldAlert } from "lucide-react";
 
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
@@ -7,17 +9,12 @@ import {
   type UnifiedAlert,
   type UnifiedAlerts,
 } from "@/lib/dashboard/agenda";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/locales/fr";
 import type { ServiceResult } from "@/types/hermes";
 
 type Props = {
   alerts: ServiceResult<UnifiedAlerts>;
-};
-
-const SEVERITY_LABEL: Record<AlertSeverity, string> = {
-  CRITICAL: "Critique",
-  HIGH: "Élevé",
-  WARNING: "Attention",
-  INFO: "Info",
 };
 
 function severityIcon(sev: AlertSeverity) {
@@ -28,12 +25,13 @@ function severityIcon(sev: AlertSeverity) {
 }
 
 function Frame({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   return (
     <section className="dashboard-card alerts-card">
       <div className="dashboard-card-header">
         <div>
-          <span className="panel-eyebrow">ALERTES</span>
-          <h3>Alertes &amp; priorités</h3>
+          <span className="panel-eyebrow">{t("alerts.eyebrow")}</span>
+          <h3>{t("alerts.title")}</h3>
         </div>
         <ProvenanceBadge provenance="REAL" />
       </div>
@@ -43,12 +41,12 @@ function Frame({ children }: { children: React.ReactNode }) {
 }
 
 export default function AlertsPanel({ alerts }: Props) {
+  const { t } = useI18n();
+
   if (!alerts.ok || alerts.data.resolutionStatus !== "OK") {
     return (
       <Frame>
-        <p className="alerts-empty">
-          Les alertes sont indisponibles pour le moment.
-        </p>
+        <p className="alerts-empty">{t("alerts.unavailable")}</p>
       </Frame>
     );
   }
@@ -61,22 +59,20 @@ export default function AlertsPanel({ alerts }: Props) {
       <div className="alerts-summary">
         <div className={summary.critical > 0 ? "is-critical" : undefined}>
           <strong>{summary.critical}</strong>
-          <span>critiques</span>
+          <span>{t("alerts.critical")}</span>
         </div>
         <div className={summary.high > 0 ? "is-high" : undefined}>
           <strong>{summary.high}</strong>
-          <span>élevées</span>
+          <span>{t("alerts.high")}</span>
         </div>
         <div className={summary.warning > 0 ? "is-warning" : undefined}>
           <strong>{summary.warning}</strong>
-          <span>attention</span>
+          <span>{t("alerts.warning")}</span>
         </div>
       </div>
 
       {shown.length === 0 ? (
-        <p className="alerts-empty">
-          Aucune alerte active. Tout est nominal pour votre tenant.
-        </p>
+        <p className="alerts-empty">{t("alerts.empty")}</p>
       ) : (
         <div className="alerts-list">
           {shown.map((a) => (
@@ -84,10 +80,10 @@ export default function AlertsPanel({ alerts }: Props) {
               <span className="alert-icon">{severityIcon(a.severity)}</span>
               <span className="alert-copy">
                 <strong>{a.title}</strong>
-                <span>{a.detail ?? "—"}</span>
+                <span>{a.detail ?? t("common.none")}</span>
               </span>
               <span className={`alert-sev is-${a.severity.toLowerCase()}`}>
-                {SEVERITY_LABEL[a.severity]}
+                {t(`alerts.severity.${a.severity}` as MessageKey)}
               </span>
             </div>
           ))}
@@ -96,7 +92,7 @@ export default function AlertsPanel({ alerts }: Props) {
 
       {unavailable.length > 0 ? (
         <p className="alerts-footer-note">
-          Sources partiellement indisponibles : {unavailable.join(", ")}.
+          {t("alerts.partialSources", { sources: unavailable.join(", ") })}
         </p>
       ) : null}
     </Frame>

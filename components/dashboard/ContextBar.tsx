@@ -10,6 +10,7 @@ import {
   isValidTimeZone,
   type ContextBarModel,
 } from "@/lib/dashboard/contextBar";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type Props = {
   model: ContextBarModel;
@@ -34,6 +35,7 @@ function fmtCurrency(amount: number, currency: string, locale: string): string {
 }
 
 export default function ContextBar({ model, initialClock, visibleSegments }: Props) {
+  const { t } = useI18n();
   const { settings, timezone, timezoneSource, units, weather, cost, alerts } =
     model;
   const locale = settings.locale || "fr-FR";
@@ -97,7 +99,7 @@ export default function ContextBar({ model, initialClock, visibleSegments }: Pro
           {settings.city ? (
             <span className="context-strong">{settings.city}</span>
           ) : (
-            <span className="context-muted">Localisation à configurer</span>
+            <span className="context-muted">{t("context.location.todo")}</span>
           )}
         </span>
       ) : null}
@@ -171,8 +173,8 @@ export default function ContextBar({ model, initialClock, visibleSegments }: Pro
         ) : showWeather ? (
           <span className="context-muted">
             {settings.locationConfigured
-              ? "Météo indisponible"
-              : "Météo à configurer"}
+              ? t("context.weather.unavailable")
+              : t("context.weather.todo")}
           </span>
         ) : null}
       </span>
@@ -199,7 +201,7 @@ export default function ContextBar({ model, initialClock, visibleSegments }: Pro
           <span
             className={alerts.count > 0 ? "context-strong" : "context-muted"}
           >
-            {alerts.count} {alerts.count > 1 ? "alertes" : "alerte"}
+            {t(alerts.count === 1 ? "context.alerts.one" : "context.alerts.other", { count: alerts.count })}
           </span>
         ) : (
           <span className="context-muted">—</span>
@@ -212,37 +214,37 @@ export default function ContextBar({ model, initialClock, visibleSegments }: Pro
       {showCost ? (
       <span className="context-seg context-seg-cost">
         <Sparkles className="context-ico" aria-hidden />
-        <span className="context-muted">Hermès</span>
+        <span className="context-muted">{t("context.brand")}</span>
         {cost.provenance === "REAL" ? (
           <>
             <span
               className="context-strong"
-              title="Coût IA aujourd'hui (source SW23)"
+              title={t("context.cost.todayTitle")}
             >
               {fmtCurrency(cost.todayAmount, cost.currency, locale)}
             </span>
-            <span className="context-muted context-hide-mobile">aujourd’hui</span>
+            <span className="context-muted context-hide-mobile">{t("context.cost.today")}</span>
             {cost.monthAmount !== null ? (
               <span
                 className="context-muted context-hide-tablet"
-                title="Coût IA ce mois-ci (source SW23)"
+                title={t("context.cost.monthTitle")}
               >
-                · {fmtCurrency(cost.monthAmount, cost.currency, locale)} ce mois
+                · {fmtCurrency(cost.monthAmount, cost.currency, locale)} {t("context.cost.month")}
               </span>
             ) : null}
             {cost.remainingAmount !== null ? (
               <span
                 className="context-muted context-hide-tablet"
-                title="Budget mensuel restant"
+                title={t("context.cost.remainingTitle")}
               >
                 · {fmtCurrency(cost.remainingAmount, cost.currency, locale)}{" "}
-                restant
+                {t("context.cost.remaining")}
               </span>
             ) : null}
           </>
         ) : (
-          <span className="context-muted" title="Coût non disponible">
-            indisponible
+          <span className="context-muted" title={t("context.cost.unavailable")}>
+            {t("context.cost.unavailable")}
           </span>
         )}
       </span>

@@ -1,6 +1,9 @@
+"use client";
+
 import { Bot, Boxes, CircleSlash, GitBranch, Workflow } from "lucide-react";
 
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { PublicKpis, ServiceResult } from "@/types/hermes";
 
 type KpiGridProps = {
@@ -10,22 +13,22 @@ type KpiGridProps = {
 const numberFormat = new Intl.NumberFormat("fr-FR");
 
 export default function KpiGrid({ kpis }: KpiGridProps) {
+  const { t } = useI18n();
+
   if (!kpis.ok) {
     // Compact, full-width UNAVAILABLE state — never an isolated tall card that
     // breaks the grid composition.
     return (
-      <section className="kpi-grid" aria-label="Indicateurs plateforme (indisponibles)">
+      <section className="kpi-grid" aria-label={t("kpi.ariaUnavailable")}>
         <article className="kpi-card kpi-card-unavailable">
           <div className="kpi-unavailable-inner">
             <span className="kpi-unavailable-icon">
               <CircleSlash size={18} strokeWidth={1.9} />
             </span>
             <div>
-              <span className="kpi-title">Indicateurs plateforme</span>
-              <strong>Indisponible</strong>
-              <span className="kpi-subtle">
-                Les indicateurs ne peuvent pas être chargés pour le moment.
-              </span>
+              <span className="kpi-title">{t("kpi.platformIndicators")}</span>
+              <strong>{t("common.unavailable")}</strong>
+              <span className="kpi-subtle">{t("kpi.loadError")}</span>
             </div>
             <ProvenanceBadge provenance="UNAVAILABLE" />
           </div>
@@ -38,32 +41,32 @@ export default function KpiGrid({ kpis }: KpiGridProps) {
 
   const cards = [
     {
-      title: "Agents IA actifs",
+      title: t("kpi.agentsActive"),
       value: numberFormat.format(k.agentsIaActive),
       icon: Bot,
     },
     {
-      title: "Modules SW actifs",
+      title: t("kpi.modulesActive"),
       value: numberFormat.format(k.modulesSwActive),
       icon: Workflow,
     },
     {
-      title: "Sous-workflows actifs",
+      title: t("kpi.subworkflowsActive"),
       value: numberFormat.format(k.subworkflowsActive),
       icon: GitBranch,
     },
     {
-      title: "Composants actifs",
+      title: t("kpi.componentsActive"),
       value: `${numberFormat.format(k.componentsActiveTotal)} / ${numberFormat.format(
         k.componentsRegisteredTotal,
       )}`,
       icon: Boxes,
-      hint: `${k.activeRate}% actifs`,
+      hint: t("kpi.activeRate", { rate: k.activeRate }),
     },
   ];
 
   return (
-    <section className="kpi-grid" aria-label="Indicateurs plateforme (données réelles)">
+    <section className="kpi-grid" aria-label={t("kpi.ariaReal")}>
       {cards.map((card) => {
         const Icon = card.icon;
 

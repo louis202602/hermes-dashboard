@@ -49,6 +49,8 @@ import {
   type VoicePhase,
 } from "@/lib/voice/speech";
 import { TERMINAL_RESULT_STATUSES } from "@/types/agent-actions";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/locales/fr";
 
 type Turn = {
   id: string;
@@ -84,46 +86,6 @@ type ComposerAttachment = {
   file?: File;
 };
 
-// Honest, user-facing wording.
-const ATTACH_UPLOADING_MSG =
-  "Téléversement en cours — patientez avant d’envoyer votre message.";
-const ATTACH_FAILED_MSG =
-  "Une pièce jointe n’a pas pu être téléversée. Retirez-la ou réessayez avant d’envoyer.";
-// The files ARE transmitted (private, per-organisation isolated storage) but are
-// NOT analysed by Hermès yet — that stays honest about the current capability.
-const ATTACH_UPLOADED_NOTE =
-  "Pièces jointes téléversées en privé (stockage isolé par organisation). Elles ne sont pas encore analysées par Hermès.";
-
-function attachmentStateLabel(a: ComposerAttachment): string {
-  switch (a.state) {
-    case "UPLOADING":
-      return "Téléversement…";
-    case "UPLOADED":
-      return "Prête";
-    case "FAILED":
-      return a.error ? `Échec — ${a.error}` : "Échec";
-    default:
-      return "En attente";
-  }
-}
-
-function attachmentKindLabel(kind: AttachmentKind): string {
-  switch (kind) {
-    case "image":
-      return "Image";
-    case "video":
-      return "Vidéo";
-    case "audio":
-      return "Audio";
-    case "pdf":
-      return "PDF";
-    case "document":
-      return "Document";
-    default:
-      return "Fichier";
-  }
-}
-
 function AttachmentGlyph({ kind }: { kind: AttachmentKind }) {
   if (kind === "image") return <ImageIcon size={18} strokeWidth={1.8} />;
   if (kind === "video") return <Film size={18} strokeWidth={1.8} />;
@@ -133,26 +95,28 @@ function AttachmentGlyph({ kind }: { kind: AttachmentKind }) {
   return <FileIcon size={18} strokeWidth={1.8} />;
 }
 
+// Maps a canonical status token (logic/backend value) to its i18n label key.
+// The tokens themselves are never translated — only the displayed label is.
 const STATE_LABEL: Record<string, string> = {
-  IDLE: "Au repos",
-  SUBMITTING: "Envoi…",
-  RESOLVING: "Compréhension…",
-  ANSWER_ONLY: "Réponse",
-  NEEDS_CLARIFICATION: "À préciser",
-  QUEUED: "En file",
-  RUNNING: "En cours",
-  PENDING_APPROVAL: "Approbation requise",
-  SUCCEEDED: "Succès",
-  FAILED: "Échec",
-  POLICY_DENIED: "Refusée (sécurité)",
-  REJECTED: "Refusée",
-  TIMEOUT: "Délai dépassé",
-  RPC_ERROR: "Service indisponible",
-  NOT_FOUND: "Introuvable",
-  VALIDATION_FAILED: "À préciser",
-  UNAUTHENTICATED: "Session expirée",
-  NO_TENANT: "Aucun tenant",
-  ERROR: "Erreur",
+  IDLE: "chat.state.idle",
+  SUBMITTING: "chat.state.submitting",
+  RESOLVING: "chat.state.resolving",
+  ANSWER_ONLY: "chat.state.answerOnly",
+  NEEDS_CLARIFICATION: "chat.state.needsClarification",
+  QUEUED: "chat.state.queued",
+  RUNNING: "chat.state.running",
+  PENDING_APPROVAL: "chat.state.pendingApproval",
+  SUCCEEDED: "chat.state.succeeded",
+  FAILED: "chat.state.failed",
+  POLICY_DENIED: "chat.state.policyDenied",
+  REJECTED: "chat.state.rejected",
+  TIMEOUT: "chat.state.timeout",
+  RPC_ERROR: "chat.state.rpcError",
+  NOT_FOUND: "chat.state.notFound",
+  VALIDATION_FAILED: "chat.state.validationFailed",
+  UNAUTHENTICATED: "chat.state.unauthenticated",
+  NO_TENANT: "chat.state.noTenant",
+  ERROR: "chat.state.error",
 };
 
 function toneFor(state: string): "ok" | "bad" | "warn" | "pending" {
@@ -195,6 +159,42 @@ function newRequestId(): string {
 }
 
 export default function HermesPanel() {
+  const { t } = useI18n();
+
+  // Display-only helpers (closures over `t`); the underlying state/kind tokens
+  // are logic values and stay untranslated.
+  function attachmentStateLabel(a: ComposerAttachment): string {
+    switch (a.state) {
+      case "UPLOADING":
+        return t("chat.attach.state.uploading");
+      case "UPLOADED":
+        return t("chat.attach.state.ready");
+      case "FAILED":
+        return a.error
+          ? t("chat.attach.state.failedReason", { error: a.error })
+          : t("chat.attach.state.failed");
+      default:
+        return t("chat.attach.state.pending");
+    }
+  }
+
+  function attachmentKindLabel(kind: AttachmentKind): string {
+    switch (kind) {
+      case "image":
+        return t("chat.attach.kind.image");
+      case "video":
+        return t("chat.attach.kind.video");
+      case "audio":
+        return t("chat.attach.kind.audio");
+      case "pdf":
+        return t("chat.attach.kind.pdf");
+      case "document":
+        return t("chat.attach.kind.document");
+      default:
+        return t("chat.attach.kind.file");
+    }
+  }
+
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -292,10 +292,12 @@ export default function HermesPanel() {
         }
       }
       setAttachNote(
-        ignored.length > 0 ? `Fichier(s) ignoré(s) : ${ignored.join(" ; ")}` : null,
+        ignored.length > 0
+          ? t("chat.attach.ignored", { list: ignored.join(" ; ") })
+          : null,
       );
     },
-    [uploadOne],
+    [uploadOne, t],
   );
 
   function onFilesPicked(event: React.ChangeEvent<HTMLInputElement>) {
@@ -481,19 +483,18 @@ export default function HermesPanel() {
       } else if (attempts >= max) {
         clearInterval(timer);
         setTurns((prev) =>
-          prev.map((t) =>
-            t.id === turnId
+          prev.map((turn) =>
+            turn.id === turnId
               ? {
-                  ...t,
+                  ...turn,
                   // Honest: the request was accepted and queued, but no result
                   // came back in time. Never presented as a failure of intent or
                   // as a (fake) success.
-                  text:
-                    "Votre demande a bien été reçue et mise en file, mais n’a pas encore été traitée (délai d’attente dépassé). Réessayez plus tard.",
+                  text: t("chat.timeout.message"),
                   outcome: "TIMEOUT",
                   lifecycle: undefined,
                 }
-              : t,
+              : turn,
           ),
         );
         setActiveResolve(null);
@@ -506,7 +507,7 @@ export default function HermesPanel() {
       }
     }, 1500);
     return () => clearInterval(timer);
-  }, [activeResolve, speakReply]);
+  }, [activeResolve, speakReply, t]);
 
   // Keep the newest turn in view after the list changes.
   useEffect(() => {
@@ -519,11 +520,11 @@ export default function HermesPanel() {
     const text = input.trim();
     if (text.length === 0 || sending) return;
     if (attachments.some((a) => a.state === "UPLOADING")) {
-      setAttachNote(ATTACH_UPLOADING_MSG);
+      setAttachNote(t("chat.attach.uploadingBlock"));
       return;
     }
     if (attachments.some((a) => a.state === "FAILED")) {
-      setAttachNote(ATTACH_FAILED_MSG);
+      setAttachNote(t("chat.attach.failedBlock"));
       return;
     }
     setInput("");
@@ -535,11 +536,11 @@ export default function HermesPanel() {
     const current = attachmentsRef.current;
     // Block only on in-flight or failed uploads. UPLOADED attachments are sent.
     if (current.some((a) => a.state === "UPLOADING")) {
-      setAttachNote(ATTACH_UPLOADING_MSG);
+      setAttachNote(t("chat.attach.uploadingBlock"));
       return;
     }
     if (current.some((a) => a.state === "FAILED")) {
-      setAttachNote(ATTACH_FAILED_MSG);
+      setAttachNote(t("chat.attach.failedBlock"));
       return;
     }
     const uploaded = current.filter(
@@ -574,26 +575,28 @@ export default function HermesPanel() {
         );
         if (!link.ok) {
           setTurns((prev) =>
-            prev.map((t) =>
-              t.id === userTurn.id
+            prev.map((turn) =>
+              turn.id === userTurn.id
                 ? {
-                    ...t,
-                    attachmentNote: `Message envoyé. ${link.linked}/${link.requested} pièce(s) jointe(s) rattachée(s) — les autres n’ont pas pu l’être.`,
+                    ...turn,
+                    attachmentNote: t("chat.attach.linkPartial", {
+                      linked: link.linked,
+                      requested: link.requested,
+                    }),
                   }
-                : t,
+                : turn,
             ),
           );
         }
       } else {
         setTurns((prev) =>
-          prev.map((t) =>
-            t.id === userTurn.id
+          prev.map((turn) =>
+            turn.id === userTurn.id
               ? {
-                  ...t,
-                  attachmentNote:
-                    "Message envoyé, mais les pièces jointes n’ont pas pu être rattachées.",
+                  ...turn,
+                  attachmentNote: t("chat.attach.linkFailed"),
                 }
-              : t,
+              : turn,
           ),
         );
       }
@@ -639,7 +642,7 @@ export default function HermesPanel() {
   }
 
   const tone = toneFor(state);
-  const label = STATE_LABEL[state] ?? state;
+  const label = STATE_LABEL[state] ? t(STATE_LABEL[state] as MessageKey) : state;
   const inFlight =
     sending ||
     !!activeResolve ||
@@ -695,13 +698,9 @@ export default function HermesPanel() {
     <section className="hermes-panel hermes-panel-exec">
       <div className="hermes-panel-header">
         <div className="hermes-head-titles">
-          <span className="panel-eyebrow">DIRECTEUR GÉNÉRAL IA</span>
+          <span className="panel-eyebrow">{t("chat.header.eyebrow")}</span>
           <h2>Hermès</h2>
-          <p>
-            Décrivez votre intention en langage naturel : Hermès sélectionne une
-            action autorisée et l’exécute en toute sécurité — vos permissions et
-            un journal d’audit s’appliquent toujours.
-          </p>
+          <p>{t("chat.header.intro")}</p>
         </div>
 
         <div className="hermes-head-meta">
@@ -709,12 +708,9 @@ export default function HermesPanel() {
             <span className="status-pulse" />
             <span>{label}</span>
           </div>
-          <span
-            className="hermes-conn"
-            title="Connecté au backend Hermès — données réelles"
-          >
+          <span className="hermes-conn" title={t("chat.conn.title")}>
             <ShieldCheck size={12} strokeWidth={2} />
-            <span>Connecté à hermes_os</span>
+            <span>{t("chat.conn.label")}</span>
           </span>
         </div>
       </div>
@@ -723,14 +719,14 @@ export default function HermesPanel() {
         {/* PRIMARY — interact with Hermès (the real centre of this block). */}
         <form onSubmit={handleSubmit} className="hermes-command-zone">
           <span className="panel-eyebrow hermes-composer-eyebrow">
-            Demander à Hermès
+            {t("chat.composer.eyebrow")}
           </span>
 
           <textarea
             name="command"
-            aria-label="Message pour Hermès"
+            aria-label={t("chat.composer.ariaLabel")}
             className="hermes-composer-input"
-            placeholder="Demandez à Hermès — ex. « qualifie le chantier Toiture Atelier Nord »"
+            placeholder={t("chat.composer.placeholder")}
             rows={2}
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -779,24 +775,24 @@ export default function HermesPanel() {
                         type="button"
                         className="hermes-attachment-retry"
                         onClick={() => retryAttachment(a.id)}
-                        title="Réessayer le téléversement"
+                        title={t("chat.attach.retryTitle")}
                       >
-                        Réessayer
+                        {t("common.retry")}
                       </button>
                     ) : null}
                     <button
                       type="button"
                       className="hermes-attachment-remove"
                       onClick={() => removeAttachment(a.id)}
-                      aria-label={`Retirer ${a.name}`}
-                      title="Retirer"
+                      aria-label={t("chat.attach.removeAria", { name: a.name })}
+                      title={t("chat.attach.removeTitle")}
                     >
                       <X size={13} strokeWidth={2} />
                     </button>
                   </li>
                 ))}
               </ul>
-              <p className="hermes-attachment-note">{ATTACH_UPLOADED_NOTE}</p>
+              <p className="hermes-attachment-note">{t("chat.attach.uploadedNote")}</p>
             </div>
           ) : null}
           {attachNote ? (
@@ -821,12 +817,12 @@ export default function HermesPanel() {
                   : voice.listening
                     ? voice.interim
                       ? `« ${voice.interim} »`
-                      : "Écoute… parlez maintenant."
+                      : t("chat.voice.listening")
                     : voice.speaking
-                      ? "Hermès parle…"
+                      ? t("chat.voice.speaking")
                       : micRequested
-                        ? "Autorisation micro…"
-                        : "Analyse en cours…"}
+                        ? t("chat.voice.permission")
+                        : t("chat.voice.thinking")}
               </span>
               {voice.speaking ? (
                 <button
@@ -836,7 +832,7 @@ export default function HermesPanel() {
                   data-testid="hermes-voice-stop"
                 >
                   <Square size={13} strokeWidth={2} />
-                  <span>Stop</span>
+                  <span>{t("chat.voice.stop")}</span>
                 </button>
               ) : null}
             </div>
@@ -852,10 +848,10 @@ export default function HermesPanel() {
                   type="button"
                   className={`hermes-plus-button${attachMenuOpen ? " is-open" : ""}`}
                   onClick={() => setAttachMenuOpen((v) => !v)}
-                  aria-label="Ajouter une pièce jointe"
+                  aria-label={t("chat.attach.addAria")}
                   aria-haspopup="menu"
                   aria-expanded={attachMenuOpen}
-                  title="Ajouter — photo, scan, document ou audio"
+                  title={t("chat.attach.addTitle")}
                   data-testid="hermes-plus-button"
                 >
                   <Plus size={17} strokeWidth={2.2} />
@@ -865,29 +861,29 @@ export default function HermesPanel() {
                     <button
                       type="button"
                       className="hermes-attach-scrim"
-                      aria-label="Fermer le menu"
+                      aria-label={t("chat.attach.closeMenuAria")}
                       onClick={() => setAttachMenuOpen(false)}
                     />
                     <div className="hermes-attach-menu" role="menu" data-testid="hermes-attach-menu">
                       <button type="button" role="menuitem" onClick={() => chooseAttachAction("camera")} data-testid="attach-camera">
                         <Camera size={16} strokeWidth={1.8} />
-                        <span>Prendre une photo</span>
+                        <span>{t("chat.attach.menu.camera")}</span>
                       </button>
                       <button type="button" role="menuitem" onClick={() => chooseAttachAction("scan")} data-testid="attach-scan">
                         <ScanLine size={16} strokeWidth={1.8} />
-                        <span>Scanner un document</span>
+                        <span>{t("chat.attach.menu.scan")}</span>
                       </button>
                       <button type="button" role="menuitem" onClick={() => chooseAttachAction("photos")} data-testid="attach-photos">
                         <ImageIcon size={16} strokeWidth={1.8} />
-                        <span>Photos</span>
+                        <span>{t("chat.attach.menu.photos")}</span>
                       </button>
                       <button type="button" role="menuitem" onClick={() => chooseAttachAction("documents")} data-testid="attach-documents">
                         <FileText size={16} strokeWidth={1.8} />
-                        <span>Documents</span>
+                        <span>{t("chat.attach.menu.documents")}</span>
                       </button>
                       <button type="button" role="menuitem" onClick={() => chooseAttachAction("audio")} data-testid="attach-audio">
                         <Music size={16} strokeWidth={1.8} />
-                        <span>Audio</span>
+                        <span>{t("chat.attach.menu.audio")}</span>
                       </button>
                     </div>
                   </>
@@ -947,8 +943,8 @@ export default function HermesPanel() {
                   aria-pressed={readAloud}
                   title={
                     readAloud
-                      ? "Réponses lues à voix haute — désactiver"
-                      : "Lire les réponses à voix haute"
+                      ? t("chat.voice.readAloud.on")
+                      : t("chat.voice.readAloud.off")
                   }
                   data-testid="hermes-readaloud-toggle"
                 >
@@ -956,7 +952,7 @@ export default function HermesPanel() {
                 </button>
               ) : null}
               <span className="hermes-command-hint">
-                Vos permissions et un journal d’audit s’appliquent à chaque action.
+                {t("chat.composer.hint")}
               </span>
             </div>
 
@@ -971,9 +967,15 @@ export default function HermesPanel() {
                   onClick={handleMicClick}
                   disabled={inFlight}
                   aria-pressed={voice.listening}
-                  title={voice.listening ? "Arrêter l’écoute" : "Parler à Hermès"}
+                  title={
+                    voice.listening
+                      ? t("chat.voice.mic.stop")
+                      : t("chat.voice.mic.start")
+                  }
                   aria-label={
-                    voice.listening ? "Arrêter l’écoute" : "Parler à Hermès"
+                    voice.listening
+                      ? t("chat.voice.mic.stop")
+                      : t("chat.voice.mic.start")
                   }
                   data-testid="hermes-mic-button"
                 >
@@ -996,13 +998,13 @@ export default function HermesPanel() {
                 }
                 title={
                   attachmentsBusy
-                    ? ATTACH_UPLOADING_MSG
+                    ? t("chat.attach.uploadingBlock")
                     : attachmentsHaveError
-                      ? ATTACH_FAILED_MSG
+                      ? t("chat.attach.failedBlock")
                       : undefined
                 }
               >
-                <span>{sending ? "Envoi…" : "Envoyer"}</span>
+                <span>{sending ? t("chat.composer.sending") : t("chat.composer.send")}</span>
                 <ArrowUp size={16} strokeWidth={2} />
               </button>
             </div>
@@ -1016,63 +1018,64 @@ export default function HermesPanel() {
               <ShieldCheck size={18} strokeWidth={1.8} />
             </div>
             <div>
-              <span>État Hermès</span>
+              <span>{t("chat.insight.state")}</span>
               <strong>{label}</strong>
             </div>
           </div>
 
           <div className="hermes-thread" ref={threadRef} data-testid="hermes-thread">
             {turns.length === 0 ? (
-              <p className="hermes-thread-empty">
-                Exemple : « qualifie le chantier Toiture Nord », « fais un
-                diagnostic », ou « que peux-tu faire ? ».
-              </p>
+              <p className="hermes-thread-empty">{t("chat.thread.empty")}</p>
             ) : (
-              turns.map((t) => (
+              turns.map((turn) => (
                 <div
-                  key={t.id}
-                  className={`hermes-bubble is-${t.role}`}
-                  data-testid={t.role === "assistant" ? "hermes-assistant" : "hermes-user"}
-                  data-outcome={t.outcome ?? ""}
+                  key={turn.id}
+                  className={`hermes-bubble is-${turn.role}`}
+                  data-testid={turn.role === "assistant" ? "hermes-assistant" : "hermes-user"}
+                  data-outcome={turn.outcome ?? ""}
                 >
-                  <p>{t.text}</p>
-                  {t.role === "user" && t.attachmentNames?.length ? (
+                  <p>{turn.text}</p>
+                  {turn.role === "user" && turn.attachmentNames?.length ? (
                     <span className="hermes-bubble-attachments">
-                      {t.attachmentNames.map((n, i) => (
-                        <span key={`${t.id}-att-${i}`} className="hermes-bubble-attachment">
+                      {turn.attachmentNames.map((n, i) => (
+                        <span key={`${turn.id}-att-${i}`} className="hermes-bubble-attachment">
                           <FileIcon size={11} strokeWidth={2} />
                           {n}
                         </span>
                       ))}
                     </span>
                   ) : null}
-                  {t.role === "user" && t.attachmentNote ? (
-                    <span className="hermes-bubble-attachment-note">{t.attachmentNote}</span>
+                  {turn.role === "user" && turn.attachmentNote ? (
+                    <span className="hermes-bubble-attachment-note">{turn.attachmentNote}</span>
                   ) : null}
-                  {t.role === "assistant" && t.lifecycle ? (
-                    <span className={`hermes-lifecycle is-${toneFor(t.lifecycle)}`}>
-                      {STATE_LABEL[t.lifecycle] ?? t.lifecycle}
-                      {t.chantierId ? ` · chantier ${t.chantierId}` : ""}
+                  {turn.role === "assistant" && turn.lifecycle ? (
+                    <span className={`hermes-lifecycle is-${toneFor(turn.lifecycle)}`}>
+                      {STATE_LABEL[turn.lifecycle]
+                        ? t(STATE_LABEL[turn.lifecycle] as MessageKey)
+                        : turn.lifecycle}
+                      {turn.chantierId
+                        ? ` · ${t("chat.lifecycle.worksite", { id: turn.chantierId })}`
+                        : ""}
                     </span>
                   ) : null}
-                  {t.role === "assistant" && t.lifecycle === "PENDING_APPROVAL" ? (
+                  {turn.role === "assistant" && turn.lifecycle === "PENDING_APPROVAL" ? (
                     <span className="hermes-lifecycle-hint">
-                      Approbation humaine requise — traitez la demande dans «
-                      Approbations en attente » ci-dessous ; la conversation
-                      reprendra automatiquement après décision.
+                      {t("chat.approval.hint")}
                     </span>
                   ) : null}
-                  {t.role === "assistant" && t.requestId ? (
-                    <span className="agent-req">Réf. {t.requestId}</span>
+                  {turn.role === "assistant" && turn.requestId ? (
+                    <span className="agent-req">
+                      {t("chat.ref", { id: turn.requestId })}
+                    </span>
                   ) : null}
-                  {t.role === "assistant" && t.outcome === "ERROR" && t.userText ? (
+                  {turn.role === "assistant" && turn.outcome === "ERROR" && turn.userText ? (
                     <button
                       type="button"
                       className="hermes-retry-button"
                       disabled={inFlight}
-                      onClick={() => send(t.userText as string)}
+                      onClick={() => send(turn.userText as string)}
                     >
-                      Réessayer
+                      {t("common.retry")}
                     </button>
                   ) : null}
                 </div>

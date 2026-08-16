@@ -8,8 +8,6 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { getChantierWeatherAction } from "@/app/actions/chantier-map";
 import {
   MAP_FILTERS,
-  MAP_FILTER_LABELS,
-  MARKER_LABELS,
   computeMapView,
   deriveMarkerStatus,
   filterChantiers,
@@ -18,6 +16,8 @@ import {
   type ChantierPoint,
   type MapFilter,
 } from "@/lib/dashboard/chantierMap";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/languages";
 
 // Free, keyless OSM vector tiles (OpenFreeMap). Overridable via env for
 // self-hosting (PMTiles / tileserver) without touching the app — future-proof, 0 €.
@@ -25,13 +25,14 @@ const STYLE_URL =
   process.env.NEXT_PUBLIC_MAP_STYLE_URL ||
   "https://tiles.openfreemap.org/styles/liberty";
 
-function fmtDate(iso: string | null): string {
+function fmtDate(iso: string | null, locale: string): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("fr-FR");
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString(locale);
 }
 
 export default function ChantierMap({ points }: { points: ChantierPoint[] }) {
+  const { t, lang } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
@@ -85,7 +86,7 @@ export default function ChantierMap({ points }: { points: ChantierPoint[] }) {
       const el = document.createElement("button");
       el.type = "button";
       el.className = `map-marker ${markerStatusToken(status)}`;
-      el.setAttribute("aria-label", `${p.name} — ${MARKER_LABELS[status]}`);
+      el.setAttribute("aria-label", `${p.name} — ${t(`map.marker.${status}` as MessageKey)}`);
 
       const popupNode = document.createElement("div");
       popupNode.className = "map-popup";
@@ -95,7 +96,7 @@ export default function ChantierMap({ points }: { points: ChantierPoint[] }) {
       const meta = document.createElement("div");
       meta.className = "map-popup-meta";
       meta.textContent = [
-        MARKER_LABELS[status],
+        t(`map.marker.${status}` as MessageKey),
         p.typeChantier,
         p.formattedAddress || p.address,
       ]
@@ -103,16 +104,19 @@ export default function ChantierMap({ points }: { points: ChantierPoint[] }) {
         .join(" · ");
       const dates = document.createElement("div");
       dates.className = "map-popup-meta";
-      dates.textContent = `Du ${fmtDate(p.dateDebut)} au ${fmtDate(p.dateFin)}`;
+      dates.textContent = t("map.dates", {
+        start: fmtDate(p.dateDebut, lang),
+        end: fmtDate(p.dateFin, lang),
+      });
       const weather = document.createElement("div");
       weather.className = "map-popup-weather";
-      weather.textContent = "Météo…";
+      weather.textContent = t("map.weather.loading");
       const route = document.createElement("a");
       route.className = "map-popup-route";
       route.href = routeUrl(p.latitude, p.longitude);
       route.target = "_blank";
       route.rel = "noopener noreferrer";
-      route.textContent = "Ouvrir l’itinéraire";
+      route.textContent = t("map.openRoute");
       popupNode.append(title, meta, dates, weather, route);
 
       const popup = new maplibregl.Popup({ offset: 18, closeButton: true }).setDOMContent(popupNode);
@@ -124,7 +128,7 @@ export default function ChantierMap({ points }: { points: ChantierPoint[] }) {
           weather.textContent = w
             ? `${w.icon} ${Math.round(w.temperatureC)}°C · ${w.condition}` +
               (w.windKph !== null ? ` · ${Math.round(w.windKph)} km/h` : "")
-            : "Météo indisponible";
+            : t("map.weather.unavailable");
         });
       });
 
@@ -134,20 +138,20 @@ export default function ChantierMap({ points }: { points: ChantierPoint[] }) {
         .addTo(map);
       markersRef.current.push(marker);
     }
-  }, [shown, failed, now]);
+  }, [shown, failed, now, t, lang]);
 
   if (failed) {
     return (
       <div className="chantier-map-fallback" role="status">
-        <strong>Carte indisponible</strong>
-        <span>Le fond de carte n’a pas pu être chargé. La liste des chantiers reste accessible.</span>
+        <strong>{t("map.unavailable.title")}</strong>
+        <span>{t("map.unavailable.body")}</span>
       </div>
     );
   }
 
   return (
     <div className="chantier-map">
-      <div className="chantier-map-filters" role="group" aria-label="Filtres carte">
+      <div className="chantier-map-filters" role="group" aria-label={t("map.filters.aria")}>
         {MAP_FILTERS.map((f) => (
           <button
             key={f}
@@ -156,7 +160,7 @@ export default function ChantierMap({ points }: { points: ChantierPoint[] }) {
             aria-pressed={filter === f}
             onClick={() => setFilter(f)}
           >
-            {MAP_FILTER_LABELS[f]}
+            {t(`map.filter.${f}` as MessageKey)}
           </button>
         ))}
       </div>

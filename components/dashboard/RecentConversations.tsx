@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Bot,
   ChevronRight,
@@ -7,38 +9,30 @@ import {
 } from "lucide-react";
 
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/languages";
 import type {
   RecentConversation,
   RecentConversations as RecentConversationsData,
   ServiceResult,
-  TenantResolutionStatus,
 } from "@/types/hermes";
 
 type RecentConversationsProps = {
   conversations: ServiceResult<RecentConversationsData>;
 };
 
-const RESOLUTION_MESSAGES: Record<TenantResolutionStatus, string> = {
-  OK: "",
-  UNAUTHENTICATED: "Session expirée. Reconnectez-vous.",
-  NO_TENANT: "Aucun tenant n’est associé à votre compte.",
-  ACCESS_DENIED: "Accès refusé pour le tenant demandé.",
-  AMBIGUOUS_TENANT_REQUIRE_SELECTION:
-    "Plusieurs tenants disponibles : sélection requise.",
-};
-
-function relativeTime(iso: string | null): string {
+function relativeTime(iso: string | null, t: TranslateFn): string {
   if (!iso) return "";
   const then = new Date(iso).getTime();
   if (!Number.isFinite(then)) return "";
   const diffMin = Math.max(0, Math.round((Date.now() - then) / 60000));
-  if (diffMin < 1) return "À l’instant";
-  if (diffMin < 60) return `Il y a ${diffMin} min`;
+  if (diffMin < 1) return t("conv.time.now");
+  if (diffMin < 60) return t("conv.time.minutes", { count: diffMin });
   const diffH = Math.round(diffMin / 60);
-  if (diffH < 24) return `Il y a ${diffH} h`;
+  if (diffH < 24) return t("conv.time.hours", { count: diffH });
   const diffD = Math.round(diffH / 24);
-  if (diffD === 1) return "Hier";
-  return `Il y a ${diffD} j`;
+  if (diffD === 1) return t("conv.time.yesterday");
+  return t("conv.time.days", { count: diffD });
 }
 
 // Business outcome → avatar style. Never exposes internal ids.
@@ -50,12 +44,13 @@ function outcomeTone(outcome: string | null): string {
 }
 
 function Frame({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   return (
     <section className="dashboard-card conversations-card">
       <div className="dashboard-card-header">
         <div>
-          <span className="panel-eyebrow">HISTORIQUE</span>
-          <h3>Conversations récentes</h3>
+          <span className="panel-eyebrow">{t("conv.eyebrow")}</span>
+          <h3>{t("conv.title")}</h3>
         </div>
         <ProvenanceBadge provenance="REAL" />
       </div>
@@ -73,12 +68,12 @@ function OutcomeIcon({ tone }: { tone: string }) {
 export default function RecentConversations({
   conversations,
 }: RecentConversationsProps) {
+  const { t } = useI18n();
+
   if (!conversations.ok) {
     return (
       <Frame>
-        <p className="conversations-empty">
-          L’historique des conversations est indisponible pour le moment.
-        </p>
+        <p className="conversations-empty">{t("conv.unavailable")}</p>
       </Frame>
     );
   }
@@ -89,7 +84,7 @@ export default function RecentConversations({
     return (
       <Frame>
         <p className="conversations-empty">
-          {RESOLUTION_MESSAGES[resolutionStatus]}
+          {t(`conv.resolution.${resolutionStatus}` as MessageKey)}
         </p>
       </Frame>
     );
@@ -98,10 +93,7 @@ export default function RecentConversations({
   if (rows.length === 0) {
     return (
       <Frame>
-        <p className="conversations-empty">
-          Aucune conversation pour le moment. Posez une question à Hermès
-          ci-dessus pour démarrer.
-        </p>
+        <p className="conversations-empty">{t("conv.empty")}</p>
       </Frame>
     );
   }
@@ -120,11 +112,11 @@ export default function RecentConversations({
 
               <span className="conversation-copy">
                 <strong>{conversation.title}</strong>
-                <span>{conversation.preview || "—"}</span>
+                <span>{conversation.preview || t("common.none")}</span>
               </span>
 
               <span className="conversation-time">
-                {relativeTime(conversation.lastMessageAt)}
+                {relativeTime(conversation.lastMessageAt, t)}
               </span>
 
               <ChevronRight size={16} strokeWidth={1.8} />
@@ -135,7 +127,7 @@ export default function RecentConversations({
 
       <div className="conversations-footer-note">
         <MessageSquareText size={16} strokeWidth={1.8} />
-        <span>Vos échanges Hermès, limités à votre tenant.</span>
+        <span>{t("conv.footerNote")}</span>
       </div>
     </Frame>
   );

@@ -1,6 +1,10 @@
+"use client";
+
 import { Activity, CircuitBoard, PauseCircle, PlayCircle } from "lucide-react";
 
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
+import type { MessageKey } from "@/lib/i18n/languages";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import type {
   ResolverObservability,
   ResolverState,
@@ -9,13 +13,6 @@ import type {
 
 type Props = {
   resolver: ServiceResult<ResolverObservability>;
-};
-
-const STATE_LABEL: Record<ResolverState, string> = {
-  READY: "Prêt",
-  DISABLED: "Désactivé",
-  CIRCUIT_OPEN: "Circuit ouvert",
-  NOT_CONFIGURED: "Non configuré",
 };
 
 function stateTone(s: ResolverState): string {
@@ -43,12 +40,13 @@ function fmtRate(r: number | null): string {
 }
 
 function Frame({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   return (
     <section className="dashboard-card system-status-card">
       <div className="dashboard-card-header">
         <div>
-          <span className="panel-eyebrow">RÉSOLVEUR · OPÉRATIONNEL</span>
-          <h3>Résolveur sémantique</h3>
+          <span className="panel-eyebrow">{t("rslv.eyebrow")}</span>
+          <h3>{t("rslv.title")}</h3>
         </div>
         <ProvenanceBadge provenance="REAL" />
       </div>
@@ -58,12 +56,11 @@ function Frame({ children }: { children: React.ReactNode }) {
 }
 
 export default function ResolverStatus({ resolver }: Props) {
+  const { t } = useI18n();
   if (!resolver.ok || resolver.data.resolutionStatus !== "OK") {
     return (
       <Frame>
-        <p className="system-empty">
-          L’état du résolveur est indisponible pour le moment.
-        </p>
+        <p className="system-empty">{t("rslv.unavailable")}</p>
       </Frame>
     );
   }
@@ -79,25 +76,25 @@ export default function ResolverStatus({ resolver }: Props) {
         : PauseCircle;
 
   const cells: { label: string; value: string; tone?: string }[] = [
-    { label: "File", value: String(queue.queueDepth) },
-    { label: "Plus ancienne", value: fmtAge(queue.oldestQueuedAgeSeconds) },
-    { label: "En cours", value: String(queue.runningCount) },
+    { label: t("rslv.cell.queue"), value: String(queue.queueDepth) },
+    { label: t("rslv.cell.oldest"), value: fmtAge(queue.oldestQueuedAgeSeconds) },
+    { label: t("rslv.cell.running"), value: String(queue.runningCount) },
     {
-      label: "Échecs (24 h)",
-      value: outcomes.provenance === "REAL" ? String(outcomes.failedCount) : "—",
+      label: t("rslv.cell.failures"),
+      value: outcomes.provenance === "REAL" ? String(outcomes.failedCount) : t("common.none"),
       tone: outcomes.failedCount > 0 ? "critical" : undefined,
     },
     {
-      label: "Dead-letter",
-      value: outcomes.provenance === "REAL" ? String(outcomes.deadLetterCount) : "—",
+      label: t("rslv.cell.deadLetter"),
+      value: outcomes.provenance === "REAL" ? String(outcomes.deadLetterCount) : t("common.none"),
       tone: outcomes.deadLetterCount > 0 ? "critical" : undefined,
     },
     {
-      label: "Taux d’erreur",
-      value: outcomes.provenance === "REAL" ? fmtRate(outcomes.errorRate) : "—",
+      label: t("rslv.cell.errorRate"),
+      value: outcomes.provenance === "REAL" ? fmtRate(outcomes.errorRate) : t("common.none"),
     },
-    { label: "Coût jour", value: fmtUsd(cost.daySpendUsd) },
-    { label: "Budget restant", value: fmtUsd(cost.dailyRemainingUsd) },
+    { label: t("rslv.cell.dayCost"), value: fmtUsd(cost.daySpendUsd) },
+    { label: t("rslv.cell.budgetRemaining"), value: fmtUsd(cost.dailyRemainingUsd) },
   ];
 
   return (
@@ -105,12 +102,15 @@ export default function ResolverStatus({ resolver }: Props) {
       <div className="resolver-state-row">
         <span className={`resolver-state-pill is-${tone}`}>
           <StateIcon size={14} strokeWidth={2} />
-          {STATE_LABEL[resolverState]}
+          {t(`rslv.state.${resolverState}` as MessageKey)}
         </span>
         <span className="resolver-state-meta">
           <Activity size={12} strokeWidth={1.9} />
-          lot {control.maxBatch ?? "—"} · concurrence {control.maxConcurrency ?? "—"}
-          {control.circuitState === "OPEN" ? " · circuit ouvert" : ""}
+          {t("rslv.stateMeta", {
+            batch: control.maxBatch ?? t("common.none"),
+            concurrency: control.maxConcurrency ?? t("common.none"),
+          })}
+          {control.circuitState === "OPEN" ? ` · ${t("rslv.circuitOpen")}` : ""}
         </span>
       </div>
 
@@ -128,11 +128,8 @@ export default function ResolverStatus({ resolver }: Props) {
       </ul>
 
       <p className="resolver-note">
-        Consommateur inactif — le résolveur ne traite aucune demande tant qu’il
-        n’est pas explicitement activé.
-        {outcomes.provenance !== "REAL"
-          ? " Taux/latence indisponibles (aucune exécution récente)."
-          : ""}
+        {t("rslv.note.idle")}
+        {outcomes.provenance !== "REAL" ? ` ${t("rslv.note.noMetrics")}` : ""}
       </p>
     </Frame>
   );

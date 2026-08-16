@@ -12,11 +12,11 @@ import {
   type OperatorResult,
 } from "@/app/actions/resolver-control";
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
+import type { MessageKey } from "@/lib/i18n/languages";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import {
   deriveResolverControl,
   parseResolverControl,
-  RESOLVER_BLOCKER_LABELS,
-  RESOLVER_STATUS_LABELS,
   type ResolverControl,
 } from "@/lib/resolver/controlState";
 import type { ServiceResult } from "@/types/hermes";
@@ -32,6 +32,7 @@ function toneForStatus(s: string): string {
 }
 
 export default function ResolverControlPanel({ control }: Props) {
+  const { t } = useI18n();
   const initial: ResolverControl | null = control.ok ? control.data : null;
   const [model, setModel] = useState<ResolverControl | null>(initial);
   const [msg, setMsg] = useState<string | null>(null);
@@ -59,38 +60,45 @@ export default function ResolverControlPanel({ control }: Props) {
     setMsg(null);
     startTransition(async () => {
       const res = await action();
-      setMsg(res.ok ? okMessage : `Refusé : ${res.status ?? "erreur"}`);
+      setMsg(
+        res.ok
+          ? okMessage
+          : t("rctl.refused", { status: res.status ?? t("rctl.error") }),
+      );
       const raw = await resolverRefreshControlAction();
       if (raw) setModel(parseResolverControl(raw));
     });
   }
 
   const cells: { label: string; value: string; tone?: string }[] = [
-    { label: "Kill-switch", value: model.enabled ? "ON" : "OFF", tone: model.enabled ? undefined : "muted" },
-    { label: "Circuit", value: model.circuitState, tone: model.circuitState === "OPEN" ? "critical" : undefined },
-    { label: "File", value: String(model.queueDepth) },
-    { label: "En cours", value: String(model.runningCount) },
-    { label: "Exclusions protégées", value: String(model.protectedExclusionsCount) },
-    { label: "Préflight", value: view.canEnable ? "PRÊT" : "NON PRÊT", tone: view.canEnable ? "normal" : "critical" },
+    { label: t("rctl.cell.killSwitch"), value: model.enabled ? t("rctl.on") : t("rctl.off"), tone: model.enabled ? undefined : "muted" },
+    { label: t("rctl.cell.circuit"), value: t(`rctl.circuit.${model.circuitState}` as MessageKey), tone: model.circuitState === "OPEN" ? "critical" : undefined },
+    { label: t("rctl.cell.queue"), value: String(model.queueDepth) },
+    { label: t("rctl.cell.running"), value: String(model.runningCount) },
+    { label: t("rctl.cell.protectedExclusions"), value: String(model.protectedExclusionsCount) },
+    { label: t("rctl.cell.preflight"), value: view.canEnable ? t("rctl.ready") : t("rctl.notReady"), tone: view.canEnable ? "normal" : "critical" },
   ];
 
   return (
     <section className="dashboard-card system-status-card">
       <div className="dashboard-card-header">
         <div>
-          <span className="panel-eyebrow">RÉSOLVEUR · CONTRÔLE OPÉRATEUR</span>
-          <h3>Plan de contrôle</h3>
+          <span className="panel-eyebrow">{t("rctl.eyebrow")}</span>
+          <h3>{t("rctl.title")}</h3>
         </div>
         <ProvenanceBadge provenance="REAL" />
       </div>
 
       <div className="resolver-state-row">
         <span className={`resolver-state-pill is-${toneForStatus(view.status)}`}>
-          {RESOLVER_STATUS_LABELS[view.status]}
+          {t(`rctl.status.${view.status}` as MessageKey)}
         </span>
         <span className="resolver-state-meta">
-          lot {model.maxBatch ?? "—"} · concurrence {model.maxConcurrency ?? "—"} · cadence{" "}
-          {model.cadenceSeconds ?? "—"}s
+          {t("rctl.controlMeta", {
+            batch: model.maxBatch ?? t("common.none"),
+            concurrency: model.maxConcurrency ?? t("common.none"),
+            cadence: model.cadenceSeconds ?? t("common.none"),
+          })}
         </span>
       </div>
 
@@ -109,8 +117,10 @@ export default function ResolverControlPanel({ control }: Props) {
 
       {!view.canEnable && view.blockers.length > 0 ? (
         <p className="resolver-note">
-          Activation bloquée :{" "}
-          {view.blockers.map((b) => RESOLVER_BLOCKER_LABELS[b] ?? b).join(" · ")}
+          {t("rctl.activationBlocked")}{" "}
+          {view.blockers
+            .map((b) => t(`rctl.blocker.${b}` as MessageKey))
+            .join(" · ")}
         </p>
       ) : null}
 
@@ -122,20 +132,20 @@ export default function ResolverControlPanel({ control }: Props) {
           onClick={() =>
             run(
               resolverEnableAction,
-              "Resolver activé.",
-              "Activer le résolveur sémantique ? Il commencera à traiter les demandes en file.",
+              t("rctl.msg.enabled"),
+              t("rctl.confirm.enable"),
             )
           }
         >
-          <PlayCircle size={14} strokeWidth={2} /> Activer
+          <PlayCircle size={14} strokeWidth={2} /> {t("rctl.action.enable")}
         </button>
         <button
           type="button"
           className="resolver-btn"
           disabled={!view.canDisable || pending}
-          onClick={() => run(resolverDisableAction, "Resolver désactivé.")}
+          onClick={() => run(resolverDisableAction, t("rctl.msg.disabled"))}
         >
-          <PowerOff size={14} strokeWidth={2} /> Désactiver
+          <PowerOff size={14} strokeWidth={2} /> {t("rctl.action.disable")}
         </button>
         <button
           type="button"
@@ -144,11 +154,11 @@ export default function ResolverControlPanel({ control }: Props) {
           onClick={() =>
             run(
               resolverResetCircuitAction,
-              "Circuit réarmé (resolver reste désactivé).",
+              t("rctl.msg.circuitReset"),
             )
           }
         >
-          <CircuitBoard size={14} strokeWidth={2} /> Réarmer circuit
+          <CircuitBoard size={14} strokeWidth={2} /> {t("rctl.action.resetCircuit")}
         </button>
         <button
           type="button"
@@ -157,29 +167,26 @@ export default function ResolverControlPanel({ control }: Props) {
           onClick={() =>
             run(
               resolverReapAction,
-              "Reaper exécuté (borné).",
-              "Lancer un reap borné des dead-letters du résolveur ?",
+              t("rctl.msg.reaped"),
+              t("rctl.confirm.reap"),
             )
           }
         >
-          <Trash2 size={14} strokeWidth={2} /> Reaper
+          <Trash2 size={14} strokeWidth={2} /> {t("rctl.action.reap")}
         </button>
         <button
           type="button"
           className="resolver-btn is-ghost"
           disabled={pending}
           onClick={refresh}
-          aria-label="Rafraîchir"
+          aria-label={t("common.refresh")}
         >
           <RefreshCw size={14} strokeWidth={2} />
         </button>
       </div>
 
       {msg ? <p className="resolver-note">{msg}</p> : null}
-      <p className="resolver-note">
-        Réarmer le circuit ne réactive jamais le résolveur : l’activation reste un
-        geste opérateur explicite, validé côté serveur (préflight fail-closed).
-      </p>
+      <p className="resolver-note">{t("rctl.note.circuitReset")}</p>
     </section>
   );
 }

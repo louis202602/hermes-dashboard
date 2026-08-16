@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import DashboardSettings from "@/components/dashboard/DashboardSettings";
 import { HERMES_DEFAULT_PREFERENCES } from "@/lib/dashboard/preferences";
 import { availableWidgetIds } from "@/lib/dashboard/widgets";
+import { getCatalog, getLanguageDef, resolveLanguage } from "@/lib/i18n";
+import { I18nProvider } from "@/lib/i18n/I18nProvider";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getAvailableCapabilities } from "@/services/hermes/panels";
 import { getDashboardUserPreferences } from "@/services/hermes/preferences";
@@ -32,10 +34,15 @@ export default async function DashboardSettingsPage() {
       : [],
   );
   const available = [...availableWidgetIds(capabilityKeys)];
+  const lang = resolveLanguage(prefs.regional.language, prefs.regional.locale);
+  const dir = getLanguageDef(lang).dir;
+  const messages = getCatalog(lang);
 
   return (
-    <main className="settings-shell">
-      <DashboardSettings initial={prefs} availableWidgets={available} />
-    </main>
+    <I18nProvider lang={lang} dir={dir} messages={messages}>
+      <main className="settings-shell" dir={dir}>
+        <DashboardSettings initial={prefs} availableWidgets={available} />
+      </main>
+    </I18nProvider>
   );
 }
