@@ -6,6 +6,7 @@ import { test } from "node:test";
 import {
   WALLPAPER_REGISTRY,
   WALLPAPER_CATEGORIES,
+  PHOTO_CATEGORIES,
   DEFAULT_WALLPAPER_REF,
   wallpaperById,
   isBuiltinWallpaper,
@@ -15,7 +16,10 @@ import {
   resolveWallpaper,
   scrimLevel,
   wallpaperClass,
+  wallpaperAsset,
+  wallpaperThumb,
   wallpapersByCategory,
+  photoCategoryPending,
   userWallpaperPath,
   userWallpaperPrefix,
   isOwnedWallpaperPath,
@@ -87,10 +91,54 @@ test("wallpaperClass: built-in ⇒ class, user/none ⇒ null (image path is futu
   assert.equal(wallpaperClass(clampWallpaper({})), null);
 });
 
-test("categories: hermes/espace/montagne/mer/tropical all populated (CSS art)", () => {
-  for (const c of ["hermes", "espace", "montagne", "mer", "tropical"] as const) {
-    assert.ok(wallpapersByCategory(c).length >= 1, `${c} has wallpapers`);
+test("categories: CSS art (hermes/abstrait) populated; espace ships REAL photos", () => {
+  // Gradient art categories are never empty.
+  for (const c of ["hermes", "abstrait"] as const) {
+    const list = wallpapersByCategory(c);
+    assert.ok(list.length >= 1, `${c} has wallpapers`);
+    assert.ok(list.every((w) => w.kind === "gradient"), `${c} is CSS gradient art`);
   }
+  // Espace ships real image assets (NASA public domain), never gradients.
+  const espace = wallpapersByCategory("espace");
+  assert.ok(espace.length >= 1, "espace has real photos");
+  assert.ok(espace.every((w) => w.kind === "image"), "espace entries are images");
+});
+
+test("photo categories: real images carry a local asset, thumb + honest provenance", () => {
+  const photos = WALLPAPER_REGISTRY.filter((w) => w.kind === "image");
+  assert.ok(photos.length >= 1);
+  for (const w of photos) {
+    assert.ok(PHOTO_CATEGORIES.includes(w.category), `${w.id} is in a photo category`);
+    assert.match(w.asset ?? "", /^\/wallpapers\//, `${w.id} has a /public asset path`);
+    assert.match(w.thumb ?? "", /^\/wallpapers\//, `${w.id} has a thumbnail path`);
+    assert.ok((w.provenance ?? "").length > 0, `${w.id} declares provenance (never fabricated)`);
+  }
+});
+
+test("wallpaperAsset / wallpaperThumb: image ⇒ paths, gradient/user ⇒ null", () => {
+  assert.match(wallpaperAsset("espace-terre") ?? "", /espace-terre\.webp$/);
+  assert.match(wallpaperThumb("espace-terre") ?? "", /espace-terre-thumb\.webp$/);
+  assert.equal(wallpaperAsset("hermes-noir"), null, "gradient has no asset");
+  assert.equal(wallpaperThumb("hermes-noir"), null, "gradient has no thumb");
+  assert.equal(wallpaperAsset("user:abc"), null);
+  assert.equal(wallpaperThumb(null), null);
+});
+
+test("photoCategoryPending: true only for photo categories with no real image yet", () => {
+  // espace ships real images ⇒ not pending
+  assert.equal(photoCategoryPending("espace"), false);
+  // montagne/mer/tropical are prepared slots (no fabricated provenance) ⇒ pending
+  for (const c of ["montagne", "mer", "tropical"] as const) {
+    assert.equal(photoCategoryPending(c), true, `${c} awaits real photos`);
+  }
+  // non-photo categories are never "pending"
+  assert.equal(photoCategoryPending("hermes"), false);
+  assert.equal(photoCategoryPending("abstrait"), false);
+});
+
+test("image wallpaper renders via URL, not a gradient class", () => {
+  // kind:"image" ⇒ no gradient class (WallpaperLayer uses the asset/URL path instead)
+  assert.equal(wallpaperClass(clampWallpaper({ wallpaperRef: "espace-terre" })), null);
 });
 
 // --- SECURITY: user wallpaper ownership / traversal guard ---------------------

@@ -14,56 +14,86 @@
  */
 
 export const WALLPAPER_CATEGORIES = [
-  "hermes",
-  "espace",
-  "montagne",
-  "mer",
-  "tropical",
-  "user",
+  "hermes", // CSS gradient art — sober, premium (0 asset)
+  "abstrait", // CSS gradient art — atmospheres/ambiances (0 asset)
+  "montagne", // PHOTO category (real images)
+  "mer", // PHOTO category (real images)
+  "tropical", // PHOTO category (real images)
+  "espace", // PHOTO category (real images)
+  "user", // user uploads
 ] as const;
 export type WallpaperCategory = (typeof WALLPAPER_CATEGORIES)[number];
+
+/** Categories that must show REAL photographs (never CSS gradient art). */
+export const PHOTO_CATEGORIES: WallpaperCategory[] = ["montagne", "mer", "tropical", "espace"];
 
 export type WallpaperDef = {
   id: string;
   category: WallpaperCategory;
-  /** "gradient" = pure CSS built-in (0 asset). "image" = asset/signed-URL. */
+  /** "gradient" = pure CSS built-in (0 asset). "image" = real image asset. */
   kind: "gradient" | "image";
   /** Default readability scrim (0..1) suited to this wallpaper's brightness. */
   defaultScrim: number;
-  /** For kind:"image" built-ins: the local asset path (served from /public). */
+  /** For kind:"image": the full-quality local asset path (served from /public). */
   asset?: string;
+  /** For kind:"image": a lightweight thumbnail path for the gallery (lazy-loaded). */
+  thumb?: string;
+  /** For kind:"image": human-readable source + LICENCE (never fabricated). */
+  provenance?: string;
 };
 
 /**
- * Built-in wallpapers shipped in this increment — all pure CSS (`.wallpaper-<id>`), all
- * dark-to-mid so text stays readable with a light scrim. Photographic families
- * (montagne / mer / tropical) and user uploads are the next DASH-4E increment; their
- * ids will slot into this same registry with kind:"image" — no architecture change.
+ * Wallpaper registry.
+ *
+ * - `hermes` / `abstrait`: pure-CSS gradient art (`.wallpaper-<id>`, 0 asset, 0 egress).
+ *   The former "espace/montagne/mer/tropical" GRADIENTS are RECLASSIFIED here — they are
+ *   stylised atmospheres, NOT photographs, so they are no longer presented as landscape
+ *   photos (ids are kept stable so existing user prefs keep working).
+ * - Photo categories (`montagne`/`mer`/`tropical`/`espace`) carry REAL images only
+ *   (kind:"image"). `espace` ships real NASA public-domain photos. `montagne`/`mer`/
+ *   `tropical` are prepared SLOTS — the exact files to provide are in
+ *   docs/wallpaper-assets.md; provenance is NEVER fabricated.
  */
 export const WALLPAPER_REGISTRY: WallpaperDef[] = [
-  // Hermès / abstract (sober, premium)
+  // --- Hermès (CSS, sober premium) ---
   { id: "hermes-noir", category: "hermes", kind: "gradient", defaultScrim: 0.15 },
   { id: "hermes-bleu-nuit", category: "hermes", kind: "gradient", defaultScrim: 0.18 },
   { id: "hermes-graphite", category: "hermes", kind: "gradient", defaultScrim: 0.15 },
   { id: "hermes-azur", category: "hermes", kind: "gradient", defaultScrim: 0.22 },
   { id: "hermes-solaire", category: "hermes", kind: "gradient", defaultScrim: 0.28 },
   { id: "hermes-aurora", category: "hermes", kind: "gradient", defaultScrim: 0.2 },
-  // Espace / planète — spatial LANDSCAPE only (atmosphere + stars), NO central object.
-  { id: "espace-atmosphere", category: "espace", kind: "gradient", defaultScrim: 0.2 },
-  { id: "espace-etoiles", category: "espace", kind: "gradient", defaultScrim: 0.15 },
-  { id: "espace-planete", category: "espace", kind: "gradient", defaultScrim: 0.2 },
-  // Montagne / neige — premium CSS art (photo built-ins are a documented manifest).
-  { id: "montagne-neige", category: "montagne", kind: "gradient", defaultScrim: 0.34 },
-  { id: "montagne-alpine", category: "montagne", kind: "gradient", defaultScrim: 0.3 },
-  { id: "montagne-crepuscule", category: "montagne", kind: "gradient", defaultScrim: 0.3 },
-  // Mer / Méditerranée
-  { id: "mer-profonde", category: "mer", kind: "gradient", defaultScrim: 0.22 },
-  { id: "mer-turquoise", category: "mer", kind: "gradient", defaultScrim: 0.34 },
-  { id: "mer-couchant", category: "mer", kind: "gradient", defaultScrim: 0.3 },
-  // Tropical / soleil
-  { id: "tropical-couchant", category: "tropical", kind: "gradient", defaultScrim: 0.3 },
-  { id: "tropical-palmiers", category: "tropical", kind: "gradient", defaultScrim: 0.32 },
-  { id: "tropical-plage", category: "tropical", kind: "gradient", defaultScrim: 0.36 },
+  // --- Abstrait (CSS atmospheres — reclassified gradients, NOT photos) ---
+  { id: "espace-atmosphere", category: "abstrait", kind: "gradient", defaultScrim: 0.2 },
+  { id: "espace-etoiles", category: "abstrait", kind: "gradient", defaultScrim: 0.15 },
+  { id: "espace-planete", category: "abstrait", kind: "gradient", defaultScrim: 0.2 },
+  { id: "montagne-neige", category: "abstrait", kind: "gradient", defaultScrim: 0.34 },
+  { id: "montagne-alpine", category: "abstrait", kind: "gradient", defaultScrim: 0.3 },
+  { id: "montagne-crepuscule", category: "abstrait", kind: "gradient", defaultScrim: 0.3 },
+  { id: "mer-profonde", category: "abstrait", kind: "gradient", defaultScrim: 0.22 },
+  { id: "mer-turquoise", category: "abstrait", kind: "gradient", defaultScrim: 0.34 },
+  { id: "mer-couchant", category: "abstrait", kind: "gradient", defaultScrim: 0.3 },
+  { id: "tropical-couchant", category: "abstrait", kind: "gradient", defaultScrim: 0.3 },
+  { id: "tropical-palmiers", category: "abstrait", kind: "gradient", defaultScrim: 0.32 },
+  { id: "tropical-plage", category: "abstrait", kind: "gradient", defaultScrim: 0.36 },
+  // --- Espace (REAL photos — NASA, public domain) ---
+  {
+    id: "espace-terre",
+    category: "espace",
+    kind: "image",
+    defaultScrim: 0.28,
+    asset: "/wallpapers/space/espace-terre.webp",
+    thumb: "/wallpapers/space/espace-terre-thumb.webp",
+    provenance: "NASA — Apollo 17 « Blue Marble » (AS17-148-22727) — domaine public",
+  },
+  {
+    id: "espace-horizon",
+    category: "espace",
+    kind: "image",
+    defaultScrim: 0.24,
+    asset: "/wallpapers/space/espace-horizon.webp",
+    thumb: "/wallpapers/space/espace-horizon-thumb.webp",
+    provenance: "NASA — ISS Expedition 43 (iss043e091794) — domaine public",
+  },
 ];
 
 /** The Hermès default wallpaper id when nothing is chosen (subtle, always readable). */
@@ -177,8 +207,23 @@ export function wallpaperAsset(ref: string | null | undefined): string | null {
   return def?.kind === "image" ? (def.asset ?? null) : null;
 }
 
+/** Lightweight thumbnail path for an image wallpaper (falls back to the full asset). */
+export function wallpaperThumb(ref: string | null | undefined): string | null {
+  const def = wallpaperById(ref);
+  if (def?.kind !== "image") return null;
+  return def.thumb ?? def.asset ?? null;
+}
+
 export function wallpapersByCategory(category: WallpaperCategory): WallpaperDef[] {
   return WALLPAPER_REGISTRY.filter((w) => w.category === category);
+}
+
+/** True when a PHOTO category still has no real image shipped (gallery shows a note). */
+export function photoCategoryPending(category: WallpaperCategory): boolean {
+  return (
+    PHOTO_CATEGORIES.includes(category) &&
+    WALLPAPER_REGISTRY.every((w) => w.category !== category || w.kind !== "image")
+  );
 }
 
 // --- User-uploaded wallpapers: ref = "user:<storagePath>" --------------------
