@@ -155,6 +155,31 @@ test("MULTI_DEVICE_PROFILE: state survives a DB JSONB round-trip unchanged", () 
   assert.equal(roundTripped.byId.custom?.name, "Mon tableau");
 });
 
+// --- DASH-4E readiness: wallpaperRef reserved per profile, additive-safe ------
+test("WALLPAPER_REF_READY: per-profile wallpaperRef round-trips; unknown future fields are non-destructive", () => {
+  // A wallpaper reference set on a profile survives clamp + JSONB round-trip.
+  const raw = {
+    active: "direction",
+    byId: {
+      direction: { wallpaperRef: "hermes/space-earth", appearance: { theme: "midnight" } },
+      custom: { wallpaperRef: "user/abc123.webp" },
+    },
+  };
+  const s = clampProfiles(raw);
+  assert.equal(s.byId.direction?.wallpaperRef, "hermes/space-earth");
+  assert.equal(s.byId.custom?.wallpaperRef, "user/abc123.webp");
+  const rt = clampProfiles(JSON.parse(JSON.stringify(s)));
+  assert.deepEqual(rt, s, "wallpaperRef survives a DB JSONB round-trip");
+  // Additive forward-compat: a DASH-4E field not yet known to the clamp does not crash
+  // and does not corrupt the known fields (the row simply carries it opaquely in JSONB).
+  const withFuture = clampProfiles({
+    active: "chantier",
+    byId: { chantier: { wallpaperRef: "hermes/mountain", wallpaperScrim: 0.4, wallpaperPosition: "center" } },
+  });
+  assert.equal(withFuture.active, "chantier");
+  assert.equal(withFuture.byId.chantier?.wallpaperRef, "hermes/mountain");
+});
+
 // --- COST-FIRST: pure module, no I/O -----------------------------------------
 test("NO_EXTRA_DB_FETCH: profiles module is pure (no fetch/network/LLM)", () => {
   const src = readFileSync(fileURLToPath(new URL("../lib/dashboard/profiles.ts", import.meta.url)), "utf8");
