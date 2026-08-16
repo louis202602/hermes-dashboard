@@ -104,6 +104,14 @@ test("DEDUPLICATION: same canonical id collapses to one notification", () => {
   assert.deepEqual(n.map((x) => x.id).sort(), ["APPROVAL_PENDING:1", "APPROVAL_PENDING:2"]);
 });
 
+test("DEDUP key includes source/type: APPROVAL:123 ≠ INCIDENT:123", () => {
+  const n = buildNotifications([
+    alert({ id: "APPROVAL_PENDING:123", severity: "HIGH", kind: "approval", source: "APPROVAL_PENDING" }),
+    alert({ id: "INCIDENT_OPEN:123", severity: "HIGH", kind: "incident", source: "INCIDENT_OPEN" }),
+  ]);
+  assert.equal(n.length, 2, "same numeric id but different source ⇒ two distinct notifications");
+});
+
 // --- SORT_PRIORITY -----------------------------------------------------------
 test("SORT_PRIORITY: CRITICAL → HIGH → WARNING → INFO", () => {
   const n = buildNotifications([
@@ -134,17 +142,33 @@ test("MAX_LIMIT: never surfaces more than MAX_NOTIFICATIONS", () => {
 });
 
 // --- READ_STATE / UNREAD_STATE ----------------------------------------------
-test("READ_STATE + UNREAD_STATE via watermark and explicit ids", () => {
-  const older = alert({ id: "a", severity: "HIGH", kind: "x", ts: "2026-08-16T08:00:00Z" });
-  const newer = alert({ id: "b", severity: "HIGH", kind: "x", ts: "2026-08-16T12:00:00Z" });
+test("READ_STATE: watermark covers INFO/WARNING; HIGH/CRITICAL need explicit key", () => {
   const cursor: NotificationCursor = { lastSeenAt: "2026-08-16T10:00:00Z", readIds: [] };
-  assert.equal(isRead(older, cursor), true, "older than watermark ⇒ read");
-  assert.equal(isRead(newer, cursor), false, "newer than watermark ⇒ unread");
-  // explicit id marks a newer item read even without moving the watermark
-  const c2 = markRead(cursor, "b");
-  assert.equal(isRead(newer, c2), true);
-  const n = buildNotifications([older, newer], cursor);
-  assert.equal(unreadCount(n), 1);
+  const warnOld = alert({ id: "w", severity: "WARNING", ts: "2026-08-16T08:00:00Z" });
+  const warnNew = alert({ id: "w2", severity: "WARNING", ts: "2026-08-16T12:00:00Z" });
+  assert.equal(isRead(warnOld, cursor), true, "WARNING older than watermark ⇒ read");
+  assert.equal(isRead(warnNew, cursor), false, "WARNING newer than watermark ⇒ unread");
+  // HIGH is NEVER auto-read by the time watermark (even when older) — must be explicit
+  const highOld = alert({ id: "h", severity: "HIGH", ts: "2026-08-16T08:00:00Z" });
+  assert.equal(isRead(highOld, cursor), false, "HIGH not covered by watermark");
+  const c2 = markRead(cursor, highOld);
+  assert.equal(isRead(highOld, c2), true, "explicit mark ⇒ read");
+});
+
+// --- SEVERITY ESCALATION (aggravation must resurface, never masked) ----------
+test("ESCALATION: a read WARNING that becomes CRITICAL on the SAME source resurfaces", () => {
+  const base = { id: "BUDGET_MONTH:2026-08", source: "BUDGET", kind: "budget", ts: "2026-08-16T08:00:00Z" };
+  const warn = alert({ ...base, severity: "WARNING" });
+  const crit = alert({ ...base, severity: "CRITICAL" });
+  // (a) individually read WARNING → escalation to CRITICAL is UNREAD again
+  const c1 = markRead(EMPTY, warn);
+  assert.equal(isRead(warn, c1), true);
+  assert.equal(isRead(crit, c1), false, "aggravation not masked by individual read");
+  // (b) mark-all-read (watermark) then escalation with the SAME ts is still UNREAD
+  const c2 = markAllRead(EMPTY, buildNotifications([warn]));
+  assert.equal(isRead(crit, c2), false, "aggravation not masked by watermark");
+  // sanity: same-severity re-render stays read
+  assert.equal(isRead(warn, c2), true);
 });
 
 // --- MARK_ALL_READ -----------------------------------------------------------
@@ -168,12 +192,12 @@ test("MARK_ALL_READ: everything currently surfaced becomes read (ts + null-ts)",
 // --- markRead bounded --------------------------------------------------------
 test("markRead is bounded and de-duplicated (no infinite list)", () => {
   let c: NotificationCursor = EMPTY;
-  for (let i = 0; i < 500; i++) c = markRead(c, `id-${i}`);
+  for (let i = 0; i < 500; i++) c = markRead(c, { id: `id-${i}`, severity: "HIGH" });
   assert.ok(c.readIds.length <= 200, "readIds bounded to 200");
-  assert.ok(c.readIds.includes("id-499"), "keeps the most recent");
+  assert.ok(c.readIds.includes("id-499::HIGH"), "keeps the most recent (id::severity)");
   // idempotent
   const before = c.readIds.length;
-  c = markRead(c, "id-499");
+  c = markRead(c, { id: "id-499", severity: "HIGH" });
   assert.equal(c.readIds.length, before);
 });
 

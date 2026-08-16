@@ -31,7 +31,7 @@ type HeaderProps = {
   visibleWidgetIds?: string[];
   locale?: string;
   onMarkAllRead?: () => void;
-  onMarkRead?: (id: string) => void;
+  onMarkRead?: (n: Notification) => void;
 };
 
 function initials(email: string): string {
@@ -57,7 +57,13 @@ export default function Header({
   const router = useRouter();
   const [appr, setAppr] = useState<Appearance>(appearance);
   const [notifOpen, setNotifOpen] = useState(false);
+  const bellRef = useRef<HTMLButtonElement | null>(null);
   const versionRef = useRef<number>(preferencesVersion);
+  // Return focus to the bell when the panel closes (a11y).
+  const closeNotif = () => {
+    setNotifOpen(false);
+    bellRef.current?.focus();
+  };
   const unread = unreadCount(notifications);
   const badge = badgeText(unread);
   // Effective light/dark for the icon (resolves auto/named themes at click time).
@@ -125,6 +131,7 @@ export default function Header({
         </Link>
 
         <button
+          ref={bellRef}
           type="button"
           className="hos-icon-btn hos-notif-btn"
           aria-label={
@@ -154,11 +161,11 @@ export default function Header({
           notifications={notifications}
           visibleWidgetIds={visibleWidgetIds}
           locale={locale}
-          onClose={() => setNotifOpen(false)}
+          onClose={closeNotif}
           onMarkAllRead={() => {
             onMarkAllRead?.();
           }}
-          onMarkRead={(id) => onMarkRead?.(id)}
+          onMarkRead={(n) => onMarkRead?.(n)}
         />
       ) : null}
     </header>

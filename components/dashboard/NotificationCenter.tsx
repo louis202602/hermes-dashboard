@@ -28,7 +28,7 @@ type Props = {
   locale: string;
   onClose: () => void;
   onMarkAllRead: () => void;
-  onMarkRead: (id: string) => void;
+  onMarkRead: (n: Notification) => void;
 };
 
 function severityIcon(sev: AlertSeverity) {
@@ -173,7 +173,7 @@ export default function NotificationCenter({
                         className="notif-link"
                         href={`#widget-${n.targetWidget}`}
                         onClick={() => {
-                          onMarkRead(n.id);
+                          onMarkRead(n);
                           onClose();
                         }}
                       >
@@ -187,7 +187,7 @@ export default function NotificationCenter({
                         className="notif-read-btn"
                         aria-label={t("notifications.markRead")}
                         title={t("notifications.markRead")}
-                        onClick={() => onMarkRead(n.id)}
+                        onClick={() => onMarkRead(n)}
                       >
                         <Check size={15} strokeWidth={1.9} />
                       </button>

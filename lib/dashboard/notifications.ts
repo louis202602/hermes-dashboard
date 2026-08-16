@@ -104,13 +104,34 @@ export function targetWidgetForAlert(a: Pick<UnifiedAlert, "kind" | "source">): 
 
 // --- Cursor / read-state ----------------------------------------------------
 
-/** A notification is read when covered by the watermark OR marked individually. */
-export function isRead(
-  n: Pick<Notification, "id" | "ts">,
-  cursor: NotificationCursor,
-): boolean {
-  if (cursor.readIds.includes(n.id)) return true;
-  if (n.ts && cursor.lastSeenAt && n.ts <= cursor.lastSeenAt) return true;
+type ReadTarget = Pick<Notification, "id" | "ts" | "severity">;
+
+/**
+ * The read identity is `${id}::${severity}` — NOT the bare canonical id. So an
+ * aggravation on the SAME source (e.g. a WARNING budget alert that becomes CRITICAL)
+ * has a DIFFERENT read key and correctly resurfaces as unread, never masked by the
+ * old "read" state. Dedup still uses the bare id (see buildNotifications).
+ */
+export function readKey(n: Pick<Notification, "id" | "severity">): string {
+  return `${n.id}::${n.severity}`;
+}
+
+/**
+ * Read when the exact (id, severity) was marked, OR — for non-actionable INFO/WARNING
+ * only — when covered by the time watermark. HIGH/CRITICAL are NEVER auto-read by the
+ * watermark: an escalation to an actionable severity always demands attention (it is
+ * cleared only by an explicit mark-read / mark-all-read of that exact severity).
+ */
+export function isRead(n: ReadTarget, cursor: NotificationCursor): boolean {
+  if (cursor.readIds.includes(readKey(n))) return true;
+  if (
+    (n.severity === "INFO" || n.severity === "WARNING") &&
+    n.ts &&
+    cursor.lastSeenAt &&
+    n.ts <= cursor.lastSeenAt
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -129,16 +150,21 @@ function capReadIds(ids: string[]): string[] {
     : out;
 }
 
-/** Mark one notification read (bounded, de-duplicated). */
-export function markRead(cursor: NotificationCursor, id: string): NotificationCursor {
-  if (!id || cursor.readIds.includes(id)) return cursor;
-  return { lastSeenAt: cursor.lastSeenAt, readIds: capReadIds([...cursor.readIds, id]) };
+/** Mark one notification read at its CURRENT severity (bounded, de-duplicated). */
+export function markRead(
+  cursor: NotificationCursor,
+  n: Pick<Notification, "id" | "severity">,
+): NotificationCursor {
+  const k = readKey(n);
+  if (!n.id || cursor.readIds.includes(k)) return cursor;
+  return { lastSeenAt: cursor.lastSeenAt, readIds: capReadIds([...cursor.readIds, k]) };
 }
 
 /**
  * Mark everything currently surfaced as read: advance the watermark to the newest ts
- * (so timestamped items are covered without storing their ids) and add the ids of any
- * still-unread items WITHOUT a ts (bounded). Idempotent.
+ * (covers INFO/WARNING without storing their keys) and store the (id, severity) key of
+ * every item NOT covered by that watermark — i.e. HIGH/CRITICAL and any un-timestamped
+ * item. Bounded + idempotent. A later escalation gets a new key and resurfaces.
  */
 export function markAllRead(
   cursor: NotificationCursor,
@@ -148,13 +174,13 @@ export function markAllRead(
   for (const n of notifications) {
     if (n.ts && (!newest || n.ts > newest)) newest = n.ts;
   }
-  const untimestamped = notifications
-    .filter((n) => !n.ts && !isRead(n, cursor))
-    .map((n) => n.id);
-  return {
-    lastSeenAt: newest,
-    readIds: capReadIds([...cursor.readIds, ...untimestamped]),
-  };
+  const coveredByWatermark = (n: ReadTarget): boolean =>
+    (n.severity === "INFO" || n.severity === "WARNING") &&
+    !!n.ts &&
+    !!newest &&
+    n.ts <= newest;
+  const keys = notifications.filter((n) => !coveredByWatermark(n)).map(readKey);
+  return { lastSeenAt: newest, readIds: capReadIds([...cursor.readIds, ...keys]) };
 }
 
 // --- Build / count / filter -------------------------------------------------

@@ -57,6 +57,7 @@ import {
   buildNotificationsFromResult,
   markAllRead as markAllNotificationsRead,
   markRead as markNotificationRead,
+  type Notification,
 } from "@/lib/dashboard/notifications";
 import {
   contextVisibleSegments,
@@ -262,7 +263,7 @@ export default function DashboardShell({
     [applyCursor, notifications],
   );
   const onMarkRead = useCallback(
-    (id: string) => applyCursor(markNotificationRead(cursorRef.current, id)),
+    (n: Notification) => applyCursor(markNotificationRead(cursorRef.current, n)),
     [applyCursor],
   );
 
