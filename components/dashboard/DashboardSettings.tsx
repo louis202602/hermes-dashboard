@@ -355,6 +355,16 @@ export default function DashboardSettings({
     label: t(`wallpaper.pos.${p}` as MessageKey),
   }));
   const currentIsUserWp = isUserWallpaperRef(currentWpRef);
+  // A `user:` object is safe to delete only if NO other profile — nor the global
+  // default — still references it (refs can be shared across profiles).
+  const isOrphanAfterReplace = (ref: string | null): ref is string => {
+    if (!ref || !isUserWallpaperRef(ref)) return false;
+    if (profiles.wallpaper?.wallpaperRef === ref) return false;
+    for (const [id, cfg] of Object.entries(profiles.byId)) {
+      if (id !== activeProfile && cfg?.wallpaperRef === ref) return false;
+    }
+    return true;
+  };
   const onUploadWallpaper = async (file: File | null | undefined) => {
     if (!file) return;
     setWpError(false);
@@ -367,7 +377,14 @@ export default function DashboardSettings({
       fd.append("file", jpeg);
       const res = await uploadWallpaperAction(fd);
       if (res.ok) {
+        const previousRef = currentWpRef;
         setWp({ wallpaperRef: res.ref });
+        // ORPHAN_POLICY (V1, no cron/GC): replacing this profile's own photo deletes
+        // the previous object when nothing else references it — bounds stored user
+        // wallpapers to ≤ profile count. Ownership is re-checked server-side.
+        if (isOrphanAfterReplace(previousRef)) {
+          void deleteWallpaperAction(previousRef);
+        }
         router.refresh(); // re-sign server-side so the dashboard shows the new fond
       } else {
         setWpError(true);

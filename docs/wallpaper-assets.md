@@ -43,3 +43,22 @@ readability or paired with a higher default scrim):
 
 Each asset should have a lightweight thumbnail (the gallery can also reuse the full
 image scaled). Add `img-src`/asset paths are already allowed (served from `/public`).
+
+## User photo wallpapers — storage & lifecycle (V1)
+
+- **Storage**: reuses the existing PRIVATE bucket `hermes-chat-attachments` and its
+  `storage.objects` RLS. The RLS gate checks only `foldername[1]=tenant` and
+  `foldername[2]=auth.uid()`, so the path `${tenant}/${user}/wallpapers/<uuid>/<safe>`
+  is already covered — **no migration, no new bucket, no new table, no new RPC**.
+  Cross-user and cross-tenant access is denied by the same policy.
+- **Reads**: short-TTL (10 min) signed URLs minted server-side per load; the canonical
+  preference is the `user:<storage-path>` ref, never a signed URL. A missing/expired
+  URL falls back to global → Hermès default (never a broken screen).
+- **ORPHAN_POLICY (V1, no cron / no GC — COST-FIRST)**: deleting a personal photo
+  removes its object immediately (ownership re-checked server-side). Uploading a
+  replacement to a profile deletes the profile's previous own object **iff no other
+  profile and not the global default still reference it**. This bounds stored user
+  wallpaper objects to **≤ the number of profiles** without any scheduler or worker.
+- **MAX_USER_WALLPAPERS (V1)**: not a hard numeric cap; the replace-on-upload rule
+  above keeps at most one live object per profile ref. A future increment can add the
+  bounded, callable orphan-sweep pattern (`list_orphan_*`) if ever needed.
