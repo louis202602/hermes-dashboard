@@ -44,6 +44,7 @@ import {
 import {
   PROFILE_IDS,
   clampProfiles,
+  profileWallpaperFields,
   renameProfile,
   resetProfile,
   resolveActiveProfile,
@@ -57,11 +58,13 @@ import {
   WALLPAPER_POSITIONS,
   isUserWallpaperRef,
   populatedCategories,
+  resolveWallpaper,
   wallpaperThumb,
   wallpapersByCategory,
   type WallpaperCategory,
   type WallpaperPosition,
 } from "@/lib/dashboard/wallpapers";
+import WallpaperLayer from "@/components/dashboard/WallpaperLayer";
 import { deleteWallpaperAction, uploadWallpaperAction } from "@/app/actions/wallpaper";
 import { encodeImageFileToJpeg } from "@/lib/attachments/browserImage";
 import { LANGUAGES, type MessageKey } from "@/lib/i18n/languages";
@@ -196,11 +199,14 @@ export default function DashboardSettings({
   availableWidgets = [],
   availableProfiles = PROFILE_IDS as unknown as ProfileId[],
   capabilities = [],
+  wallpaperUrls = {},
 }: {
   initial: DashboardPreferences;
   availableWidgets?: string[];
   availableProfiles?: ProfileId[];
   capabilities?: { actionKey: string; label: string }[];
+  /** DASH-4E — signed URLs for each profile's user-uploaded wallpaper (for the preview). */
+  wallpaperUrls?: Record<string, string>;
 }) {
   // DASH-4I: only the profiles offered to this tenant are configurable / selectable.
   const profileOptionIds = PROFILE_IDS.filter((id) => availableProfiles.includes(id));
@@ -399,6 +405,18 @@ export default function DashboardSettings({
   const currentWpPos = (profWp?.wallpaperPosition as WallpaperPosition) ?? "center";
   const setWp = (fields: Parameters<typeof setProfileWallpaper>[2]) =>
     commitProfiles(setProfileWallpaper(profiles, activeProfile, fields));
+  // BUGFIX — live wallpaper PREVIEW. The picker updates the active profile's wallpaper in
+  // local state (optimistic) via commitProfiles; resolve it the same way the dashboard
+  // does so the change is visible IMMEDIATELY on this page (before the server save). A
+  // user-upload ref needs its signed URL; built-in images resolve their /public asset
+  // inside WallpaperLayer, so their preview needs no URL.
+  const previewWallpaper = resolveWallpaper(
+    profileWallpaperFields(profiles, activeProfile),
+    profiles.wallpaper,
+  );
+  const previewWallpaperUrl = isUserWallpaperRef(previewWallpaper.ref)
+    ? (wallpaperUrls[activeProfile] ?? null)
+    : null;
   const wpPosOpts: Opt[] = WALLPAPER_POSITIONS.map((p) => ({
     value: p,
     label: t(`wallpaper.pos.${p}` as MessageKey),
@@ -460,6 +478,9 @@ export default function DashboardSettings({
 
   return (
     <div className="settings-page">
+      {/* Live wallpaper preview behind the (glass) settings — reflects the active
+          profile's pick immediately (optimistic), reusing the dashboard's layer. */}
+      <WallpaperLayer config={previewWallpaper} imageUrl={previewWallpaperUrl} />
       <header className="settings-header">
         <div>
           <span className="panel-eyebrow">{t("settings.eyebrow")}</span>

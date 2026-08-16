@@ -4398,9 +4398,10 @@ html[data-reduce-transparency="1"] .context-bar { backdrop-filter: none; backgro
 /* --- DASH-4A · Paramètres > Dashboard (settings surface) ------------------- */
 .settings-shell {
   min-height: 100vh;
-  background: var(--bg-primary);
-  background-image: var(--bg-gradient);
-  background-attachment: fixed;
+  /* Transparent so the live wallpaper preview (fixed WallpaperLayer, z-index:-1) shows
+     through behind the glass settings sections — mirrors the dashboard. The Hermès
+     default wallpaper always renders, so there is never a bare background. */
+  background: transparent;
   padding: var(--space-4);
   color: var(--text-primary);
 }

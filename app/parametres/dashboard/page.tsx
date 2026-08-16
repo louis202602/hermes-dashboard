@@ -2,13 +2,21 @@ import { redirect } from "next/navigation";
 
 import DashboardSettings from "@/components/dashboard/DashboardSettings";
 import { HERMES_DEFAULT_PREFERENCES } from "@/lib/dashboard/preferences";
-import { availableProfiles, deriveCapabilityTokens } from "@/lib/dashboard/profiles";
+import {
+  PROFILE_IDS,
+  availableProfiles,
+  clampProfiles,
+  deriveCapabilityTokens,
+  profileWallpaperFields,
+} from "@/lib/dashboard/profiles";
 import { availableWidgetIds } from "@/lib/dashboard/widgets";
+import { isUserWallpaperRef, resolveWallpaper } from "@/lib/dashboard/wallpapers";
 import { getCatalog, getLanguageDef, resolveLanguage } from "@/lib/i18n";
 import { I18nProvider } from "@/lib/i18n/I18nProvider";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getAvailableCapabilities } from "@/services/hermes/panels";
 import { getDashboardUserPreferences } from "@/services/hermes/preferences";
+import { signUserWallpapers } from "@/services/hermes/wallpapers";
 
 export const metadata = {
   title: "Paramètres · Dashboard — Hermès OS",
@@ -40,6 +48,16 @@ export default async function DashboardSettingsPage() {
     deriveCapabilityTokens(capabilityKeys),
     capabilities.ok && capabilities.data.resolutionStatus === "OK",
   );
+  // DASH-4E: sign each profile's user-uploaded wallpaper so the settings live preview can
+  // paint it (built-in images resolve their /public asset client-side and need no URL).
+  // COST-FIRST: one batched signer resolves the owner once; usually empty (CSS built-ins).
+  const profiles = clampProfiles(prefs.profiles);
+  const wallpaperEntries: { key: string; ref: string }[] = [];
+  for (const id of PROFILE_IDS) {
+    const ref = resolveWallpaper(profileWallpaperFields(profiles, id), profiles.wallpaper).ref;
+    if (isUserWallpaperRef(ref)) wallpaperEntries.push({ key: id, ref: ref as string });
+  }
+  const wallpaperUrls = await signUserWallpapers(wallpaperEntries);
   // DASH-4H: the granted capabilities (canonical) offered in the Quick-Actions picker.
   const capabilityList =
     capabilities.ok && capabilities.data.resolutionStatus === "OK"
@@ -57,6 +75,7 @@ export default async function DashboardSettingsPage() {
           availableWidgets={available}
           availableProfiles={offeredProfiles}
           capabilities={capabilityList}
+          wallpaperUrls={wallpaperUrls}
         />
       </main>
     </I18nProvider>
