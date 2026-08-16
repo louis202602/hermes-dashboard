@@ -53,6 +53,10 @@ export type WidgetDef = {
  */
 export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: "kpis", label: "KPI exécutifs", category: "general", supportedSizes: ["medium", "large"], defaultSize: "large", span: "full", snapshotKeys: ["kpis"] },
+  // DASH-4G — deterministic daily intelligence (synthesis + recommendations). Both are
+  // pure client derivations of already-loaded snapshots (+ enriched worksite weather).
+  { id: "daily-summary", label: "Résumé du jour", category: "general", supportedSizes: ["medium", "large"], defaultSize: "medium", span: "half", snapshotKeys: ["agenda", "priorities", "projects", "alerts", "commercial", "worksiteWeather"] },
+  { id: "recommended-actions", label: "Actions recommandées", category: "general", supportedSizes: ["medium", "large"], defaultSize: "medium", span: "half", snapshotKeys: ["agenda", "priorities", "alerts", "cost", "commercial", "worksiteWeather"] },
   { id: "system-health", label: "État global Hermès", category: "system", supportedSizes: ["medium", "large"], defaultSize: "medium", span: "half", snapshotKeys: ["kpis", "observability", "platformHealth", "actionStats", "resolver", "cost"] },
   { id: "agent-activity", label: "Activité des agents", category: "agents", supportedSizes: ["medium", "large"], defaultSize: "medium", span: "half", snapshotKeys: ["observability"] },
   { id: "agenda", label: "Agenda du jour", category: "agenda", supportedSizes: ["medium", "large"], defaultSize: "medium", span: "half", snapshotKeys: ["agenda"] },

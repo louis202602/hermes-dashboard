@@ -5069,3 +5069,109 @@ html[data-reduce-transparency="1"] .notif-panel {
   backdrop-filter: none;
   background: var(--bg-primary);
 }
+
+/* ============================================================================
+   DASH-4G — Daily intelligence: "Résumé du jour" + "Actions recommandées".
+   Reuse the glass .dashboard-card; semantic priority/risk colours (never from
+   the wallpaper). Responsive, RTL-safe (logical properties).
+   ============================================================================ */
+
+/* Résumé du jour — stat grid + lines. */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.summary-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+.summary-stat.is-active { border-color: var(--border-strong); }
+.summary-stat strong { font-size: 20px; font-weight: 680; line-height: 1; color: var(--text-primary); }
+.summary-stat span { font-size: 11px; color: var(--text-secondary); }
+.summary-empty { padding: 24px 4px; color: var(--text-muted); font-size: 13px; }
+.summary-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  margin: 6px 0 0;
+}
+.summary-line-label { color: var(--text-muted); }
+.summary-line-value { min-width: 0; color: var(--text-primary); font-weight: 550; overflow-wrap: anywhere; }
+.summary-line-value.is-muted { color: var(--text-muted); font-weight: 400; }
+.summary-weather-risk {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+}
+.summary-weather-risk.is-high { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.summary-weather-risk.is-warning { color: var(--warning); background: color-mix(in srgb, var(--warning) 16%, transparent); }
+
+/* Actions recommandées — prioritised to-do list. */
+.actions-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 4px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.actions-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.action-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px 11px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+.action-prio {
+  flex: 0 0 auto;
+  width: 4px;
+  align-self: stretch;
+  border-radius: var(--radius-pill);
+  background: var(--text-muted);
+}
+.action-item.is-critical .action-prio { background: var(--danger); }
+.action-item.is-high .action-prio { background: color-mix(in srgb, var(--danger) 55%, var(--warning)); }
+.action-item.is-medium .action-prio { background: var(--warning); }
+.action-item.is-low .action-prio { background: var(--accent); }
+.action-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.action-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.action-title { font-size: 13px; font-weight: 620; color: var(--text-primary); overflow-wrap: anywhere; }
+.action-prio-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+}
+.action-prio-label.is-critical { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.action-prio-label.is-high { color: color-mix(in srgb, var(--danger) 60%, var(--warning)); background: color-mix(in srgb, var(--warning) 15%, transparent); }
+.action-prio-label.is-medium { color: var(--warning); background: color-mix(in srgb, var(--warning) 15%, transparent); }
+.action-prio-label.is-low { color: var(--accent); background: var(--accent-soft); }
+.action-reason { font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.action-link {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+  margin-top: 1px;
+}
+.action-link:hover { text-decoration: underline; }
