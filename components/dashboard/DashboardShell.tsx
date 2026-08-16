@@ -51,7 +51,14 @@ import {
   PREFERENCES_SCHEMA_VERSION,
   type Appearance,
   type Behavior,
+  type NotificationCursor,
 } from "@/lib/dashboard/preferences";
+import {
+  buildNotificationsFromResult,
+  markAllRead as markAllNotificationsRead,
+  markRead as markNotificationRead,
+  type Notification,
+} from "@/lib/dashboard/notifications";
 import {
   contextVisibleSegments,
   normalizeOrder,
@@ -204,6 +211,60 @@ export default function DashboardShell({
   );
   const visibleItems = resolved.items.filter(
     (it) => it.available && !it.hidden,
+  );
+  // DASH-4F — the widget ids currently on screen, so a notification only deep-links to
+  // a target that actually exists in this view (no dead buttons).
+  const visibleWidgetIds = useMemo(
+    () => visibleItems.map((it) => it.id),
+    [visibleItems],
+  );
+
+  // DASH-4F — notification center. The feed is DERIVED client-side from the SAME
+  // already-loaded `alerts` snapshot (0 extra DB read, 0 polling, 0 LLM); read-state is
+  // a per-user cursor persisted in the existing `behavior` JSONB through the SAME
+  // optimistic upsert as the rest of the preferences.
+  const [cursor, setCursor] = useState<NotificationCursor>(behavior.notifications);
+  const cursorRef = useRef<NotificationCursor>(behavior.notifications);
+  const cursorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notifications = useMemo(
+    () => buildNotificationsFromResult(alerts, cursor),
+    [alerts, cursor],
+  );
+  const persistCursor = useCallback(
+    (next: NotificationCursor) => {
+      if (cursorTimer.current) clearTimeout(cursorTimer.current);
+      cursorTimer.current = setTimeout(async () => {
+        const res = await saveDashboardPreferencesAction(
+          {
+            behavior: { ...behavior, notifications: next },
+            schema_version: PREFERENCES_SCHEMA_VERSION,
+          },
+          versionRef.current,
+        );
+        if (res.ok && typeof res.version === "number") {
+          versionRef.current = res.version;
+        } else if (res.status === "VERSION_CONFLICT") {
+          window.location.reload();
+        }
+      }, 500);
+    },
+    [behavior],
+  );
+  const applyCursor = useCallback(
+    (next: NotificationCursor) => {
+      cursorRef.current = next;
+      setCursor(next);
+      persistCursor(next);
+    },
+    [persistCursor],
+  );
+  const onMarkAllRead = useCallback(
+    () => applyCursor(markAllNotificationsRead(cursorRef.current, notifications)),
+    [applyCursor, notifications],
+  );
+  const onMarkRead = useCallback(
+    (n: Notification) => applyCursor(markNotificationRead(cursorRef.current, n)),
+    [applyCursor],
   );
 
   const profileNames = useMemo(() => {
@@ -366,6 +427,11 @@ export default function DashboardShell({
           onMenuClick={() => setMobileMenuOpen((value) => !value)}
           appearance={effectiveAppearance}
           preferencesVersion={preferencesVersion}
+          notifications={notifications}
+          visibleWidgetIds={visibleWidgetIds}
+          locale={locale}
+          onMarkAllRead={onMarkAllRead}
+          onMarkRead={onMarkRead}
         />
 
         <div className="dashboard-content">
