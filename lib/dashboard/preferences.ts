@@ -95,7 +95,14 @@ export type Behavior = {
   openLastMode: boolean;
   defaultWidget: string | null;
   notifications: NotificationCursor;
+  // DASH-4H — personal shortcuts (bounded; validated at resolution against reality).
+  defaultHome: string | null; // a profile id or "map" (opening screen); null ⇒ default
+  quickActions: string[]; // selected quick-action ids (nav ids or capability keys)
+  favorites: string[]; // favorite refs ("widget:<id>" | "nav:<navId>")
 };
+
+export const MAX_QUICK_ACTION_PREFS = 12;
+export const MAX_FAVORITE_PREFS = 8;
 
 /** User overrides of the DASH-1 regional axes. `null` ⇒ inherit tenant default. */
 export type RegionalOverride = {
@@ -149,6 +156,9 @@ export const HERMES_DEFAULT_BEHAVIOR: Behavior = {
   openLastMode: false,
   defaultWidget: null,
   notifications: { lastSeenAt: null, readIds: [] },
+  defaultHome: null,
+  quickActions: [],
+  favorites: [],
 };
 
 export const HERMES_DEFAULT_REGIONAL: RegionalOverride = {
@@ -283,6 +293,21 @@ export function clampNotificationCursor(input: unknown): NotificationCursor {
   return { lastSeenAt, readIds };
 }
 
+/** De-duplicated, length-and-count-bounded list of short id strings (fail-safe). */
+function clampStringList(v: unknown, maxItems: number, maxLen = 80): string[] {
+  const raw = Array.isArray(v) ? v : [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const x of raw) {
+    if (typeof x !== "string" || x.length === 0 || x.length > maxLen) continue;
+    if (seen.has(x)) continue;
+    seen.add(x);
+    out.push(x);
+    if (out.length >= maxItems) break;
+  }
+  return out;
+}
+
 export function clampBehavior(input: unknown): Behavior {
   const b = (input ?? {}) as Record<string, unknown>;
   const d = HERMES_DEFAULT_BEHAVIOR;
@@ -292,6 +317,9 @@ export function clampBehavior(input: unknown): Behavior {
     openLastMode: bool(b.openLastMode, d.openLastMode),
     defaultWidget: strOrNull(b.defaultWidget),
     notifications: clampNotificationCursor(b.notifications),
+    defaultHome: strOrNull(b.defaultHome),
+    quickActions: clampStringList(b.quickActions, MAX_QUICK_ACTION_PREFS),
+    favorites: clampStringList(b.favorites, MAX_FAVORITE_PREFS),
   };
 }
 

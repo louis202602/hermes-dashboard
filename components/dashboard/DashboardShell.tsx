@@ -16,6 +16,7 @@ import ChantierMapWidget from "@/components/dashboard/ChantierMapWidget";
 import CommercialPanel from "@/components/dashboard/CommercialPanel";
 import ContextBar from "@/components/dashboard/ContextBar";
 import DailySummaryPanel from "@/components/dashboard/DailySummaryPanel";
+import FavoritesBar from "@/components/dashboard/FavoritesBar";
 import RecommendedActionsPanel from "@/components/dashboard/RecommendedActionsPanel";
 import CostGovernance from "@/components/dashboard/CostGovernance";
 import Header from "@/components/dashboard/Header";
@@ -71,6 +72,7 @@ import {
   resolveWidgetLayout,
   setWidgetHidden,
   setWidgetSize,
+  WIDGET_REGISTRY,
   type LayoutPreferences,
   type WidgetSize,
 } from "@/lib/dashboard/widgets";
@@ -422,7 +424,9 @@ export default function DashboardShell({
       </div>
     ),
     commercial: () => <CommercialPanel commercial={commercial} locale={locale} />,
-    "quick-actions": () => <QuickActions capabilities={capabilities} />,
+    "quick-actions": () => (
+      <QuickActions capabilities={capabilities} selected={behavior.quickActions} />
+    ),
     "system-status": () => <SystemStatus observability={observability} />,
     audit: () => <ActionAuditTrail audit={audit} />,
     "resolver-status": () => <ResolverStatus resolver={resolver} />,
@@ -484,6 +488,14 @@ export default function DashboardShell({
             active={activeProfile}
             names={profileNames}
             onSelect={onSelectProfile}
+          />
+
+          {/* DASH-4H — user favorites (pinned widgets + real nav shortcuts). Renders
+              nothing when empty; widget chips appear only when the target is visible. */}
+          <FavoritesBar
+            favorites={behavior.favorites}
+            registryWidgetIds={WIDGET_REGISTRY.map((w) => w.id)}
+            visibleWidgetIds={visibleWidgetIds}
           />
 
           {/* 0 — Barre de contexte compacte (segments configurables DASH-4B).

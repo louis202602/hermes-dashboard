@@ -27,8 +27,8 @@ import {
   clampProfiles,
   effectiveProfileLayout,
   profileWallpaperFields,
-  resolveActiveProfile,
 } from "@/lib/dashboard/profiles";
+import { resolveHomeProfile } from "@/lib/dashboard/shortcuts";
 import { isUserWallpaperRef, resolveWallpaper } from "@/lib/dashboard/wallpapers";
 import { signUserWallpaper } from "@/services/hermes/wallpapers";
 import { getCatalog, getLanguageDef, resolveLanguage } from "@/lib/i18n";
@@ -143,7 +143,9 @@ export default async function HomePage() {
   // profile only SELECTS/orders existing widgets — the capability filter still applies.
   const globalLayout = clampLayout(prefs.layout);
   const profiles = clampProfiles(prefs.profiles);
-  const activeProfile = resolveActiveProfile(profiles, globalLayout);
+  // DASH-4H: the opening screen — resume the last-used mode (openLastMode) or a fixed
+  // default profile (user-scoped, multi-device via the prefs row).
+  const activeProfile = resolveHomeProfile(prefs.behavior, profiles, globalLayout);
   const layout = effectiveProfileLayout(profiles, activeProfile, globalLayout);
   // DASH-4E: sign every profile's user-image wallpaper server-side (short-TTL signed
   // URL, ownership re-checked) so switching profiles shows the right fond instantly.
