@@ -74,20 +74,16 @@ function mapProject(raw: Record<string, unknown>): DashboardProject {
 }
 
 /**
- * Tenant-scoped projects. Tenant authorization is enforced entirely in the
- * backend RPC (`resolve_active_tenant`); a non-OK `resolutionStatus` means the
- * caller is not authorized for the requested tenant and no rows are returned.
- *
- * @param requestedTenantId Optional explicit tenant; omit to use the caller's
- *   single authorized tenant. A foreign tenant yields `ACCESS_DENIED`.
+ * Tenant-scoped projects for the CALLER's own active tenant. The tenant is resolved
+ * server-side inside the RPC (`resolve_active_tenant(null)` from `auth.uid()`); we
+ * deliberately expose NO tenant parameter so no client-reachable path can ever request
+ * a foreign tenant (defense in depth on top of the RPC's own authorization).
  */
-export async function getDashboardProjects(
-  requestedTenantId?: string,
-): Promise<ServiceResult<DashboardProjects>> {
+export async function getDashboardProjects(): Promise<ServiceResult<DashboardProjects>> {
   try {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.rpc("get_dashboard_projects", {
-      p_requested_tenant_id: requestedTenantId ?? null,
+      p_requested_tenant_id: null,
     });
 
     if (error) {

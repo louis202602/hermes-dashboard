@@ -43,14 +43,6 @@ export function markerStatusToken(status: MarkerStatus): string {
   return `marker-${status}`;
 }
 
-export const MARKER_LABELS: Record<MarkerStatus, string> = {
-  upcoming: "À venir",
-  running: "En cours",
-  done: "Terminé",
-  late: "Retard",
-  alert: "Alerte",
-};
-
 function isValidCoord(lat: unknown, lon: unknown): boolean {
   return (
     typeof lat === "number" &&
@@ -108,17 +100,6 @@ export const MAP_FILTERS = [
   "alert",
 ] as const;
 export type MapFilter = (typeof MAP_FILTERS)[number];
-
-export const MAP_FILTER_LABELS: Record<MapFilter, string> = {
-  all: "Tous",
-  today: "Aujourd’hui",
-  week: "Cette semaine",
-  upcoming: "À venir",
-  running: "En cours",
-  done: "Terminés",
-  late: "Retards",
-  alert: "Alertes",
-};
 
 function spansDay(point: ChantierPoint, dayStart: number, dayEnd: number): boolean {
   const debut = toDateOrNull(point.dateDebut);

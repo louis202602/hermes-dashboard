@@ -109,3 +109,31 @@ export async function signUserWallpaper(ref: string): Promise<string | null> {
     .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
   return data?.signedUrl ?? null;
 }
+
+/**
+ * Sign several profiles' user wallpapers in one pass. COST-FIRST: the owner (user +
+ * active tenant) is resolved ONCE for the whole batch — not per ref — so N profiles
+ * cost 1 identity resolution + N signed-URL calls (was 3×N round-trips before). Each
+ * path is still ownership-checked (defense in depth). Returns { key → signedUrl } for
+ * refs that resolved; unknown/foreign refs are simply omitted (never a broken screen).
+ */
+export async function signUserWallpapers(
+  entries: { key: string; ref: string }[],
+): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  if (entries.length === 0) return out;
+  const supabase = await createSupabaseServerClient();
+  const owner = await resolveOwner(supabase);
+  if (!owner) return out;
+  await Promise.all(
+    entries.map(async ({ key, ref }) => {
+      const path = userWallpaperPath(ref);
+      if (!path || !isOwnedWallpaperPath(path, owner.tenantId, owner.userId)) return;
+      const { data } = await supabase.storage
+        .from(ATTACHMENT_BUCKET)
+        .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
+      if (data?.signedUrl) out[key] = data.signedUrl;
+    }),
+  );
+  return out;
+}

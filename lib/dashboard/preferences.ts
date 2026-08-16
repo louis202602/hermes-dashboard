@@ -481,8 +481,7 @@ export function appearanceToHtmlAttrs(a: Appearance): Record<string, string> {
 }
 
 // --- Compact cookie (anti-FOUC). Format: "k:v;k:v" of dataset pairs ----------
-
-export const APPEARANCE_COOKIE = "hermes-appearance";
+// (The cookie NAME is the single source of truth in lib/theme.ts: APPEARANCE_COOKIE_NAME.)
 
 export function serializeAppearanceCookie(a: Appearance): string {
   const ds = appearanceToDataset(a);

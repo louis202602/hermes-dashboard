@@ -629,14 +629,6 @@ export function setProfileWallpaper(
   });
 }
 
-/** DASH-4E — set the GLOBAL default wallpaper (applied when a profile sets none). */
-export function setGlobalWallpaper(
-  state: ProfilesState,
-  fields: WallpaperFields,
-): ProfilesState {
-  return { ...state, wallpaper: clampWallpaperFields(fields as Record<string, unknown>) };
-}
-
 /** DASH-4E — the flat wallpaper fields of a profile config (for resolution). */
 export function profileWallpaperFields(
   state: ProfilesState,

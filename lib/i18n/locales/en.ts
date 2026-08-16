@@ -11,6 +11,7 @@ export const en: Messages = {
   "common.save.conflict": "Conflict — reloading…",
 
   "header.menu": "Open menu",
+  "header.menu.close": "Close menu",
   "header.notifications": "Notifications",
   "header.notifications.soon": "Coming soon",
 

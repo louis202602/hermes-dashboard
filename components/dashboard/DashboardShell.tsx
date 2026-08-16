@@ -465,7 +465,7 @@ export default function DashboardShell({
         <button
           type="button"
           className="dashboard-mobile-overlay"
-          aria-label="Fermer le menu"
+          aria-label={t("header.menu.close")}
           onClick={() => setMobileMenuOpen(false)}
         />
       ) : null}
