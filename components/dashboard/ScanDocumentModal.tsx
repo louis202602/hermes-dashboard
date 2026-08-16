@@ -14,6 +14,7 @@ import {
   ensurePdfName,
   scanPdfFilename,
 } from "@/lib/attachments/scan";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type ScanPage = { id: string; previewUrl: string; page: PdfImagePage };
 
@@ -37,6 +38,7 @@ export default function ScanDocumentModal({
   onComplete: (file: File) => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [pages, setPages] = useState<ScanPage[]>([]);
   const [name, setName] = useState<string>(() => scanPdfFilename(new Date()));
   const [busy, setBusy] = useState(false);
@@ -71,7 +73,7 @@ export default function ScanDocumentModal({
       retakeIndexRef.current = null;
 
       if (retakeIdx === null && pagesRef.current.length >= SCAN_MAX_PAGES) {
-        setError(`Un scan est limité à ${SCAN_MAX_PAGES} pages.`);
+        setError(t("scan.maxPages", { max: SCAN_MAX_PAGES }));
         return;
       }
 
@@ -94,14 +96,12 @@ export default function ScanDocumentModal({
           return [...prev, { id: uid(), previewUrl, page }];
         });
       } catch {
-        setError(
-          "Impossible de lire cette image. Réessayez ou choisissez une autre photo.",
-        );
+        setError(t("scan.readError"));
       } finally {
         setBusy(false);
       }
     },
-    [],
+    [t],
   );
 
   function removePage(id: string) {
@@ -120,7 +120,7 @@ export default function ScanDocumentModal({
 
   function finish() {
     if (pages.length === 0) {
-      setError("Ajoutez au moins une page.");
+      setError(t("scan.addAtLeastOne"));
       return;
     }
     setBusy(true);
@@ -132,7 +132,9 @@ export default function ScanDocumentModal({
       );
       if (file.size > PDF_MAX_BYTES) {
         setError(
-          `Le PDF généré est trop volumineux (max ${Math.round(PDF_MAX_BYTES / (1024 * 1024))} Mo). Retirez des pages.`,
+          t("scan.tooLarge", {
+            max: Math.round(PDF_MAX_BYTES / (1024 * 1024)),
+          }),
         );
         setBusy(false);
         return;
@@ -140,7 +142,7 @@ export default function ScanDocumentModal({
       for (const p of pagesRef.current) URL.revokeObjectURL(p.previewUrl);
       onComplete(file);
     } catch {
-      setError("La génération du PDF a échoué. Réessayez.");
+      setError(t("scan.generateFailed"));
       setBusy(false);
     }
   }
@@ -150,19 +152,19 @@ export default function ScanDocumentModal({
       className="scan-modal-backdrop"
       role="dialog"
       aria-modal="true"
-      aria-label="Scanner un document"
+      aria-label={t("scan.dialogAria")}
     >
       <div className="scan-modal">
         <header className="scan-modal-head">
           <div>
-            <span className="panel-eyebrow">SCANNER UN DOCUMENT</span>
-            <h3>Composez votre PDF</h3>
+            <span className="panel-eyebrow">{t("scan.eyebrow")}</span>
+            <h3>{t("scan.title")}</h3>
           </div>
           <button
             type="button"
             className="scan-close"
             onClick={cancel}
-            aria-label="Fermer"
+            aria-label={t("common.close")}
           >
             <X size={18} strokeWidth={2} />
           </button>
@@ -193,8 +195,8 @@ export default function ScanDocumentModal({
             ) : (
               <Camera size={26} strokeWidth={1.7} />
             )}
-            <strong>Prendre la première page</strong>
-            <span>Photographiez le document — vous pourrez ajouter des pages.</span>
+            <strong>{t("scan.firstPage")}</strong>
+            <span>{t("scan.firstPageHint")}</span>
           </button>
         ) : (
           <>
@@ -203,14 +205,14 @@ export default function ScanDocumentModal({
                 <li key={p.id} className="scan-page">
                   <span className="scan-page-index">{i + 1}</span>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={p.previewUrl} alt={`Page ${i + 1}`} />
+                  <img src={p.previewUrl} alt={t("scan.pageAlt", { n: i + 1 })} />
                   <div className="scan-page-actions">
                     <button
                       type="button"
                       onClick={() => openCapture(i)}
                       disabled={busy}
-                      title="Reprendre cette page"
-                      aria-label={`Reprendre la page ${i + 1}`}
+                      title={t("scan.retakeTitle")}
+                      aria-label={t("scan.retakeAria", { n: i + 1 })}
                     >
                       <RotateCw size={13} strokeWidth={2} />
                     </button>
@@ -218,8 +220,8 @@ export default function ScanDocumentModal({
                       type="button"
                       onClick={() => removePage(p.id)}
                       disabled={busy}
-                      title="Retirer cette page"
-                      aria-label={`Retirer la page ${i + 1}`}
+                      title={t("scan.removeTitle")}
+                      aria-label={t("scan.removeAria", { n: i + 1 })}
                     >
                       <Trash2 size={13} strokeWidth={2} />
                     </button>
@@ -239,14 +241,14 @@ export default function ScanDocumentModal({
                     ) : (
                       <Plus size={20} strokeWidth={2} />
                     )}
-                    <span>Ajouter une page</span>
+                    <span>{t("scan.addPage")}</span>
                   </button>
                 </li>
               ) : null}
             </ul>
 
             <label className="scan-name">
-              <span>Nom du fichier</span>
+              <span>{t("scan.filename")}</span>
               <input
                 type="text"
                 value={name}
@@ -266,11 +268,14 @@ export default function ScanDocumentModal({
 
         <footer className="scan-modal-foot">
           <span className="scan-count">
-            {pages.length} page{pages.length > 1 ? "s" : ""} · max {SCAN_MAX_PAGES}
+            {t(pages.length > 1 ? "scan.count.other" : "scan.count.one", {
+              count: pages.length,
+              max: SCAN_MAX_PAGES,
+            })}
           </span>
           <div className="scan-foot-buttons">
             <button type="button" className="scan-btn-secondary" onClick={cancel}>
-              Annuler
+              {t("common.cancel")}
             </button>
             <button
               type="button"
@@ -280,7 +285,7 @@ export default function ScanDocumentModal({
               data-testid="scan-finish"
             >
               <Check size={15} strokeWidth={2.2} />
-              <span>Joindre le PDF</span>
+              <span>{t("scan.attachPdf")}</span>
             </button>
           </div>
         </footer>

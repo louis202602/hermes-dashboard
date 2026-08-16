@@ -8,6 +8,8 @@ import {
   type SubmitState,
 } from "@/app/actions/agent-actions";
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/locales/fr";
 import {
   TERMINAL_RESULT_STATUSES,
   type ResultOutcome,
@@ -15,18 +17,18 @@ import {
 
 const INITIAL: SubmitState = { phase: "idle" };
 
-const STATUS_LABELS: Record<string, string> = {
-  QUEUED: "En file d’attente",
-  RUNNING: "En cours d’exécution",
-  SUCCEEDED: "Terminé avec succès",
-  FAILED: "Échec",
-  POLICY_DENIED: "Refusé par la politique (SW15)",
-  PENDING_APPROVAL: "En attente d’approbation",
-  NOT_FOUND: "Introuvable",
-  UNAUTHENTICATED: "Session expirée",
-  NO_TENANT: "Aucun tenant",
-  RPC_ERROR: "Service indisponible",
-};
+const KNOWN_STATUSES = new Set<string>([
+  "QUEUED",
+  "RUNNING",
+  "SUCCEEDED",
+  "FAILED",
+  "POLICY_DENIED",
+  "PENDING_APPROVAL",
+  "NOT_FOUND",
+  "UNAUTHENTICATED",
+  "NO_TENANT",
+  "RPC_ERROR",
+]);
 
 function toneFor(status: string): string {
   if (status === "SUCCEEDED") return "ok";
@@ -45,6 +47,11 @@ function resultChantierId(result: unknown): string | null {
 }
 
 export default function AgentActionPanel() {
+  const { t } = useI18n();
+  const statusLabel = (status: string | undefined): string | undefined =>
+    status && KNOWN_STATUSES.has(status)
+      ? t(`aap.status.${status}` as MessageKey)
+      : undefined;
   const [submitState, formAction, pending] = useActionState(
     submitBtpQualificationAction,
     INITIAL,
@@ -81,45 +88,45 @@ export default function AgentActionPanel() {
     <section className="dashboard-card agent-action-card">
       <div className="dashboard-card-header">
         <div>
-          <span className="panel-eyebrow">ACTION AGENT</span>
-          <h3>Qualifier un chantier</h3>
+          <span className="panel-eyebrow">{t("aap.eyebrow")}</span>
+          <h3>{t("aap.title")}</h3>
         </div>
         <ProvenanceBadge provenance="REAL" />
       </div>
 
       <form action={formAction} className="agent-action-form">
         <label className="agent-field">
-          <span>Nom du chantier *</span>
-          <input type="text" name="chantier_name" required placeholder="Ex. Toiture Atelier Nord" />
+          <span>{t("aap.field.chantierName")}</span>
+          <input type="text" name="chantier_name" required placeholder={t("aap.field.chantierNamePlaceholder")} />
         </label>
         <div className="agent-field-row">
           <label className="agent-field">
-            <span>Client</span>
-            <input type="text" name="client" placeholder="Nom du client" />
+            <span>{t("aap.field.client")}</span>
+            <input type="text" name="client" placeholder={t("aap.field.clientPlaceholder")} />
           </label>
           <label className="agent-field">
-            <span>Type</span>
+            <span>{t("aap.field.type")}</span>
             <select name="type" defaultValue="installation">
-              <option value="installation">Installation</option>
-              <option value="renovation">Rénovation</option>
-              <option value="maintenance">Maintenance</option>
-              <option value="autre">Autre</option>
+              <option value="installation">{t("aap.type.installation")}</option>
+              <option value="renovation">{t("aap.type.renovation")}</option>
+              <option value="maintenance">{t("aap.type.maintenance")}</option>
+              <option value="autre">{t("aap.type.autre")}</option>
             </select>
           </label>
         </div>
         <label className="agent-field">
-          <span>Adresse</span>
-          <input type="text" name="adresse" placeholder="Adresse du chantier" />
+          <span>{t("aap.field.adresse")}</span>
+          <input type="text" name="adresse" placeholder={t("aap.field.adressePlaceholder")} />
         </label>
 
         <button type="submit" className="agent-submit" disabled={pending || polling}>
-          {pending ? "Envoi…" : "Déclencher la qualification"}
+          {pending ? t("aap.submitting") : t("aap.submit")}
         </button>
       </form>
 
       {submitState.phase === "error" ? (
         <div className="agent-status is-bad" role="alert">
-          <strong>{STATUS_LABELS[submitState.status ?? ""] ?? "Erreur"}</strong>
+          <strong>{statusLabel(submitState.status) ?? t("aap.error")}</strong>
           <span>{submitState.message}</span>
         </div>
       ) : null}
@@ -127,42 +134,42 @@ export default function AgentActionPanel() {
       {requestId ? (
         <div className={`agent-status is-${toneFor(liveStatus ?? "QUEUED")}`} aria-live="polite">
           <div className="agent-status-head">
-            <strong>{STATUS_LABELS[liveStatus ?? "QUEUED"] ?? liveStatus}</strong>
+            <strong>{statusLabel(liveStatus ?? "QUEUED") ?? liveStatus}</strong>
             {polling ? <span className="agent-spinner" aria-hidden /> : null}
           </div>
-          <span className="agent-req">Réf. demande : {requestId}</span>
+          <span className="agent-req">{t("aap.requestRef", { id: requestId })}</span>
 
           {result?.status === "SUCCEEDED" ? (
             <span className="agent-detail">
-              Chantier créé
               {resultChantierId(result.result)
-                ? ` — id ${resultChantierId(result.result)}`
-                : ""}
-              .
+                ? t("aap.chantierCreatedId", {
+                    id: resultChantierId(result.result) ?? "",
+                  })
+                : t("aap.chantierCreated")}
             </span>
           ) : null}
 
           {result?.status === "FAILED" ? (
             <span className="agent-detail">
-              {result.error?.message ?? "L’action a échoué."}
+              {result.error?.message ?? t("aap.actionFailed")}
               {result.error?.code ? ` (${result.error.code})` : ""}
             </span>
           ) : null}
 
           {result?.status === "POLICY_DENIED" ? (
             <span className="agent-detail">
-              {result.policyReason ?? "Action refusée par la politique de sécurité."}
+              {result.policyReason ?? t("aap.policyDenied")}
             </span>
           ) : null}
 
           {result?.status === "PENDING_APPROVAL" ? (
             <span className="agent-detail">
-              Une approbation humaine est requise avant exécution.
+              {t("aap.pendingApproval")}
             </span>
           ) : null}
 
           {result?.status === "NOT_FOUND" ? (
-            <span className="agent-detail">Demande introuvable pour votre tenant.</span>
+            <span className="agent-detail">{t("aap.notFound")}</span>
           ) : null}
         </div>
       ) : null}

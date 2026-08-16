@@ -1,7 +1,10 @@
+"use client";
+
 import { FileText, HandCoins, Send } from "lucide-react";
 
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
 import type { DashboardCommercial } from "@/lib/dashboard/systemActivity";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { ServiceResult } from "@/types/hermes";
 
 type Props = {
@@ -22,12 +25,13 @@ function fmtEur(amount: number, currency: string, locale: string): string {
 }
 
 function Frame({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   return (
     <section className="dashboard-card commercial-card">
       <div className="dashboard-card-header">
         <div>
-          <span className="panel-eyebrow">COMMERCIAL</span>
-          <h3>Activité commerciale</h3>
+          <span className="panel-eyebrow">{t("comm.eyebrow")}</span>
+          <h3>{t("comm.title")}</h3>
         </div>
         <ProvenanceBadge provenance="REAL" />
       </div>
@@ -37,12 +41,12 @@ function Frame({ children }: { children: React.ReactNode }) {
 }
 
 export default function CommercialPanel({ commercial, locale }: Props) {
+  const { t } = useI18n();
+
   if (!commercial.ok || commercial.data.resolutionStatus !== "OK") {
     return (
       <Frame>
-        <p className="commercial-empty">
-          L’activité commerciale est indisponible pour le moment.
-        </p>
+        <p className="commercial-empty">{t("comm.unavailable")}</p>
       </Frame>
     );
   }
@@ -52,37 +56,35 @@ export default function CommercialPanel({ commercial, locale }: Props) {
   return (
     <Frame>
       {c.total === 0 ? (
-        <p className="commercial-empty">
-          Aucun devis enregistré pour votre tenant.
-        </p>
+        <p className="commercial-empty">{t("comm.empty")}</p>
       ) : (
         <>
           <div className="commercial-grid">
             <div className="commercial-metric">
               <Send size={15} strokeWidth={1.8} />
               <strong>{c.sent}</strong>
-              <span>envoyés</span>
+              <span>{t("comm.sent")}</span>
             </div>
             <div
               className={`commercial-metric${c.toFollowUp > 0 ? " is-warning" : ""}`}
             >
               <FileText size={15} strokeWidth={1.8} />
               <strong>{c.toFollowUp}</strong>
-              <span>à relancer</span>
+              <span>{t("comm.toFollowUp")}</span>
             </div>
             <div className="commercial-metric is-success">
               <HandCoins size={15} strokeWidth={1.8} />
               <strong>{c.accepted}</strong>
-              <span>acceptés</span>
+              <span>{t("comm.accepted")}</span>
             </div>
           </div>
           <div className="commercial-amounts">
             <div>
-              <span>Montant envoyé (TTC)</span>
+              <span>{t("comm.amountSent")}</span>
               <strong>{fmtEur(c.amountSentTtcEur, c.currency, locale)}</strong>
             </div>
             <div>
-              <span>Montant accepté (TTC)</span>
+              <span>{t("comm.amountAccepted")}</span>
               <strong>
                 {fmtEur(c.amountAcceptedTtcEur, c.currency, locale)}
               </strong>
@@ -91,8 +93,7 @@ export default function CommercialPanel({ commercial, locale }: Props) {
         </>
       )}
       <p className="commercial-note">
-        Devis réels ({c.currency}). Factures / prospects / contrats : non
-        disponibles.
+        {t("comm.note", { currency: c.currency })}
       </p>
     </Frame>
   );

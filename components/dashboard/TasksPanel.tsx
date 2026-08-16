@@ -1,24 +1,18 @@
+"use client";
+
 import { AlertTriangle, ClipboardCheck, Clock3, Flag } from "lucide-react";
 
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { MessageKey, TranslateFn } from "@/lib/i18n";
 import type {
   OperationalPriorities,
   OperationalPriority,
   ServiceResult,
-  TenantResolutionStatus,
 } from "@/types/hermes";
 
 type TasksPanelProps = {
   priorities: ServiceResult<OperationalPriorities>;
-};
-
-const RESOLUTION_MESSAGES: Record<TenantResolutionStatus, string> = {
-  OK: "",
-  UNAUTHENTICATED: "Session expirée. Reconnectez-vous.",
-  NO_TENANT: "Aucun tenant n’est associé à votre compte.",
-  ACCESS_DENIED: "Accès refusé pour le tenant demandé.",
-  AMBIGUOUS_TENANT_REQUIRE_SELECTION:
-    "Plusieurs tenants disponibles : sélection requise.",
 };
 
 function severityIcon(severity: OperationalPriority["severity"]) {
@@ -27,19 +21,23 @@ function severityIcon(severity: OperationalPriority["severity"]) {
   return <Flag size={16} strokeWidth={1.8} />;
 }
 
-function severityLabel(severity: OperationalPriority["severity"]): string {
-  if (severity === "critical") return "Critique";
-  if (severity === "urgent") return "Urgent";
-  return "À traiter";
+function severityLabel(
+  severity: OperationalPriority["severity"],
+  t: TranslateFn,
+): string {
+  if (severity === "critical") return t("tasks.severity.critical");
+  if (severity === "urgent") return t("tasks.severity.urgent");
+  return t("tasks.severity.default");
 }
 
 function Frame({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   return (
     <section className="dashboard-card tasks-card">
       <div className="dashboard-card-header">
         <div>
-          <span className="panel-eyebrow">PRIORITÉS</span>
-          <h3>Priorités opérationnelles</h3>
+          <span className="panel-eyebrow">{t("tasks.eyebrow")}</span>
+          <h3>{t("tasks.title")}</h3>
         </div>
         <ProvenanceBadge provenance="DERIVED" />
       </div>
@@ -49,12 +47,12 @@ function Frame({ children }: { children: React.ReactNode }) {
 }
 
 export default function TasksPanel({ priorities }: TasksPanelProps) {
+  const { t } = useI18n();
+
   if (!priorities.ok) {
     return (
       <Frame>
-        <p className="tasks-empty">
-          Les priorités opérationnelles sont indisponibles pour le moment.
-        </p>
+        <p className="tasks-empty">{t("tasks.unavailable")}</p>
       </Frame>
     );
   }
@@ -64,7 +62,9 @@ export default function TasksPanel({ priorities }: TasksPanelProps) {
   if (resolutionStatus !== "OK") {
     return (
       <Frame>
-        <p className="tasks-empty">{RESOLUTION_MESSAGES[resolutionStatus]}</p>
+        <p className="tasks-empty">
+          {t(`tasks.resolution.${resolutionStatus}` as MessageKey)}
+        </p>
       </Frame>
     );
   }
@@ -74,26 +74,24 @@ export default function TasksPanel({ priorities }: TasksPanelProps) {
       <div className="tasks-summary">
         <div>
           <strong>{summary.pendingApprovals}</strong>
-          <span>approbations</span>
+          <span>{t("tasks.summary.approvals")}</span>
         </div>
         <div>
           <strong>{summary.openIncidents}</strong>
-          <span>incidents ouverts</span>
+          <span>{t("tasks.summary.openIncidents")}</span>
         </div>
         <div>
           <strong>{summary.toQualify}</strong>
-          <span>à qualifier</span>
+          <span>{t("tasks.summary.toQualify")}</span>
         </div>
         <div>
           <strong>{summary.late}</strong>
-          <span>en retard</span>
+          <span>{t("tasks.summary.late")}</span>
         </div>
       </div>
 
       {items.length === 0 ? (
-        <p className="tasks-empty">
-          Aucune priorité en attente. Tout est à jour pour votre tenant.
-        </p>
+        <p className="tasks-empty">{t("tasks.empty")}</p>
       ) : (
         <div className="tasks-list">
           {items.map((item, index) => (
@@ -104,11 +102,11 @@ export default function TasksPanel({ priorities }: TasksPanelProps) {
 
               <span className="task-copy">
                 <strong>{item.label}</strong>
-                <span>{item.detail ?? "—"}</span>
+                <span>{item.detail ?? t("common.none")}</span>
               </span>
 
               <span className={`task-priority is-${item.severity}`}>
-                {severityLabel(item.severity)}
+                {severityLabel(item.severity, t)}
               </span>
             </div>
           ))}
@@ -117,7 +115,7 @@ export default function TasksPanel({ priorities }: TasksPanelProps) {
 
       <p className="tasks-footer-note">
         <ClipboardCheck size={16} strokeWidth={1.8} />
-        <span>Dérivé de signaux réels : approbations, incidents, chantiers.</span>
+        <span>{t("tasks.footerNote")}</span>
       </p>
     </Frame>
   );

@@ -1,3 +1,5 @@
+"use client";
+
 import {
   CircleSlash,
   FileClock,
@@ -6,6 +8,8 @@ import {
 } from "lucide-react";
 
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/locales/fr";
 import type {
   ActionApprovalOutcome,
   AuditAction,
@@ -15,13 +19,6 @@ import type {
 
 type Props = {
   audit: ServiceResult<ActionAuditTrailData>;
-};
-
-const OUTCOME_LABEL: Record<ActionApprovalOutcome, string> = {
-  APPROVED: "Approuvée",
-  REJECTED: "Refusée",
-  PENDING_APPROVAL: "En attente d’approbation",
-  NOT_REQUIRED: "Sans approbation",
 };
 
 function outcomeTone(o: ActionApprovalOutcome): string {
@@ -55,12 +52,13 @@ function fmtDate(iso: string | null): string {
 }
 
 function Frame({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   return (
     <section className="dashboard-card system-status-card">
       <div className="dashboard-card-header">
         <div>
-          <span className="panel-eyebrow">SÉCURITÉ · AUDIT</span>
-          <h3>Journal des actions &amp; approbations</h3>
+          <span className="panel-eyebrow">{t("audit.eyebrow")}</span>
+          <h3>{t("audit.title")}</h3>
         </div>
         <ProvenanceBadge provenance="REAL" />
       </div>
@@ -70,12 +68,12 @@ function Frame({ children }: { children: React.ReactNode }) {
 }
 
 export default function ActionAuditTrail({ audit }: Props) {
+  const { t } = useI18n();
+
   if (!audit.ok || audit.data.resolutionStatus !== "OK") {
     return (
       <Frame>
-        <p className="system-empty">
-          Le journal d’audit est indisponible pour le moment.
-        </p>
+        <p className="system-empty">{t("audit.unavailable")}</p>
       </Frame>
     );
   }
@@ -83,20 +81,20 @@ export default function ActionAuditTrail({ audit }: Props) {
   const { summary, actions, unavailable } = audit.data;
 
   const metrics: { label: string; value: number; tone: string }[] = [
-    { label: "Actions", value: summary.total, tone: "normal" },
-    { label: "Sensibles", value: summary.sensitive, tone: "urgent" },
+    { label: t("audit.metric.actions"), value: summary.total, tone: "normal" },
+    { label: t("audit.metric.sensitive"), value: summary.sensitive, tone: "urgent" },
     {
-      label: "Approb. en attente",
+      label: t("audit.metric.pending"),
       value: summary.pendingApproval,
       tone: summary.pendingApproval > 0 ? "urgent" : "normal",
     },
     {
-      label: "Refusées / denied",
+      label: t("audit.metric.rejected"),
       value: summary.rejected + summary.policyDenied,
       tone: summary.rejected + summary.policyDenied > 0 ? "critical" : "normal",
     },
     {
-      label: "Échecs",
+      label: t("audit.metric.failed"),
       value: summary.failed,
       tone: summary.failed > 0 ? "critical" : "normal",
     },
@@ -123,13 +121,11 @@ export default function ActionAuditTrail({ audit }: Props) {
       <div className="system-subsection">
         <div className="system-subsection-head">
           <FileClock size={15} strokeWidth={1.9} />
-          <span>Historique récent (tenant)</span>
+          <span>{t("audit.recent")}</span>
           <ProvenanceBadge provenance="REAL" />
         </div>
         {actions.length === 0 ? (
-          <p className="system-line-empty">
-            Aucune action enregistrée pour votre tenant.
-          </p>
+          <p className="system-line-empty">{t("audit.emptyActions")}</p>
         ) : (
           <ul className="system-line-list">
             {actions.map((a: AuditAction, idx: number) => (
@@ -139,19 +135,21 @@ export default function ActionAuditTrail({ audit }: Props) {
               >
                 <strong>
                   {a.actionKey}
-                  {a.isSensitive ? " · sensible" : ""}
+                  {a.isSensitive ? ` · ${t("audit.sensitiveTag")}` : ""}
                 </strong>
                 <span>
                   {(a.status ?? "—") +
                     " · " +
-                    OUTCOME_LABEL[a.approvalOutcome] +
-                    (a.attempts > 0 ? ` · ${a.attempts} tentative(s)` : "") +
+                    t(`audit.outcome.${a.approvalOutcome}` as MessageKey) +
+                    (a.attempts > 0
+                      ? ` · ${t("audit.attempts", { count: a.attempts })}`
+                      : "") +
                     (a.errorCode ? " · " + a.errorCode : "") +
                     " · " +
                     fmtDate(a.createdAt)}
                 </span>
                 <span className={`audit-outcome is-${outcomeTone(a.approvalOutcome)}`}>
-                  {OUTCOME_LABEL[a.approvalOutcome]}
+                  {t(`audit.outcome.${a.approvalOutcome}` as MessageKey)}
                 </span>
               </li>
             ))}
@@ -163,14 +161,14 @@ export default function ActionAuditTrail({ audit }: Props) {
         <div className="system-subsection">
           <div className="system-subsection-head">
             <CircleSlash size={15} strokeWidth={1.9} />
-            <span>Sources d’audit non disponibles</span>
+            <span>{t("audit.unavailableSources")}</span>
             <ProvenanceBadge provenance="UNAVAILABLE" />
           </div>
           <ul className="system-line-list">
             {unavailable.map((u) => (
               <li key={u} className="system-line is-unavailable">
                 <strong>{u}</strong>
-                <span>Journal dédié non alimenté</span>
+                <span>{t("audit.notFed")}</span>
               </li>
             ))}
           </ul>

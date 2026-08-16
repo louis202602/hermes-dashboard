@@ -1,10 +1,13 @@
+"use client";
+
 import { Building2, CircleDollarSign, LayoutList, MapPin } from "lucide-react";
 
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/locales/fr";
 import type {
   DashboardProjects,
   ServiceResult,
-  TenantResolutionStatus,
 } from "@/types/hermes";
 
 type ProjectsTableProps = {
@@ -17,15 +20,6 @@ const eur = new Intl.NumberFormat("fr-FR", {
   maximumFractionDigits: 0,
 });
 
-const RESOLUTION_MESSAGES: Record<TenantResolutionStatus, string> = {
-  OK: "",
-  UNAUTHENTICATED: "Session expirée. Reconnectez-vous.",
-  NO_TENANT: "Aucun tenant n’est associé à votre compte.",
-  ACCESS_DENIED: "Accès refusé pour le tenant demandé.",
-  AMBIGUOUS_TENANT_REQUIRE_SELECTION:
-    "Plusieurs tenants disponibles : sélection requise.",
-};
-
 function statusTone(status: string | null): string {
   const s = (status ?? "").toUpperCase();
   if (s.includes("TERMIN") || s.includes("DONE") || s.includes("CLOS")) return "done";
@@ -35,12 +29,13 @@ function statusTone(status: string | null): string {
 }
 
 function Frame({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   return (
     <section className="dashboard-card projects-card">
       <div className="dashboard-card-header">
         <div>
-          <span className="panel-eyebrow">PORTEFEUILLE</span>
-          <h3>Projets (production)</h3>
+          <span className="panel-eyebrow">{t("proj.eyebrow")}</span>
+          <h3>{t("proj.title")}</h3>
         </div>
         <ProvenanceBadge provenance="REAL" />
       </div>
@@ -50,12 +45,12 @@ function Frame({ children }: { children: React.ReactNode }) {
 }
 
 export default function ProjectsTable({ projects }: ProjectsTableProps) {
+  const { t } = useI18n();
+
   if (!projects.ok) {
     return (
       <Frame>
-        <p className="projects-empty">
-          Le portefeuille projets est indisponible pour le moment.
-        </p>
+        <p className="projects-empty">{t("proj.unavailable")}</p>
       </Frame>
     );
   }
@@ -65,7 +60,9 @@ export default function ProjectsTable({ projects }: ProjectsTableProps) {
   if (resolutionStatus !== "OK") {
     return (
       <Frame>
-        <p className="projects-empty">{RESOLUTION_MESSAGES[resolutionStatus]}</p>
+        <p className="projects-empty">
+          {t(`proj.resolution.${resolutionStatus}` as MessageKey)}
+        </p>
       </Frame>
     );
   }
@@ -76,7 +73,7 @@ export default function ProjectsTable({ projects }: ProjectsTableProps) {
         <div className="projects-overview-item">
           <Building2 size={18} strokeWidth={1.8} />
           <div>
-            <span>Projets suivis</span>
+            <span>{t("proj.trackedProjects")}</span>
             <strong>{aggregates.totalProjects}</strong>
           </div>
         </div>
@@ -84,10 +81,10 @@ export default function ProjectsTable({ projects }: ProjectsTableProps) {
         <div className="projects-overview-item">
           <CircleDollarSign size={18} strokeWidth={1.8} />
           <div>
-            <span>Valeur estimée totale</span>
+            <span>{t("proj.totalEstimatedValue")}</span>
             <strong>
               {aggregates.totalEstimatedValueEur === null
-                ? "—"
+                ? t("common.none")
                 : eur.format(aggregates.totalEstimatedValueEur)}
             </strong>
           </div>
@@ -96,26 +93,24 @@ export default function ProjectsTable({ projects }: ProjectsTableProps) {
         <div className="projects-overview-item">
           <LayoutList size={18} strokeWidth={1.8} />
           <div>
-            <span>Statuts distincts</span>
+            <span>{t("proj.distinctStatuses")}</span>
             <strong>{Object.keys(aggregates.byStatus).length}</strong>
           </div>
         </div>
       </div>
 
       {rows.length === 0 ? (
-        <p className="projects-empty">
-          Aucun projet en environnement de production pour ce tenant.
-        </p>
+        <p className="projects-empty">{t("proj.noProjects")}</p>
       ) : (
         <div className="projects-table-wrapper">
           <table className="projects-table">
             <thead>
               <tr>
-                <th>Projet</th>
-                <th>Client</th>
-                <th>Coût estimé</th>
-                <th>Avancement</th>
-                <th>Statut</th>
+                <th>{t("proj.colProject")}</th>
+                <th>{t("proj.colClient")}</th>
+                <th>{t("proj.colEstimatedCost")}</th>
+                <th>{t("proj.colProgress")}</th>
+                <th>{t("proj.colStatus")}</th>
               </tr>
             </thead>
             <tbody>
@@ -133,25 +128,25 @@ export default function ProjectsTable({ projects }: ProjectsTableProps) {
                           <Building2 size={18} strokeWidth={1.8} />
                         </span>
                         <div>
-                          <strong>{project.chantierName ?? "Sans nom"}</strong>
+                          <strong>{project.chantierName ?? t("proj.unnamed")}</strong>
                           <span>
                             <MapPin size={13} strokeWidth={1.8} />
-                            {project.typeChantier ?? "—"}
+                            {project.typeChantier ?? t("common.none")}
                           </span>
                         </div>
                       </div>
                     </td>
 
-                    <td>{project.clientName ?? "—"}</td>
+                    <td>{project.clientName ?? t("common.none")}</td>
                     <td>
                       {project.coutEstimeEur === null
-                        ? "—"
+                        ? t("common.none")
                         : eur.format(project.coutEstimeEur)}
                     </td>
 
                     <td>
                       {progress === null ? (
-                        "—"
+                        t("common.none")
                       ) : (
                         <div className="project-progress-cell">
                           <div className="project-progress-track">
@@ -164,7 +159,7 @@ export default function ProjectsTable({ projects }: ProjectsTableProps) {
 
                     <td>
                       <span className={`project-status is-${statusTone(project.status)}`}>
-                        {project.status ?? "—"}
+                        {project.status ?? t("common.none")}
                       </span>
                     </td>
                   </tr>

@@ -1,3 +1,5 @@
+"use client";
+
 import { CheckCircle2, CircleDashed, Loader, XCircle } from "lucide-react";
 
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
@@ -6,6 +8,8 @@ import {
   formatActivityTime,
   type ActivityStatus,
 } from "@/lib/dashboard/systemActivity";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/locales/fr";
 import type { ObservabilitySnapshot, ServiceResult } from "@/types/hermes";
 
 type Props = {
@@ -13,16 +17,6 @@ type Props = {
   timezone: string;
   locale: string;
   hour12: boolean;
-};
-
-const STATUS_LABEL: Record<ActivityStatus, string> = {
-  SUCCEEDED: "Réussi",
-  RUNNING: "En cours",
-  QUEUED: "En file",
-  DEGRADED: "Dégradé",
-  FAILED: "Échoué",
-  DEAD_LETTER: "Dead-letter",
-  UNKNOWN: "—",
 };
 
 function statusIcon(s: ActivityStatus) {
@@ -34,12 +28,13 @@ function statusIcon(s: ActivityStatus) {
 }
 
 function Frame({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   return (
     <section className="dashboard-card activity-card">
       <div className="dashboard-card-header">
         <div>
-          <span className="panel-eyebrow">ACTIVITÉ</span>
-          <h3>Activité récente des agents</h3>
+          <span className="panel-eyebrow">{t("agentact.eyebrow")}</span>
+          <h3>{t("agentact.title")}</h3>
         </div>
         <ProvenanceBadge provenance="REAL" />
       </div>
@@ -54,12 +49,12 @@ export default function AgentActivityPanel({
   locale,
   hour12,
 }: Props) {
+  const { t } = useI18n();
+
   if (!observability.ok || observability.data.resolutionStatus !== "OK") {
     return (
       <Frame>
-        <p className="activity-empty">
-          L’activité des agents est indisponible pour le moment.
-        </p>
+        <p className="activity-empty">{t("agentact.unavailable")}</p>
       </Frame>
     );
   }
@@ -72,9 +67,7 @@ export default function AgentActivityPanel({
   return (
     <Frame>
       {feed.length === 0 ? (
-        <p className="activity-empty">
-          Aucune activité récente enregistrée pour votre tenant.
-        </p>
+        <p className="activity-empty">{t("agentact.empty")}</p>
       ) : (
         <div className="activity-list">
           {feed.map((item, index) => (
@@ -88,7 +81,7 @@ export default function AgentActivityPanel({
               <span className="activity-copy">
                 <strong>{item.label}</strong>
                 <span>
-                  {STATUS_LABEL[item.status]}
+                  {t(`agentact.status.${item.status}` as MessageKey)}
                   {item.latencyMs !== null
                     ? ` · ${Math.round(item.latencyMs)} ms`
                     : ""}

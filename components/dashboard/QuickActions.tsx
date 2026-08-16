@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Activity,
   Bot,
@@ -9,24 +11,16 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/locales/fr";
 import type {
   AvailableCapabilities,
   AvailableCapability,
   ServiceResult,
-  TenantResolutionStatus,
 } from "@/types/hermes";
 
 type QuickActionsProps = {
   capabilities: ServiceResult<AvailableCapabilities>;
-};
-
-const RESOLUTION_MESSAGES: Record<TenantResolutionStatus, string> = {
-  OK: "",
-  UNAUTHENTICATED: "Session expirée. Reconnectez-vous.",
-  NO_TENANT: "Aucun tenant n’est associé à votre compte.",
-  ACCESS_DENIED: "Accès refusé pour le tenant demandé.",
-  AMBIGUOUS_TENANT_REQUIRE_SELECTION:
-    "Plusieurs tenants disponibles : sélection requise.",
 };
 
 function iconFor(actionKey: string): LucideIcon {
@@ -38,12 +32,13 @@ function iconFor(actionKey: string): LucideIcon {
 }
 
 function Frame({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   return (
     <section className="dashboard-card quick-actions-card">
       <div className="dashboard-card-header">
         <div>
-          <span className="panel-eyebrow">EXÉCUTION</span>
-          <h3>Actions disponibles</h3>
+          <span className="panel-eyebrow">{t("qa.eyebrow")}</span>
+          <h3>{t("qa.title")}</h3>
         </div>
         <ProvenanceBadge provenance="REAL" />
       </div>
@@ -53,12 +48,12 @@ function Frame({ children }: { children: React.ReactNode }) {
 }
 
 export default function QuickActions({ capabilities }: QuickActionsProps) {
+  const { t } = useI18n();
+
   if (!capabilities.ok) {
     return (
       <Frame>
-        <p className="quick-actions-empty">
-          Les actions disponibles sont indisponibles pour le moment.
-        </p>
+        <p className="quick-actions-empty">{t("qa.cardUnavailable")}</p>
       </Frame>
     );
   }
@@ -69,7 +64,7 @@ export default function QuickActions({ capabilities }: QuickActionsProps) {
     return (
       <Frame>
         <p className="quick-actions-empty">
-          {RESOLUTION_MESSAGES[resolutionStatus]}
+          {t(`qa.resolution.${resolutionStatus}` as MessageKey)}
         </p>
       </Frame>
     );
@@ -78,9 +73,7 @@ export default function QuickActions({ capabilities }: QuickActionsProps) {
   if (rows.length === 0) {
     return (
       <Frame>
-        <p className="quick-actions-empty">
-          Aucune action n’est autorisée pour votre profil sur ce tenant.
-        </p>
+        <p className="quick-actions-empty">{t("qa.emptyNoActions")}</p>
       </Frame>
     );
   }
@@ -109,9 +102,9 @@ export default function QuickActions({ capabilities }: QuickActionsProps) {
               </span>
 
               {capability.isSensitive ? (
-                <span className="quick-action-flag" title="Action sensible : approbation SW15 requise">
+                <span className="quick-action-flag" title={t("qa.sensitiveTitle")}>
                   <ShieldAlert size={14} strokeWidth={1.9} />
-                  <span>Sensible</span>
+                  <span>{t("qa.sensitive")}</span>
                 </span>
               ) : null}
             </a>
@@ -119,10 +112,7 @@ export default function QuickActions({ capabilities }: QuickActionsProps) {
         })}
       </div>
 
-      <p className="quick-actions-note">
-        Ces actions passent par Hermès : permissions, tenant et politique SW15
-        appliqués. Décrivez votre demande dans le poste de commande ci-dessus.
-      </p>
+      <p className="quick-actions-note">{t("qa.note")}</p>
     </Frame>
   );
 }

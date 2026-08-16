@@ -1,13 +1,16 @@
+"use client";
+
 import { Activity, CircuitBoard, Cpu, ServerCog } from "lucide-react";
 
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/locales/fr";
 import {
   classifyPlatformHealth,
   describeResolver,
   extractCostSummary,
   formatActivityTime,
   type AgentActionStats,
-  type PlatformHealthStatus,
 } from "@/lib/dashboard/systemActivity";
 import type {
   CostGovernanceSnapshot,
@@ -28,12 +31,6 @@ type Props = {
   locale: string;
   timezone: string;
   hour12: boolean;
-};
-
-const HEALTH_LABEL: Record<PlatformHealthStatus, string> = {
-  OPERATIONAL: "Opérationnelle",
-  DEGRADED: "Dégradée",
-  UNAVAILABLE: "Indisponible",
 };
 
 function fmtUsd(n: number | null): string {
@@ -69,7 +66,12 @@ export default function SystemHealthPanel({
   timezone,
   hour12,
 }: Props) {
+  const { t } = useI18n();
   const health = classifyPlatformHealth(platformHealth);
+  const healthLabel =
+    health.status === "UNAVAILABLE"
+      ? t("common.unavailable")
+      : t(`health.status.${health.status}` as MessageKey);
   const res = describeResolver(resolver);
   const costSummary = extractCostSummary(cost);
   const stats = actionStats.ok ? actionStats.data : null;
@@ -95,8 +97,8 @@ export default function SystemHealthPanel({
     <section className="dashboard-card sysh-card">
       <div className="dashboard-card-header">
         <div>
-          <span className="panel-eyebrow">SYSTÈME</span>
-          <h3>État global Hermès</h3>
+          <span className="panel-eyebrow">{t("health.eyebrow")}</span>
+          <h3>{t("health.title")}</h3>
         </div>
         <ProvenanceBadge provenance="REAL" />
       </div>
@@ -104,24 +106,28 @@ export default function SystemHealthPanel({
       <div className={`sysh-health is-${health.status.toLowerCase()}`}>
         <ServerCog size={18} strokeWidth={1.9} />
         <div>
-          <strong>Plateforme {HEALTH_LABEL[health.status]}</strong>
+          <strong>
+            {t("health.platform")} {healthLabel}
+          </strong>
           <span>
             {health.coverage === "PARTIAL"
-              ? `Couverture partielle (composants + dernière exécution) · dernière exéc. ${formatActivityTime(
-                  health.lastExecutionAt,
-                  timezone,
-                  locale,
-                  hour12,
-                )}`
-              : "Mesure indisponible"}
+              ? t("health.partialCoverage", {
+                  time: formatActivityTime(
+                    health.lastExecutionAt,
+                    timezone,
+                    locale,
+                    hour12,
+                  ),
+                })
+              : t("health.measureUnavailable")}
           </span>
         </div>
       </div>
 
       <div className="sysh-grid">
-        <Metric label="Agents IA actifs" value={agents ?? "—"} />
+        <Metric label={t("health.agentsActive")} value={agents ?? "—"} />
         <Metric
-          label="Composants actifs"
+          label={t("health.componentsActive")}
           value={
             componentsActive !== null && componentsRegistered !== null
               ? `${componentsActive}/${componentsRegistered}`
@@ -129,20 +135,20 @@ export default function SystemHealthPanel({
           }
         />
         <Metric
-          label="Incidents ouverts"
+          label={t("health.openIncidents")}
           value={openIncidents ?? "—"}
           tone={openIncidents && openIncidents > 0 ? "warning" : undefined}
         />
       </div>
 
       <div className="sysh-subtitle">
-        <Cpu size={14} strokeWidth={1.8} /> <span>Files d’actions (tenant)</span>
+        <Cpu size={14} strokeWidth={1.8} /> <span>{t("health.actionQueues")}</span>
       </div>
       <div className="sysh-grid sysh-grid-4">
-        <Metric label="En file" value={stats ? stats.queued : "—"} />
-        <Metric label="En cours" value={stats ? stats.running : "—"} />
+        <Metric label={t("health.queued")} value={stats ? stats.queued : "—"} />
+        <Metric label={t("health.running")} value={stats ? stats.running : "—"} />
         <Metric
-          label="Échouées"
+          label={t("health.failed")}
           value={stats ? stats.failed : "—"}
           tone={stats && stats.failed > 0 ? "warning" : undefined}
         />
@@ -156,30 +162,35 @@ export default function SystemHealthPanel({
       <div className="sysh-row">
         <span className="sysh-row-item">
           <CircuitBoard size={14} strokeWidth={1.8} />
-          Résolveur :{" "}
+          {t("health.resolver")} :{" "}
           <strong>
             {res.available
-              ? `${res.enabled ? "activé" : "désactivé"} · circuit ${
-                  res.circuit === "OPEN" ? "OUVERT" : "CLOSED"
-                } · file ${res.queueDepth ?? "—"} · en cours ${
-                  res.running ?? "—"
-                } · dead-letter ${res.deadLetter ?? "—"}`
+              ? t("health.resolverSummary", {
+                  state: res.enabled ? t("health.enabled") : t("health.disabled"),
+                  circuit:
+                    res.circuit === "OPEN"
+                      ? t("health.circuitOpen")
+                      : t("health.circuitClosed"),
+                  queue: res.queueDepth ?? "—",
+                  running: res.running ?? "—",
+                  deadLetter: res.deadLetter ?? "—",
+                })
               : "—"}
           </strong>
         </span>
       </div>
 
       <div className="sysh-subtitle">
-        <Activity size={14} strokeWidth={1.8} /> <span>Coût IA (USD, source SW23)</span>
+        <Activity size={14} strokeWidth={1.8} /> <span>{t("health.costTitle")}</span>
       </div>
       {costSummary.provenance === "REAL" ? (
         <div className="sysh-grid">
-          <Metric label="Aujourd’hui" value={fmtUsd(costSummary.todayUsd)} />
-          <Metric label="Ce mois" value={fmtUsd(costSummary.monthUsd)} />
-          <Metric label="Budget restant" value={fmtUsd(costSummary.remainingUsd)} />
+          <Metric label={t("health.today")} value={fmtUsd(costSummary.todayUsd)} />
+          <Metric label={t("health.thisMonth")} value={fmtUsd(costSummary.monthUsd)} />
+          <Metric label={t("health.remainingBudget")} value={fmtUsd(costSummary.remainingUsd)} />
         </div>
       ) : (
-        <p className="sysh-note">Coût indisponible pour le moment.</p>
+        <p className="sysh-note">{t("health.costUnavailable")}</p>
       )}
     </section>
   );
