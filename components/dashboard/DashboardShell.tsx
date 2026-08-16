@@ -65,12 +65,15 @@ import {
 import {
   effectiveProfileAppearance,
   effectiveProfileLayout,
+  profileWallpaperFields,
   setActiveProfile,
   setProfileLayout,
   type ProfileId,
   type ProfilesState,
 } from "@/lib/dashboard/profiles";
+import { resolveWallpaper } from "@/lib/dashboard/wallpapers";
 import ProfileSwitcher from "@/components/dashboard/ProfileSwitcher";
+import WallpaperLayer from "@/components/dashboard/WallpaperLayer";
 import type { ContextBarModel } from "@/lib/dashboard/contextBar";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -180,6 +183,12 @@ export default function DashboardShell({
   const contextSegments = useMemo(
     () => contextVisibleSegments(resolveContextConfig(layout.context)),
     [layout],
+  );
+  // DASH-4E: effective wallpaper for the active profile (profile → global → Hermès
+  // default), recomputed client-side on switch — 0 fetch (built-ins are pure CSS).
+  const wallpaper = useMemo(
+    () => resolveWallpaper(profileWallpaperFields(profiles, activeProfile), profiles.wallpaper),
+    [profiles, activeProfile],
   );
 
   const availableSet = useMemo(
@@ -320,6 +329,8 @@ export default function DashboardShell({
 
   return (
     <main dir={dir} className={`dashboard-shell${collapsed ? " is-collapsed" : ""}`}>
+      {/* DASH-4E: the wallpaper canvas behind the glass widgets (per active profile). */}
+      <WallpaperLayer config={wallpaper} />
       {/* DASH-4A: reconcile server-canonical appearance on load + keep the cookie
           mirror fresh (init script already applied it pre-paint). Renders nothing. */}
       <AppearanceSync

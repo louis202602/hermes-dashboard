@@ -40,9 +40,15 @@ import {
   resolveActiveProfile,
   setActiveProfile,
   setProfileAppearance,
+  setProfileWallpaper,
   type ProfileId,
   type ProfilesState,
 } from "@/lib/dashboard/profiles";
+import {
+  WALLPAPER_POSITIONS,
+  wallpapersByCategory,
+  type WallpaperPosition,
+} from "@/lib/dashboard/wallpapers";
 import { LANGUAGES, type MessageKey } from "@/lib/i18n/languages";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -163,6 +169,7 @@ export default function DashboardSettings({
   const [regional, setRegional] = useState<RegionalOverride>(initial.regional);
   const [layout, setLayout] = useState<LayoutPreferences>(() => clampLayout(initial.layout));
   const [profiles, setProfiles] = useState<ProfilesState>(() => clampProfiles(initial.profiles));
+  const [wpCat, setWpCat] = useState<"hermes" | "espace">("hermes");
   const version = useRef<number>(initial.version);
   const [save, setSave] = useState<SaveState>("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -330,6 +337,18 @@ export default function DashboardSettings({
   const setProfileAccent = (v: string) =>
     commitProfiles(setProfileAppearance(profiles, activeProfile, { accent: v ? (v as Appearance["accent"]) : undefined }));
 
+  // --- DASH-4E wallpaper (per active profile) ---
+  const profWp = profiles.byId[activeProfile];
+  const currentWpRef = profWp?.wallpaperRef ?? null;
+  const currentWpScrim = profWp?.wallpaperScrim ?? 0.2;
+  const currentWpPos = (profWp?.wallpaperPosition as WallpaperPosition) ?? "center";
+  const setWp = (fields: Parameters<typeof setProfileWallpaper>[2]) =>
+    commitProfiles(setProfileWallpaper(profiles, activeProfile, fields));
+  const wpPosOpts: Opt[] = WALLPAPER_POSITIONS.map((p) => ({
+    value: p,
+    label: t(`wallpaper.pos.${p}` as MessageKey),
+  }));
+
   const saveLabel =
     save === "saving" ? t("common.save.saving")
     : save === "saved" ? t("common.save.saved")
@@ -403,6 +422,77 @@ export default function DashboardSettings({
             {t("profile.settings.reset")}
           </button>
           <p className="settings-reset-note">{t("profile.settings.resetNote")}</p>
+        </Section>
+
+        <Section title={t("settings.section.wallpaper")}>
+          <p className="settings-reset-note">
+            {t("wallpaper.activeNote", { profile: profileName(activeProfile) })}
+          </p>
+          <div className="wallpaper-cat-tabs" role="tablist" aria-label={t("settings.section.wallpaper")}>
+            {(["hermes", "espace"] as const).map((c) => (
+              <button
+                key={c}
+                type="button"
+                role="tab"
+                aria-selected={wpCat === c}
+                className={`profile-chip${wpCat === c ? " is-active" : ""}`}
+                onClick={() => setWpCat(c)}
+              >
+                {t(`wallpaper.cat.${c}` as MessageKey)}
+              </button>
+            ))}
+            {(["montagne", "mer", "tropical"] as const).map((c) => (
+              <button
+                key={c}
+                type="button"
+                className="profile-chip"
+                disabled
+                title={t("wallpaper.photoSoon")}
+              >
+                {t(`wallpaper.cat.${c}` as MessageKey)}
+              </button>
+            ))}
+          </div>
+          <div className="wallpaper-gallery">
+            {wallpapersByCategory(wpCat).map((w) => (
+              <button
+                key={w.id}
+                type="button"
+                className={`wallpaper-thumb wallpaper-${w.id}${currentWpRef === w.id ? " is-active" : ""}`}
+                aria-pressed={currentWpRef === w.id}
+                aria-label={t(`wallpaper.name.${w.id}` as MessageKey)}
+                title={t(`wallpaper.name.${w.id}` as MessageKey)}
+                onClick={() => setWp({ wallpaperRef: w.id })}
+              />
+            ))}
+          </div>
+          <SelectRow
+            label={t("wallpaper.position")}
+            value={currentWpPos}
+            options={wpPosOpts}
+            onChange={(v) => setWp({ wallpaperPosition: v })}
+          />
+          <label className="settings-row">
+            <span className="settings-row-label">{t("wallpaper.scrim")}</span>
+            <input
+              className="settings-range"
+              type="range"
+              min={0}
+              max={0.5}
+              step={0.02}
+              value={currentWpScrim}
+              aria-label={t("wallpaper.scrim")}
+              onChange={(e) => setWp({ wallpaperScrim: Number(e.target.value) })}
+            />
+          </label>
+          <button
+            type="button"
+            className="settings-reset"
+            onClick={() => setWp({ wallpaperRef: null, wallpaperScrim: null, wallpaperPosition: null })}
+          >
+            {t("wallpaper.reset")}
+          </button>
+          <p className="settings-reset-note">{t("wallpaper.uploadSoon")}</p>
         </Section>
 
         <Section title={t("settings.section.appearance")}>

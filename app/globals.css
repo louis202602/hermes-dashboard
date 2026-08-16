@@ -4681,3 +4681,117 @@ html[data-reduce-transparency="1"] .context-bar { backdrop-filter: none; backgro
 /* Settings row that stacks its control below the label (profile chip row). */
 .settings-row-block { display: block; }
 .settings-row-block .settings-row-label { display: block; margin-bottom: 8px; }
+
+/* ============================================================
+   DASH-4E — Dashboard wallpapers (pure-CSS built-ins, 0 asset)
+   Painted BEHIND the dashboard (fixed, z-index:-1, above the body
+   atmosphere, below the glass widgets). A readability scrim keeps
+   text legible; critical status colours stay semantic (never wallpaper-derived).
+   ============================================================ */
+.wallpaper-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+.wallpaper-layer.pos-top { background-position: top center; }
+.wallpaper-layer.pos-bottom { background-position: bottom center; }
+
+.wallpaper-scrim {
+  position: absolute;
+  inset: 0;
+  background: #04060b;
+  opacity: 0;
+}
+.wallpaper-scrim.scrim-1 { opacity: 0.18; }
+.wallpaper-scrim.scrim-2 { opacity: 0.34; }
+.wallpaper-scrim.scrim-3 { opacity: 0.5; }
+
+/* --- Hermès / abstract (premium, sober, dark→mid) --- */
+.wallpaper-hermes-noir {
+  background-color: #05070c;
+  background-image:
+    radial-gradient(1200px 700px at 78% -10%, rgba(38,52,84,0.55), transparent 60%),
+    radial-gradient(900px 600px at 10% 110%, rgba(20,28,46,0.6), transparent 55%),
+    linear-gradient(160deg, #05070c 0%, #080b14 55%, #04060b 100%);
+}
+.wallpaper-hermes-bleu-nuit {
+  background-color: #060b1c;
+  background-image:
+    radial-gradient(1100px 700px at 85% 8%, rgba(46,86,170,0.5), transparent 58%),
+    linear-gradient(165deg, #060b1c 0%, #0a1330 55%, #050a1a 100%);
+}
+.wallpaper-hermes-graphite {
+  background-color: #0b0e13;
+  background-image:
+    radial-gradient(1000px 620px at 20% -5%, rgba(70,80,96,0.42), transparent 58%),
+    linear-gradient(160deg, #0d1016 0%, #12151c 50%, #0a0d12 100%);
+}
+.wallpaper-hermes-azur {
+  background-color: #071426;
+  background-image:
+    radial-gradient(1100px 700px at 75% 10%, rgba(64,140,220,0.55), transparent 60%),
+    linear-gradient(160deg, #071426 0%, #0c2440 55%, #06111f 100%);
+}
+.wallpaper-hermes-solaire {
+  background-color: #0c0a12;
+  background-image:
+    radial-gradient(1100px 720px at 82% 6%, rgba(230,150,70,0.5), transparent 58%),
+    radial-gradient(900px 640px at 8% 108%, rgba(120,60,110,0.45), transparent 55%),
+    linear-gradient(160deg, #0c0a12 0%, #17111c 55%, #0a0810 100%);
+}
+.wallpaper-hermes-aurora {
+  background-color: #060a12;
+  background-image:
+    conic-gradient(from 210deg at 70% 20%, rgba(56,120,190,0.4), rgba(90,70,180,0.32), rgba(40,150,150,0.34), rgba(56,120,190,0.4)),
+    linear-gradient(160deg, #060a12 0%, #0a1020 60%, #05080f 100%);
+}
+
+/* --- Espace / planète — spatial LANDSCAPE (atmosphere + stars), NO central object --- */
+.wallpaper-espace-atmosphere {
+  background-color: #01030a;
+  background-image:
+    radial-gradient(140% 80% at 50% 128%, rgba(70,150,235,0.85) 0%, rgba(30,80,170,0.5) 26%, rgba(8,20,55,0.65) 46%, rgba(2,5,14,0) 66%),
+    radial-gradient(60% 40% at 50% 118%, rgba(180,220,255,0.6), transparent 60%),
+    linear-gradient(to top, #030814 0%, #01030a 60%, #010206 100%);
+}
+.wallpaper-espace-etoiles {
+  background-color: #010206;
+  background-image:
+    radial-gradient(1.5px 1.5px at 18% 22%, rgba(255,255,255,0.9), transparent 60%),
+    radial-gradient(1.5px 1.5px at 62% 14%, rgba(255,255,255,0.75), transparent 60%),
+    radial-gradient(1px 1px at 82% 38%, rgba(255,255,255,0.8), transparent 60%),
+    radial-gradient(1px 1px at 34% 58%, rgba(255,255,255,0.7), transparent 60%),
+    radial-gradient(1.5px 1.5px at 74% 72%, rgba(255,255,255,0.85), transparent 60%),
+    radial-gradient(1px 1px at 12% 82%, rgba(255,255,255,0.7), transparent 60%),
+    radial-gradient(1px 1px at 48% 34%, rgba(200,220,255,0.7), transparent 60%),
+    radial-gradient(1000px 700px at 84% 6%, rgba(40,70,150,0.4), transparent 60%),
+    linear-gradient(160deg, #01020a 0%, #04061a 60%, #010206 100%);
+}
+
+/* Wallpaper thumbnails in the settings gallery reuse the same visuals, scaled down. */
+.wallpaper-thumb {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  cursor: pointer;
+  background-size: cover;
+  background-position: center;
+  padding: 0;
+}
+.wallpaper-thumb.is-active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.wallpaper-thumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wallpaper-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+.wallpaper-cat-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+
+.settings-range { width: 170px; accent-color: var(--accent); }
