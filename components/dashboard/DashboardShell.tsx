@@ -53,13 +53,24 @@ import {
   type Behavior,
 } from "@/lib/dashboard/preferences";
 import {
+  contextVisibleSegments,
   normalizeOrder,
+  resolveContextConfig,
   resolveWidgetLayout,
   setWidgetHidden,
   setWidgetSize,
   type LayoutPreferences,
   type WidgetSize,
 } from "@/lib/dashboard/widgets";
+import {
+  effectiveProfileAppearance,
+  effectiveProfileLayout,
+  setActiveProfile,
+  setProfileLayout,
+  type ProfileId,
+  type ProfilesState,
+} from "@/lib/dashboard/profiles";
+import ProfileSwitcher from "@/components/dashboard/ProfileSwitcher";
 import type { ContextBarModel } from "@/lib/dashboard/contextBar";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -98,12 +109,14 @@ type DashboardShellProps = {
   commercial: ServiceResult<DashboardCommercial>;
   timezone: string;
   hour12: boolean;
-  appearance: Appearance;
+  appearance: Appearance; // GLOBAL appearance (profile overrides layer on top)
   behavior: Behavior;
   preferencesVersion: number;
-  layout: LayoutPreferences;
+  globalLayout: LayoutPreferences;
   availableWidgets: string[];
-  contextSegments: string[];
+  // DASH-4D: profiles / modes (user-scoped, from the profiles JSONB).
+  profiles: ProfilesState;
+  activeProfile: ProfileId;
 };
 
 export default function DashboardShell({
@@ -132,20 +145,42 @@ export default function DashboardShell({
   appearance,
   behavior,
   preferencesVersion,
-  layout: initialLayout,
+  globalLayout,
   availableWidgets,
-  contextSegments,
+  profiles: initialProfiles,
+  activeProfile: initialActiveProfile,
 }: DashboardShellProps) {
   const { t, dir } = useI18n();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(behavior.sidebarCollapsed);
 
-  // DASH-4C: widget layout is now client-driven (edit mode). Server-resolved on
-  // first paint (pure, hydration-safe); edits mutate this state + persist.
-  const [layout, setLayout] = useState<LayoutPreferences>(initialLayout);
+  // DASH-4D: the profiles state + active profile are client-driven so switching a
+  // mode recomposes the dashboard from ALREADY-loaded snapshots — 0 extra fetch.
+  const [profiles, setProfilesState] = useState<ProfilesState>(initialProfiles);
+  const [activeProfile, setActiveState] = useState<ProfileId>(initialActiveProfile);
   const [editing, setEditing] = useState(false);
   const versionRef = useRef<number>(preferencesVersion);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Refs mirror the latest state so an edit followed immediately by a profile switch
+  // (before React re-renders) reads the up-to-date profiles — no stale-closure race,
+  // no lost edit, no cross-profile write (see applyProfiles / commitLayout / switch).
+  const profilesRef = useRef<ProfilesState>(initialProfiles);
+  const activeRef = useRef<ProfileId>(initialActiveProfile);
+
+  // Effective (active-profile) layout + appearance, derived client-side. Edits go
+  // into THIS profile only (isolation); other profiles are untouched.
+  const layout = useMemo(
+    () => effectiveProfileLayout(profiles, activeProfile, globalLayout),
+    [profiles, activeProfile, globalLayout],
+  );
+  const effectiveAppearance = useMemo(
+    () => effectiveProfileAppearance(appearance, profiles, activeProfile),
+    [appearance, profiles, activeProfile],
+  );
+  const contextSegments = useMemo(
+    () => contextVisibleSegments(resolveContextConfig(layout.context)),
+    [layout],
+  );
 
   const availableSet = useMemo(
     () => new Set(availableWidgets),
@@ -159,14 +194,22 @@ export default function DashboardShell({
     (it) => it.available && !it.hidden,
   );
 
-  // Persist the layout sub-object through the SAME optimistic upsert as DASH-4A/4B
-  // (shared version, VERSION_CONFLICT ⇒ reload). Committed on drag-end / resize /
-  // hide only — never during pointer move. Debounced for rapid edits.
-  const persistLayout = useCallback((next: LayoutPreferences) => {
+  const profileNames = useMemo(() => {
+    const out: Partial<Record<ProfileId, string | null>> = {};
+    for (const [id, cfg] of Object.entries(profiles.byId)) {
+      out[id as ProfileId] = cfg?.name ?? null;
+    }
+    return out;
+  }, [profiles]);
+
+  // Persist the profiles sub-object through the SAME optimistic upsert as DASH-4A/B
+  // (shared version, VERSION_CONFLICT ⇒ reload). Debounced for rapid edits; a write
+  // happens only on a real switch / edit, never on render.
+  const persistProfiles = useCallback((next: ProfilesState) => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
       const res = await saveDashboardPreferencesAction(
-        { layout: next, schema_version: PREFERENCES_SCHEMA_VERSION },
+        { profiles: next, schema_version: PREFERENCES_SCHEMA_VERSION },
         versionRef.current,
       );
       if (res.ok && typeof res.version === "number") {
@@ -177,12 +220,37 @@ export default function DashboardShell({
     }, 500);
   }, []);
 
-  const commitLayout = useCallback(
-    (next: LayoutPreferences) => {
-      setLayout(next);
-      persistLayout(next);
+  // Single writer for the profiles state: updates ref + state + schedules the debounced
+  // persist. Always derives from `profilesRef.current`, so concurrent edit→switch never
+  // races on a stale closure.
+  const applyProfiles = useCallback(
+    (next: ProfilesState) => {
+      profilesRef.current = next;
+      setProfilesState(next);
+      persistProfiles(next);
     },
-    [persistLayout],
+    [persistProfiles],
+  );
+
+  // Commit a layout edit into the ACTIVE profile (scoped isolation). Reads the live refs
+  // so an edit made just before a switch is stored under the profile it belongs to.
+  const commitLayout = useCallback(
+    (nextLayout: LayoutPreferences) => {
+      applyProfiles(setProfileLayout(profilesRef.current, activeRef.current, nextLayout));
+    },
+    [applyProfiles],
+  );
+
+  // Switch mode: instant client recompose (no refetch), persisted in the background.
+  // Uses the latest profiles ref so a pending edit is preserved (not lost, not moved).
+  const onSelectProfile = useCallback(
+    (id: ProfileId) => {
+      if (id === activeRef.current) return;
+      activeRef.current = id;
+      setActiveState(id);
+      applyProfiles(setActiveProfile(profilesRef.current, id));
+    },
+    [applyProfiles],
   );
 
   const onReorder = useCallback(
@@ -255,7 +323,7 @@ export default function DashboardShell({
       {/* DASH-4A: reconcile server-canonical appearance on load + keep the cookie
           mirror fresh (init script already applied it pre-paint). Renders nothing. */}
       <AppearanceSync
-        appearance={appearance}
+        appearance={effectiveAppearance}
         behavior={behavior}
         version={preferencesVersion}
       />
@@ -282,11 +350,20 @@ export default function DashboardShell({
         <Header
           userEmail={userEmail}
           onMenuClick={() => setMobileMenuOpen((value) => !value)}
-          appearance={appearance}
+          appearance={effectiveAppearance}
           preferencesVersion={preferencesVersion}
         />
 
         <div className="dashboard-content">
+          {/* DASH-4D — quick dashboard-mode switcher. Switching recomposes the
+              dashboard client-side from already-loaded snapshots (0 extra fetch),
+              persisted in the background through the same optimistic upsert. */}
+          <ProfileSwitcher
+            active={activeProfile}
+            names={profileNames}
+            onSelect={onSelectProfile}
+          />
+
           {/* 0 — Barre de contexte compacte (segments configurables DASH-4B).
               Horloge live déterministe (Intl, 0 appel) ; météo Open-Meteo cachée
               (et non fetchée si le segment est masqué) ; réel ou UNAVAILABLE. */}

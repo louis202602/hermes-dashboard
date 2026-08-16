@@ -18,10 +18,14 @@ import {
 import {
   availableWidgetIds,
   clampLayout,
-  contextVisibleSegments,
   needsWeather,
   resolveContextConfig,
 } from "@/lib/dashboard/widgets";
+import {
+  clampProfiles,
+  effectiveProfileLayout,
+  resolveActiveProfile,
+} from "@/lib/dashboard/profiles";
 import { getCatalog, getLanguageDef, resolveLanguage } from "@/lib/i18n";
 import { I18nProvider } from "@/lib/i18n/I18nProvider";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -128,7 +132,13 @@ export default async function HomePage() {
   // DASH-4B: resolve the user's widget layout (order + show/hide, capability-filtered)
   // and the configurable context-bar segments — all from the SINGLE prefs read + the
   // capabilities snapshot already loaded above (0 extra DB calls).
-  const layout = clampLayout(prefs.layout);
+  // DASH-4D: resolve the ACTIVE profile (user-scoped) and its effective layout. The
+  // global layout column is the pre-4D base (and the custom-profile fallback). The
+  // profile only SELECTS/orders existing widgets — the capability filter still applies.
+  const globalLayout = clampLayout(prefs.layout);
+  const profiles = clampProfiles(prefs.profiles);
+  const activeProfile = resolveActiveProfile(profiles, globalLayout);
+  const layout = effectiveProfileLayout(profiles, activeProfile, globalLayout);
   const capabilityKeys = new Set(
     capabilities.ok
       ? capabilities.data.capabilities.map((c) => c.actionKey)
@@ -142,7 +152,6 @@ export default async function HomePage() {
   // Resolve the active catalog server-side and pass it as data, so the client only
   // ever ships the ONE active language (never all catalogs).
   const messages = getCatalog(lang);
-  const contextSegments = contextVisibleSegments(contextConfig);
   // Weather only when a real location is configured AND at least one weather-
   // dependent segment (weather/temperature/rain/wind) is shown — never fabricated,
   // and skipping it when all are hidden strictly REDUCES the external Open-Meteo
@@ -230,9 +239,10 @@ export default async function HomePage() {
       appearance={prefs.appearance}
       behavior={prefs.behavior}
       preferencesVersion={prefs.version}
-      layout={layout}
+      globalLayout={globalLayout}
       availableWidgets={[...available]}
-      contextSegments={contextSegments}
+      profiles={profiles}
+      activeProfile={activeProfile}
     />
     </I18nProvider>
   );

@@ -1,14 +1,16 @@
 "use client";
 
 import { AlertTriangle, CalendarClock, MapPin, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { getContextWeatherAction } from "@/app/actions/context-bar";
 import {
   formatClock,
   formatTemperature,
   formatWind,
   isValidTimeZone,
   type ContextBarModel,
+  type WeatherSnapshot,
 } from "@/lib/dashboard/contextBar";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -60,6 +62,36 @@ export default function ContextBar({ model, initialClock, visibleSegments }: Pro
   const showAlerts = show("alerts");
   const showCost = show("cost");
   const showSeconds = model.showSeconds;
+
+  // DASH-4D (LOW#1): lazy weather on profile switch. If a switch makes a
+  // weather-dependent segment visible but the server skipped the upstream call
+  // (the initial profile hid weather — COST-FIRST), fetch ONCE client-side via the
+  // SAME cached Open-Meteo service. No polling; 0 calls when no weather segment is
+  // shown or when no location is configured; never fabricated.
+  const [lazyWeather, setLazyWeather] = useState<WeatherSnapshot | null>(null);
+  const weatherReq = useRef<string | null>(null);
+  useEffect(() => {
+    if (!showWeatherSeg || weather.provenance === "REAL") return;
+    const { latitude, longitude } = settings;
+    if (latitude === null || longitude === null) return;
+    const key = `${latitude},${longitude}`;
+    if (weatherReq.current === key) return; // already fetched/fetching for this location
+    weatherReq.current = key;
+    let alive = true;
+    void getContextWeatherAction(latitude, longitude, timezone).then((snap) => {
+      if (alive && snap) setLazyWeather(snap);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [showWeatherSeg, weather.provenance, settings, timezone]);
+
+  const displayWeather =
+    weather.provenance === "REAL"
+      ? weather
+      : lazyWeather
+        ? ({ provenance: "REAL", snapshot: lazyWeather } as const)
+        : weather;
 
   // Live clock island — the only timer on the dashboard. Null until mounted so
   // the first client render reuses the server strings (hydration-safe), then we
@@ -137,36 +169,36 @@ export default function ContextBar({ model, initialClock, visibleSegments }: Pro
           gaté indépendamment ; le conteneur s'affiche si l'un d'eux est visible. */}
       {showWeatherSeg ? (
       <span className="context-seg context-seg-weather">
-        {weather.provenance === "REAL" ? (
+        {displayWeather.provenance === "REAL" ? (
           <>
             {showWeather ? (
               <span className="context-wx-icon" aria-hidden>
-                {weather.snapshot.icon}
+                {displayWeather.snapshot.icon}
               </span>
             ) : null}
             {showTemperature ? (
               <span className="context-strong">
                 {formatTemperature(
-                  weather.snapshot.temperatureC,
+                  displayWeather.snapshot.temperatureC,
                   units.temperature,
                 )}
               </span>
             ) : null}
             {showWeather ? (
               <span className="context-muted context-hide-mobile">
-                {weather.snapshot.condition}
+                {displayWeather.snapshot.condition}
               </span>
             ) : null}
             {showRain &&
-            weather.snapshot.precipitationMm !== null &&
-            weather.snapshot.precipitationMm > 0 ? (
+            displayWeather.snapshot.precipitationMm !== null &&
+            displayWeather.snapshot.precipitationMm > 0 ? (
               <span className="context-muted context-hide-tablet">
-                · {weather.snapshot.precipitationMm} mm
+                · {displayWeather.snapshot.precipitationMm} mm
               </span>
             ) : null}
-            {showWind && weather.snapshot.windKph !== null ? (
+            {showWind && displayWeather.snapshot.windKph !== null ? (
               <span className="context-muted context-hide-tablet">
-                · {formatWind(weather.snapshot.windKph, units.wind)}
+                · {formatWind(displayWeather.snapshot.windKph, units.wind)}
               </span>
             ) : null}
           </>
