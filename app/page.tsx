@@ -33,7 +33,7 @@ import {
 } from "@/lib/dashboard/profiles";
 import { resolveHomeProfile } from "@/lib/dashboard/shortcuts";
 import { isUserWallpaperRef, resolveWallpaper } from "@/lib/dashboard/wallpapers";
-import { signUserWallpaper } from "@/services/hermes/wallpapers";
+import { signUserWallpapers } from "@/services/hermes/wallpapers";
 import { getCatalog, getLanguageDef, resolveLanguage } from "@/lib/i18n";
 import { I18nProvider } from "@/lib/i18n/I18nProvider";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -166,19 +166,15 @@ export default async function HomePage() {
   const layout = effectiveProfileLayout(profiles, activeProfile, globalLayout);
   // DASH-4E: sign every profile's user-image wallpaper server-side (short-TTL signed
   // URL, ownership re-checked) so switching profiles shows the right fond instantly.
-  // Built-in (CSS) wallpapers need no URL. A few internal storage calls; 0 external API.
-  const wallpaperRefs = new Map<string, string>();
+  // Built-in (CSS) wallpapers need no URL. COST-FIRST: one batched signer resolves the
+  // owner identity ONCE for all profiles (was 3 round-trips per profile), and most
+  // profiles use CSS built-ins so `entries` is usually empty ⇒ 0 storage calls.
+  const wallpaperEntries: { key: string; ref: string }[] = [];
   for (const id of PROFILE_IDS) {
     const ref = resolveWallpaper(profileWallpaperFields(profiles, id), profiles.wallpaper).ref;
-    if (isUserWallpaperRef(ref)) wallpaperRefs.set(id, ref as string);
+    if (isUserWallpaperRef(ref)) wallpaperEntries.push({ key: id, ref: ref as string });
   }
-  const wallpaperUrls: Record<string, string> = {};
-  await Promise.all(
-    [...wallpaperRefs.entries()].map(async ([id, ref]) => {
-      const url = await signUserWallpaper(ref);
-      if (url) wallpaperUrls[id] = url;
-    }),
-  );
+  const wallpaperUrls = await signUserWallpapers(wallpaperEntries);
   const available = availableWidgetIds(capabilityKeys);
   // DASH-4G COST-FIRST: only fetch enriched worksite weather when a widget that
   // consumes it is actually visible in the active profile. If both the daily summary

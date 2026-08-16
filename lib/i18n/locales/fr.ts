@@ -19,6 +19,7 @@ export const fr = {
 
   // --- header ---
   "header.menu": "Ouvrir le menu",
+  "header.menu.close": "Fermer le menu",
   "header.notifications": "Notifications",
   "header.notifications.soon": "Bientôt disponible",
 

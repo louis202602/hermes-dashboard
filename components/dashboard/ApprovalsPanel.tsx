@@ -92,13 +92,20 @@ export default function ApprovalsPanel() {
     };
   }, [t]);
 
-  // Keep the list current so approvals created after mount (e.g. from a Command
-  // Center action that hits REQUIRE_APPROVAL) appear without a manual reload.
+  // Keep the list current WITHOUT polling (COST-FIRST: 0 idle DB reads). Approvals
+  // created after mount (e.g. a Command Center action that hits REQUIRE_APPROVAL) are
+  // picked up event-driven — when the tab regains focus/visibility — plus after every
+  // approve/reject decision (which already call refresh()). No background timer.
   useEffect(() => {
-    const id = setInterval(() => {
-      void refresh();
-    }, 8000);
-    return () => clearInterval(id);
+    const onActive = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    window.addEventListener("focus", onActive);
+    document.addEventListener("visibilitychange", onActive);
+    return () => {
+      window.removeEventListener("focus", onActive);
+      document.removeEventListener("visibilitychange", onActive);
+    };
   }, [refresh]);
 
   const trackResumption = useCallback((requestId: string, summary: string) => {

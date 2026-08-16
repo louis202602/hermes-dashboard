@@ -177,7 +177,6 @@ export const WALLPAPER_REGISTRY: WallpaperDef[] = [
 
 /** The Hermès default wallpaper id when nothing is chosen (subtle, always readable). */
 export const DEFAULT_WALLPAPER_REF: string = "hermes-graphite";
-export const WALLPAPERS_SCHEMA_VERSION = 1;
 
 const REGISTRY_IDS = new Set(WALLPAPER_REGISTRY.map((w) => w.id));
 
