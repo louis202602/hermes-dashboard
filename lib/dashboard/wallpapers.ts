@@ -14,56 +14,165 @@
  */
 
 export const WALLPAPER_CATEGORIES = [
-  "hermes",
-  "espace",
-  "montagne",
-  "mer",
-  "tropical",
-  "user",
+  "hermes", // CSS gradient art — sober, premium (0 asset)
+  "abstrait", // CSS gradient art + real abstract photos (liquid glass / chrome / energy)
+  "paysage", // PHOTO — landscapes (montagne, forêt, plage, côte…)
+  "espace", // PHOTO — space (real planets, galaxy, Earth) incl. NASA public domain
+  "ville", // PHOTO — cityscapes
+  "luxe", // PHOTO — luxury interiors / villas
+  "yacht", // PHOTO — yachts (extensible; empty until provided)
+  "automobile", // PHOTO — cars
+  "moto", // PHOTO — motorcycles
+  "technologie", // PHOTO — technology (extensible; empty until provided)
+  "user", // user uploads
 ] as const;
 export type WallpaperCategory = (typeof WALLPAPER_CATEGORIES)[number];
+
+/** Photo categories (real images, never CSS gradient art) in gallery display order. */
+export const PHOTO_CATEGORIES: WallpaperCategory[] = [
+  "paysage",
+  "espace",
+  "ville",
+  "luxe",
+  "yacht",
+  "automobile",
+  "moto",
+  "technologie",
+];
 
 export type WallpaperDef = {
   id: string;
   category: WallpaperCategory;
-  /** "gradient" = pure CSS built-in (0 asset). "image" = asset/signed-URL. */
+  /** "gradient" = pure CSS built-in (0 asset). "image" = real image asset. */
   kind: "gradient" | "image";
   /** Default readability scrim (0..1) suited to this wallpaper's brightness. */
   defaultScrim: number;
-  /** For kind:"image" built-ins: the local asset path (served from /public). */
+  /** For kind:"image": the full-quality local asset path (served from /public). */
   asset?: string;
+  /** For kind:"image": a lightweight thumbnail path for the gallery (lazy-loaded). */
+  thumb?: string;
+  /** For kind:"image": human-readable source + LICENCE (never fabricated). */
+  provenance?: string;
+  /** For kind:"image": per-image focal point (0..1) so the subject stays framed. */
+  focalX?: number;
+  focalY?: number;
+  /**
+   * OWNER_PROVIDED_ASSET marker: the source image carries inherent third-party/product
+   * branding (e.g. a Ducati badge, the « HERMÈS OS » emblem on an in-scene screen) that
+   * was present in the file the owner supplied — never added or removed by us. Flagged so
+   * these specific assets can be swapped for neutral versions later without hunting.
+   */
+  ownerBranded?: boolean;
 };
 
+/** Honest provenance for every owner-supplied photo (details in PROVENANCE.md). */
+const OWNER_PROVENANCE = "Fourni par le propriétaire (Hermès OS)";
+
+/** Build a real-image WallpaperDef from a /public path base (no ".webp" suffix). */
+function img(
+  id: string,
+  category: WallpaperCategory,
+  pathBase: string,
+  defaultScrim: number,
+  focalX: number,
+  focalY: number,
+): WallpaperDef {
+  return {
+    id,
+    category,
+    kind: "image",
+    defaultScrim,
+    asset: `/wallpapers/${pathBase}.webp`,
+    thumb: `/wallpapers/${pathBase}-thumb.webp`,
+    provenance: OWNER_PROVENANCE,
+    focalX,
+    focalY,
+  };
+}
+
 /**
- * Built-in wallpapers shipped in this increment — all pure CSS (`.wallpaper-<id>`), all
- * dark-to-mid so text stays readable with a light scrim. Photographic families
- * (montagne / mer / tropical) and user uploads are the next DASH-4E increment; their
- * ids will slot into this same registry with kind:"image" — no architecture change.
+ * Wallpaper registry.
+ *
+ * - `hermes` / `abstrait`: pure-CSS gradient art (`.wallpaper-<id>`, 0 asset, 0 egress).
+ *   The former "espace/montagne/mer/tropical" GRADIENTS are RECLASSIFIED under `abstrait`
+ *   — they are stylised atmospheres, NOT photographs (ids kept stable so existing user
+ *   prefs keep working).
+ * - Photo categories carry REAL images only (kind:"image"), each with an HD asset, a
+ *   lightweight thumbnail, an honest provenance (never fabricated) and a focal point.
+ *   `espace` also ships real NASA public-domain photos; every owner-provided asset is
+ *   recorded as owner-provided in public/wallpapers/PROVENANCE.md.
  */
 export const WALLPAPER_REGISTRY: WallpaperDef[] = [
-  // Hermès / abstract (sober, premium)
+  // --- Hermès (CSS, sober premium) ---
   { id: "hermes-noir", category: "hermes", kind: "gradient", defaultScrim: 0.15 },
   { id: "hermes-bleu-nuit", category: "hermes", kind: "gradient", defaultScrim: 0.18 },
   { id: "hermes-graphite", category: "hermes", kind: "gradient", defaultScrim: 0.15 },
   { id: "hermes-azur", category: "hermes", kind: "gradient", defaultScrim: 0.22 },
   { id: "hermes-solaire", category: "hermes", kind: "gradient", defaultScrim: 0.28 },
   { id: "hermes-aurora", category: "hermes", kind: "gradient", defaultScrim: 0.2 },
-  // Espace / planète — spatial LANDSCAPE only (atmosphere + stars), NO central object.
-  { id: "espace-atmosphere", category: "espace", kind: "gradient", defaultScrim: 0.2 },
-  { id: "espace-etoiles", category: "espace", kind: "gradient", defaultScrim: 0.15 },
-  { id: "espace-planete", category: "espace", kind: "gradient", defaultScrim: 0.2 },
-  // Montagne / neige — premium CSS art (photo built-ins are a documented manifest).
-  { id: "montagne-neige", category: "montagne", kind: "gradient", defaultScrim: 0.34 },
-  { id: "montagne-alpine", category: "montagne", kind: "gradient", defaultScrim: 0.3 },
-  { id: "montagne-crepuscule", category: "montagne", kind: "gradient", defaultScrim: 0.3 },
-  // Mer / Méditerranée
-  { id: "mer-profonde", category: "mer", kind: "gradient", defaultScrim: 0.22 },
-  { id: "mer-turquoise", category: "mer", kind: "gradient", defaultScrim: 0.34 },
-  { id: "mer-couchant", category: "mer", kind: "gradient", defaultScrim: 0.3 },
-  // Tropical / soleil
-  { id: "tropical-couchant", category: "tropical", kind: "gradient", defaultScrim: 0.3 },
-  { id: "tropical-palmiers", category: "tropical", kind: "gradient", defaultScrim: 0.32 },
-  { id: "tropical-plage", category: "tropical", kind: "gradient", defaultScrim: 0.36 },
+  // --- Abstrait (CSS atmospheres — reclassified gradients, NOT photos) ---
+  { id: "espace-atmosphere", category: "abstrait", kind: "gradient", defaultScrim: 0.2 },
+  { id: "espace-etoiles", category: "abstrait", kind: "gradient", defaultScrim: 0.15 },
+  { id: "espace-planete", category: "abstrait", kind: "gradient", defaultScrim: 0.2 },
+  { id: "montagne-neige", category: "abstrait", kind: "gradient", defaultScrim: 0.34 },
+  { id: "montagne-alpine", category: "abstrait", kind: "gradient", defaultScrim: 0.3 },
+  { id: "montagne-crepuscule", category: "abstrait", kind: "gradient", defaultScrim: 0.3 },
+  { id: "mer-profonde", category: "abstrait", kind: "gradient", defaultScrim: 0.22 },
+  { id: "mer-turquoise", category: "abstrait", kind: "gradient", defaultScrim: 0.34 },
+  { id: "mer-couchant", category: "abstrait", kind: "gradient", defaultScrim: 0.3 },
+  { id: "tropical-couchant", category: "abstrait", kind: "gradient", defaultScrim: 0.3 },
+  { id: "tropical-palmiers", category: "abstrait", kind: "gradient", defaultScrim: 0.32 },
+  { id: "tropical-plage", category: "abstrait", kind: "gradient", defaultScrim: 0.36 },
+  // --- Abstrait (REAL photos — owner-provided) ---
+  img("abstract-liquid-glass-01", "abstrait", "abstract/abstract-liquid-glass-01", 0.24, 0.5, 0.5),
+  img("abstract-chrome-01", "abstrait", "abstract/abstract-chrome-01", 0.32, 0.5, 0.5),
+  img("abstract-energy-01", "abstrait", "abstract/abstract-energy-01", 0.22, 0.5, 0.5),
+  // --- Paysage (REAL photos — owner-provided) ---
+  img("landscape-snow-peaks-01", "paysage", "landscape/landscape-snow-peaks-01", 0.4, 0.6, 0.5),
+  img("landscape-snow-valley-01", "paysage", "landscape/landscape-snow-valley-01", 0.4, 0.5, 0.5),
+  img("landscape-mountain-lake-01", "paysage", "landscape/landscape-mountain-lake-01", 0.38, 0.5, 0.45),
+  img("landscape-forest-stream-01", "paysage", "landscape/landscape-forest-stream-01", 0.34, 0.5, 0.5),
+  img("landscape-tropical-beach-01", "paysage", "landscape/landscape-tropical-beach-01", 0.4, 0.5, 0.5),
+  img("landscape-med-coast-01", "paysage", "landscape/landscape-med-coast-01", 0.4, 0.5, 0.5),
+  // --- Espace (REAL photos — NASA public domain + owner-provided) ---
+  {
+    id: "espace-terre",
+    category: "espace",
+    kind: "image",
+    defaultScrim: 0.28,
+    asset: "/wallpapers/space/espace-terre.webp",
+    thumb: "/wallpapers/space/espace-terre-thumb.webp",
+    provenance: "NASA — Apollo 17 « Blue Marble » (AS17-148-22727) — domaine public",
+    focalX: 0.5,
+    focalY: 0.5,
+  },
+  {
+    id: "espace-horizon",
+    category: "espace",
+    kind: "image",
+    defaultScrim: 0.24,
+    asset: "/wallpapers/space/espace-horizon.webp",
+    thumb: "/wallpapers/space/espace-horizon-thumb.webp",
+    provenance: "NASA — ISS Expedition 43 (iss043e091794) — domaine public",
+    focalX: 0.5,
+    focalY: 0.45,
+  },
+  img("space-ringed-planet-01", "espace", "space/space-ringed-planet-01", 0.22, 0.45, 0.45),
+  img("space-galaxy-01", "espace", "space/space-galaxy-01", 0.2, 0.5, 0.45),
+  img("space-earth-night-01", "espace", "space/space-earth-night-01", 0.22, 0.4, 0.55),
+  // --- Ville (REAL photos — owner-provided) ---
+  img("city-dubai-night-01", "ville", "city/city-dubai-night-01", 0.26, 0.5, 0.4),
+  img("city-tokyo-neon-01", "ville", "city/city-tokyo-neon-01", 0.24, 0.5, 0.45),
+  // --- Luxe (REAL photos — owner-provided) ---
+  img("luxury-villa-01", "luxe", "luxury/luxury-villa-01", 0.3, 0.6, 0.5),
+  // ownerBranded: « HERMÈS OS » emblem on an in-scene screen (inherent to the source).
+  { ...img("luxury-lounge-sunset-01", "luxe", "luxury/luxury-lounge-sunset-01", 0.3, 0.5, 0.5), ownerBranded: true },
+  { ...img("luxury-penthouse-01", "luxe", "luxury/luxury-penthouse-01", 0.26, 0.5, 0.5), ownerBranded: true },
+  // --- Automobile (REAL photo — owner-provided) ---
+  img("supercar-01", "automobile", "automotive/supercar-01", 0.3, 0.5, 0.6),
+  // --- Moto (REAL photo — owner-provided) ---
+  // ownerBranded: Ducati badging inherent to the depicted motorcycle in the source.
+  { ...img("motorcycle-ducati-01", "moto", "motorcycle/motorcycle-ducati-01", 0.26, 0.5, 0.55), ownerBranded: true },
 ];
 
 /** The Hermès default wallpaper id when nothing is chosen (subtle, always readable). */
@@ -95,7 +204,7 @@ export type WallpaperConfig = {
   ref: string | null; // null ⇒ no wallpaper (plain background)
   scrim: number; // 0..1 readability overlay
   position: WallpaperPosition;
-  focalX: number; // 0..1 (reserved; position covers V1)
+  focalX: number; // 0..1 focal point for kind:"image" (cover framing)
   focalY: number;
 };
 
@@ -129,8 +238,10 @@ export function clampWallpaper(input: unknown): WallpaperConfig {
     ref,
     scrim: num01(w.wallpaperScrim, def?.defaultScrim ?? 0.2),
     position,
-    focalX: num01(w.wallpaperFocalX, 0.5),
-    focalY: num01(w.wallpaperFocalY, 0.5),
+    // Fall back to the image's per-def focal point when the config sets none, so each
+    // real photo stays framed on its subject across viewports.
+    focalX: num01(w.wallpaperFocalX, def?.focalX ?? 0.5),
+    focalY: num01(w.wallpaperFocalY, def?.focalY ?? 0.5),
   };
 }
 
@@ -177,8 +288,28 @@ export function wallpaperAsset(ref: string | null | undefined): string | null {
   return def?.kind === "image" ? (def.asset ?? null) : null;
 }
 
+/** Lightweight thumbnail path for an image wallpaper (falls back to the full asset). */
+export function wallpaperThumb(ref: string | null | undefined): string | null {
+  const def = wallpaperById(ref);
+  if (def?.kind !== "image") return null;
+  return def.thumb ?? def.asset ?? null;
+}
+
 export function wallpapersByCategory(category: WallpaperCategory): WallpaperDef[] {
   return WALLPAPER_REGISTRY.filter((w) => w.category === category);
+}
+
+/**
+ * Selectable categories, in canonical order, that actually hold at least one wallpaper.
+ * Drives the gallery tabs — empty/extensible categories (yacht, technologie until photos
+ * are provided) simply don't appear, so the taxonomy stays extensible with no dead tabs.
+ * `user` is excluded (uploads have their own control, not a gallery tab).
+ */
+export function populatedCategories(): Exclude<WallpaperCategory, "user">[] {
+  return WALLPAPER_CATEGORIES.filter(
+    (c): c is Exclude<WallpaperCategory, "user"> =>
+      c !== "user" && WALLPAPER_REGISTRY.some((w) => w.category === c),
+  );
 }
 
 // --- User-uploaded wallpapers: ref = "user:<storagePath>" --------------------
