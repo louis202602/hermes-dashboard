@@ -32,6 +32,17 @@ import {
   type LayoutPreferences,
   type WidgetSize,
 } from "@/lib/dashboard/widgets";
+import {
+  PROFILE_IDS,
+  clampProfiles,
+  renameProfile,
+  resetProfile,
+  resolveActiveProfile,
+  setActiveProfile,
+  setProfileAppearance,
+  type ProfileId,
+  type ProfilesState,
+} from "@/lib/dashboard/profiles";
 import { LANGUAGES, type MessageKey } from "@/lib/i18n/languages";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -151,6 +162,7 @@ export default function DashboardSettings({
   const [behavior, setBehavior] = useState<Behavior>(initial.behavior);
   const [regional, setRegional] = useState<RegionalOverride>(initial.regional);
   const [layout, setLayout] = useState<LayoutPreferences>(() => clampLayout(initial.layout));
+  const [profiles, setProfiles] = useState<ProfilesState>(() => clampProfiles(initial.profiles));
   const version = useRef<number>(initial.version);
   const [save, setSave] = useState<SaveState>("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -298,6 +310,26 @@ export default function DashboardSettings({
   const widgetName = (id: string) => t(`widget.${id}` as MessageKey);
   const segLabel = (seg: ContextSegment) => t(`seg.${seg}` as MessageKey);
 
+  // --- DASH-4D profiles / modes ---
+  const activeProfile = resolveActiveProfile(profiles, layout);
+  const commitProfiles = useCallback(
+    (next: ProfilesState) => {
+      setProfiles(next);
+      persistPatch({ profiles: next });
+    },
+    [persistPatch],
+  );
+  const profileName = (id: ProfileId): string =>
+    profiles.byId[id]?.name?.trim() || t(`profile.${id}` as MessageKey);
+  const profileOverride = profiles.byId[activeProfile]?.appearance ?? {};
+  const inheritOpt: Opt = { value: "", label: t("profile.settings.inherit") };
+  const profileThemeOpts: Opt[] = [inheritOpt, ...A_VALUES.theme.map((v) => ({ value: v, label: themeLabel(v) }))];
+  const profileAccentOpts: Opt[] = [inheritOpt, ...A_VALUES.accent.map((v) => ({ value: v, label: t(`opt.accent.${v}` as MessageKey) }))];
+  const setProfileTheme = (v: string) =>
+    commitProfiles(setProfileAppearance(profiles, activeProfile, { theme: v ? (v as Appearance["theme"]) : undefined }));
+  const setProfileAccent = (v: string) =>
+    commitProfiles(setProfileAppearance(profiles, activeProfile, { accent: v ? (v as Appearance["accent"]) : undefined }));
+
   const saveLabel =
     save === "saving" ? t("common.save.saving")
     : save === "saved" ? t("common.save.saved")
@@ -319,6 +351,60 @@ export default function DashboardSettings({
       </header>
 
       <div className="settings-body">
+        <Section title={t("settings.section.profiles")}>
+          <div className="settings-row settings-row-block">
+            <span className="settings-row-label">{t("profile.settings.active")}</span>
+            <div className="profile-switcher-chips" role="group" aria-label={t("profile.switcher.aria")}>
+              {PROFILE_IDS.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`profile-chip${id === activeProfile ? " is-active" : ""}`}
+                  aria-pressed={id === activeProfile}
+                  onClick={() => commitProfiles(setActiveProfile(profiles, id))}
+                >
+                  {profileName(id)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <SelectRow
+            label={t("profile.settings.theme")}
+            value={profileOverride.theme ?? ""}
+            options={profileThemeOpts}
+            onChange={setProfileTheme}
+          />
+          <SelectRow
+            label={t("profile.settings.accent")}
+            value={profileOverride.accent ?? ""}
+            options={profileAccentOpts}
+            onChange={setProfileAccent}
+          />
+          {activeProfile === "custom" ? (
+            <label className="settings-row">
+              <span className="settings-row-label">{t("profile.settings.rename")}</span>
+              <input
+                className="settings-select"
+                type="text"
+                maxLength={64}
+                defaultValue={profiles.byId.custom?.name ?? ""}
+                placeholder={t("profile.custom")}
+                onBlur={(e) =>
+                  commitProfiles(renameProfile(profiles, "custom", e.target.value.trim() || null))
+                }
+              />
+            </label>
+          ) : null}
+          <button
+            type="button"
+            className="settings-reset"
+            onClick={() => commitProfiles(resetProfile(profiles, activeProfile))}
+          >
+            {t("profile.settings.reset")}
+          </button>
+          <p className="settings-reset-note">{t("profile.settings.resetNote")}</p>
+        </Section>
+
         <Section title={t("settings.section.appearance")}>
           <SelectRow label={t("settings.row.theme")} value={appearance.theme} options={opts("theme")} onChange={(v) => setA({ theme: v as Appearance["theme"] })} />
           <SelectRow label={t("settings.row.accent")} value={appearance.accent} options={opts("accent")} onChange={(v) => setA({ accent: v as Appearance["accent"] })} />
