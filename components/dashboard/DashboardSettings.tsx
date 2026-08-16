@@ -56,6 +56,8 @@ import {
 import {
   WALLPAPER_POSITIONS,
   isUserWallpaperRef,
+  populatedCategories,
+  wallpaperThumb,
   wallpapersByCategory,
   type WallpaperCategory,
   type WallpaperPosition,
@@ -525,7 +527,7 @@ export default function DashboardSettings({
             {t("wallpaper.activeNote", { profile: profileName(activeProfile) })}
           </p>
           <div className="wallpaper-cat-tabs" role="tablist" aria-label={t("settings.section.wallpaper")}>
-            {(["hermes", "espace", "montagne", "mer", "tropical"] as const).map((c) => (
+            {populatedCategories().map((c) => (
               <button
                 key={c}
                 type="button"
@@ -539,17 +541,27 @@ export default function DashboardSettings({
             ))}
           </div>
           <div className="wallpaper-gallery">
-            {wallpapersByCategory(wpCat).map((w) => (
-              <button
-                key={w.id}
-                type="button"
-                className={`wallpaper-thumb wallpaper-${w.id}${currentWpRef === w.id ? " is-active" : ""}`}
-                aria-pressed={currentWpRef === w.id}
-                aria-label={t(`wallpaper.name.${w.id}` as MessageKey)}
-                title={t(`wallpaper.name.${w.id}` as MessageKey)}
-                onClick={() => setWp({ wallpaperRef: w.id })}
-              />
-            ))}
+            {wallpapersByCategory(wpCat).map((w) => {
+              const name = t(`wallpaper.name.${w.id}` as MessageKey);
+              const thumb = wallpaperThumb(w.id);
+              return (
+                <button
+                  key={w.id}
+                  type="button"
+                  className={`wallpaper-thumb${w.kind === "gradient" ? ` wallpaper-${w.id}` : " wallpaper-thumb-photo"}${currentWpRef === w.id ? " is-active" : ""}`}
+                  aria-pressed={currentWpRef === w.id}
+                  aria-label={name}
+                  title={w.provenance ? `${name} — ${w.provenance}` : name}
+                  onClick={() => setWp({ wallpaperRef: w.id })}
+                >
+                  {thumb ? (
+                    // Real photo: lazy-loaded lightweight thumbnail (never the HD asset).
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={thumb} alt="" loading="lazy" decoding="async" className="wallpaper-thumb-img" />
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
           <SelectRow
             label={t("wallpaper.position")}

@@ -4787,6 +4787,16 @@ html[data-reduce-transparency="1"] .context-bar { backdrop-filter: none; backgro
 }
 .wallpaper-thumb.is-active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .wallpaper-thumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wallpaper-thumb-photo { background-color: #05070c; }
+.wallpaper-thumb-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.wallpaper-pending-note { margin-top: 10px; }
 .wallpaper-gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
