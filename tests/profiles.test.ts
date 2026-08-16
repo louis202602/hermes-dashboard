@@ -173,29 +173,26 @@ test("PENDING_WRITE_SAFE / NO_CROSS_PROFILE_WRITE / NO_LOST_EDIT", () => {
   assert.deepEqual(effectiveProfileLayout(afterSwitch, "direction", null), editedLayout);
 });
 
-// --- DASH-4E readiness: wallpaperRef reserved per profile, additive-safe ------
-test("WALLPAPER_REF_READY: per-profile wallpaperRef round-trips; unknown future fields are non-destructive", () => {
-  // A wallpaper reference set on a profile survives clamp + JSONB round-trip.
-  const raw = {
+// --- DASH-4E: per-profile wallpaper fields round-trip; invalid refs drop safely ---
+test("WALLPAPER per-profile fields round-trip; invalid ref dropped; scrim/position clamp", () => {
+  const s = clampProfiles({
     active: "direction",
     byId: {
-      direction: { wallpaperRef: "hermes/space-earth", appearance: { theme: "midnight" } },
-      custom: { wallpaperRef: "user/abc123.webp" },
+      direction: { wallpaperRef: "hermes-graphite", wallpaperScrim: 0.3, wallpaperPosition: "top", appearance: { theme: "midnight" } },
+      custom: { wallpaperRef: "user:abc123", wallpaperScrim: 2 /*clamped→1*/, wallpaperPosition: "sideways" /*invalid→null*/ },
+      chantier: { wallpaperRef: "not-a-wallpaper" /*invalid→null*/ },
     },
-  };
-  const s = clampProfiles(raw);
-  assert.equal(s.byId.direction?.wallpaperRef, "hermes/space-earth");
-  assert.equal(s.byId.custom?.wallpaperRef, "user/abc123.webp");
-  const rt = clampProfiles(JSON.parse(JSON.stringify(s)));
-  assert.deepEqual(rt, s, "wallpaperRef survives a DB JSONB round-trip");
-  // Additive forward-compat: a DASH-4E field not yet known to the clamp does not crash
-  // and does not corrupt the known fields (the row simply carries it opaquely in JSONB).
-  const withFuture = clampProfiles({
-    active: "chantier",
-    byId: { chantier: { wallpaperRef: "hermes/mountain", wallpaperScrim: 0.4, wallpaperPosition: "center" } },
+    wallpaper: { wallpaperRef: "espace-atmosphere", wallpaperScrim: 0.2 },
   });
-  assert.equal(withFuture.active, "chantier");
-  assert.equal(withFuture.byId.chantier?.wallpaperRef, "hermes/mountain");
+  assert.equal(s.byId.direction?.wallpaperRef, "hermes-graphite");
+  assert.equal(s.byId.direction?.wallpaperPosition, "top");
+  assert.equal(s.byId.custom?.wallpaperRef, "user:abc123", "user-namespaced ref accepted");
+  assert.equal(s.byId.custom?.wallpaperScrim, 1, "scrim clamped to 0..1");
+  assert.equal(s.byId.custom?.wallpaperPosition, null, "invalid position dropped");
+  assert.equal(s.byId.chantier?.wallpaperRef, null, "unknown ref dropped (fail-safe)");
+  assert.equal(s.wallpaper.wallpaperRef, "espace-atmosphere", "global default wallpaper");
+  const rt = clampProfiles(JSON.parse(JSON.stringify(s)));
+  assert.deepEqual(rt, s, "wallpaper fields survive a DB JSONB round-trip (multi-device)");
 });
 
 // --- COST-FIRST: pure module, no I/O -----------------------------------------

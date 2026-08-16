@@ -40,9 +40,19 @@ import {
   resolveActiveProfile,
   setActiveProfile,
   setProfileAppearance,
+  setProfileWallpaper,
   type ProfileId,
   type ProfilesState,
 } from "@/lib/dashboard/profiles";
+import {
+  WALLPAPER_POSITIONS,
+  isUserWallpaperRef,
+  wallpapersByCategory,
+  type WallpaperCategory,
+  type WallpaperPosition,
+} from "@/lib/dashboard/wallpapers";
+import { deleteWallpaperAction, uploadWallpaperAction } from "@/app/actions/wallpaper";
+import { encodeImageFileToJpeg } from "@/lib/attachments/browserImage";
 import { LANGUAGES, type MessageKey } from "@/lib/i18n/languages";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -163,6 +173,9 @@ export default function DashboardSettings({
   const [regional, setRegional] = useState<RegionalOverride>(initial.regional);
   const [layout, setLayout] = useState<LayoutPreferences>(() => clampLayout(initial.layout));
   const [profiles, setProfiles] = useState<ProfilesState>(() => clampProfiles(initial.profiles));
+  const [wpCat, setWpCat] = useState<Exclude<WallpaperCategory, "user">>("hermes");
+  const [wpUploading, setWpUploading] = useState(false);
+  const [wpError, setWpError] = useState(false);
   const version = useRef<number>(initial.version);
   const [save, setSave] = useState<SaveState>("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -330,6 +343,65 @@ export default function DashboardSettings({
   const setProfileAccent = (v: string) =>
     commitProfiles(setProfileAppearance(profiles, activeProfile, { accent: v ? (v as Appearance["accent"]) : undefined }));
 
+  // --- DASH-4E wallpaper (per active profile) ---
+  const profWp = profiles.byId[activeProfile];
+  const currentWpRef = profWp?.wallpaperRef ?? null;
+  const currentWpScrim = profWp?.wallpaperScrim ?? 0.2;
+  const currentWpPos = (profWp?.wallpaperPosition as WallpaperPosition) ?? "center";
+  const setWp = (fields: Parameters<typeof setProfileWallpaper>[2]) =>
+    commitProfiles(setProfileWallpaper(profiles, activeProfile, fields));
+  const wpPosOpts: Opt[] = WALLPAPER_POSITIONS.map((p) => ({
+    value: p,
+    label: t(`wallpaper.pos.${p}` as MessageKey),
+  }));
+  const currentIsUserWp = isUserWallpaperRef(currentWpRef);
+  // A `user:` object is safe to delete only if NO other profile — nor the global
+  // default — still references it (refs can be shared across profiles).
+  const isOrphanAfterReplace = (ref: string | null): ref is string => {
+    if (!ref || !isUserWallpaperRef(ref)) return false;
+    if (profiles.wallpaper?.wallpaperRef === ref) return false;
+    for (const [id, cfg] of Object.entries(profiles.byId)) {
+      if (id !== activeProfile && cfg?.wallpaperRef === ref) return false;
+    }
+    return true;
+  };
+  const onUploadWallpaper = async (file: File | null | undefined) => {
+    if (!file) return;
+    setWpError(false);
+    setWpUploading(true);
+    try {
+      // Compress client-side (max edge 2560, JPEG q0.82) before upload — COST-FIRST.
+      const enc = await encodeImageFileToJpeg(file, 2560, 0.82);
+      const jpeg = new File([enc.blob], "wallpaper.jpg", { type: "image/jpeg" });
+      const fd = new FormData();
+      fd.append("file", jpeg);
+      const res = await uploadWallpaperAction(fd);
+      if (res.ok) {
+        const previousRef = currentWpRef;
+        setWp({ wallpaperRef: res.ref });
+        // ORPHAN_POLICY (V1, no cron/GC): replacing this profile's own photo deletes
+        // the previous object when nothing else references it — bounds stored user
+        // wallpapers to ≤ profile count. Ownership is re-checked server-side.
+        if (isOrphanAfterReplace(previousRef)) {
+          void deleteWallpaperAction(previousRef);
+        }
+        router.refresh(); // re-sign server-side so the dashboard shows the new fond
+      } else {
+        setWpError(true);
+      }
+    } catch {
+      setWpError(true);
+    } finally {
+      setWpUploading(false);
+    }
+  };
+  const onDeleteWallpaper = async () => {
+    if (!currentIsUserWp || !currentWpRef) return;
+    await deleteWallpaperAction(currentWpRef);
+    setWp({ wallpaperRef: null });
+    router.refresh();
+  };
+
   const saveLabel =
     save === "saving" ? t("common.save.saving")
     : save === "saved" ? t("common.save.saved")
@@ -403,6 +475,89 @@ export default function DashboardSettings({
             {t("profile.settings.reset")}
           </button>
           <p className="settings-reset-note">{t("profile.settings.resetNote")}</p>
+        </Section>
+
+        <Section title={t("settings.section.wallpaper")}>
+          <p className="settings-reset-note">
+            {t("wallpaper.activeNote", { profile: profileName(activeProfile) })}
+          </p>
+          <div className="wallpaper-cat-tabs" role="tablist" aria-label={t("settings.section.wallpaper")}>
+            {(["hermes", "espace", "montagne", "mer", "tropical"] as const).map((c) => (
+              <button
+                key={c}
+                type="button"
+                role="tab"
+                aria-selected={wpCat === c}
+                className={`profile-chip${wpCat === c ? " is-active" : ""}`}
+                onClick={() => setWpCat(c)}
+              >
+                {t(`wallpaper.cat.${c}` as MessageKey)}
+              </button>
+            ))}
+          </div>
+          <div className="wallpaper-gallery">
+            {wallpapersByCategory(wpCat).map((w) => (
+              <button
+                key={w.id}
+                type="button"
+                className={`wallpaper-thumb wallpaper-${w.id}${currentWpRef === w.id ? " is-active" : ""}`}
+                aria-pressed={currentWpRef === w.id}
+                aria-label={t(`wallpaper.name.${w.id}` as MessageKey)}
+                title={t(`wallpaper.name.${w.id}` as MessageKey)}
+                onClick={() => setWp({ wallpaperRef: w.id })}
+              />
+            ))}
+          </div>
+          <SelectRow
+            label={t("wallpaper.position")}
+            value={currentWpPos}
+            options={wpPosOpts}
+            onChange={(v) => setWp({ wallpaperPosition: v })}
+          />
+          <label className="settings-row">
+            <span className="settings-row-label">{t("wallpaper.scrim")}</span>
+            <input
+              className="settings-range"
+              type="range"
+              min={0}
+              max={0.5}
+              step={0.02}
+              value={currentWpScrim}
+              aria-label={t("wallpaper.scrim")}
+              onChange={(e) => setWp({ wallpaperScrim: Number(e.target.value) })}
+            />
+          </label>
+          {/* Personal wallpaper — reuses the private storage infra (image-only,
+              tenant/user isolated, signed URLs). Compressed client-side before upload. */}
+          <label className="settings-wp-upload">
+            <span className="settings-reset">{wpUploading ? t("wallpaper.uploading") : t("wallpaper.upload")}</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              hidden
+              disabled={wpUploading}
+              onChange={(e) => {
+                void onUploadWallpaper(e.target.files?.[0]);
+                e.currentTarget.value = "";
+              }}
+            />
+          </label>
+          {wpError ? <p className="settings-savestate is-error">{t("wallpaper.uploadError")}</p> : null}
+          {currentIsUserWp ? (
+            <>
+              <p className="settings-reset-note">{t("wallpaper.userFond")}</p>
+              <button type="button" className="settings-reset" onClick={() => void onDeleteWallpaper()}>
+                {t("wallpaper.delete")}
+              </button>
+            </>
+          ) : null}
+          <button
+            type="button"
+            className="settings-reset"
+            onClick={() => setWp({ wallpaperRef: null, wallpaperScrim: null, wallpaperPosition: null })}
+          >
+            {t("wallpaper.reset")}
+          </button>
         </Section>
 
         <Section title={t("settings.section.appearance")}>

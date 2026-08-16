@@ -28,6 +28,11 @@ import {
   registryIds,
   type LayoutPreferences,
 } from "@/lib/dashboard/widgets";
+import {
+  WALLPAPER_POSITIONS,
+  isValidWallpaperRef,
+  type WallpaperFields,
+} from "@/lib/dashboard/wallpapers";
 
 export const PROFILE_IDS = [
   "direction",
@@ -87,20 +92,27 @@ export type ProfileConfig = {
   appearance: Partial<Appearance>;
   /** Optional rename (mainly for the custom profile). */
   name: string | null;
-  /** DASH-4E reservation — a wallpaper reference per profile. Unused in 4D. */
+  /** DASH-4E — per-profile wallpaper (built-in id or "user:<key>") + display params. */
   wallpaperRef: string | null;
+  wallpaperScrim: number | null;
+  wallpaperPosition: string | null;
+  wallpaperFocalX: number | null;
+  wallpaperFocalY: number | null;
 };
 
 export type ProfilesState = {
   /** Active profile, or `null` when the user has never chosen one (resolve with global layout). */
   active: ProfileId | null;
   byId: Partial<Record<ProfileId, ProfileConfig>>;
+  /** DASH-4E — global default wallpaper (applied when a profile sets no wallpaper). */
+  wallpaper: WallpaperFields;
   schemaVersion: number;
 };
 
 export const EMPTY_PROFILES_STATE: ProfilesState = {
   active: null,
   byId: {},
+  wallpaper: {},
   schemaVersion: PROFILES_SCHEMA_VERSION,
 };
 
@@ -124,15 +136,41 @@ export function clampAppearanceOverride(input: unknown): Partial<Appearance> {
   return out;
 }
 
+function num01OrNull(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v)
+    ? Math.min(1, Math.max(0, v))
+    : null;
+}
+
+/** Keep only the valid flat wallpaper fields (fail-safe; unknown ref ⇒ dropped). */
+function clampWallpaperFields(c: Record<string, unknown>): WallpaperFields {
+  return {
+    wallpaperRef: isValidWallpaperRef(c.wallpaperRef) ? (c.wallpaperRef as string) : null,
+    wallpaperScrim: num01OrNull(c.wallpaperScrim),
+    wallpaperPosition: WALLPAPER_POSITIONS.includes(
+      c.wallpaperPosition as (typeof WALLPAPER_POSITIONS)[number],
+    )
+      ? (c.wallpaperPosition as string)
+      : null,
+    wallpaperFocalX: num01OrNull(c.wallpaperFocalX),
+    wallpaperFocalY: num01OrNull(c.wallpaperFocalY),
+  };
+}
+
 function clampProfileConfig(input: unknown): ProfileConfig {
   const c = (input ?? {}) as Record<string, unknown>;
   const hasLayout =
     c.layout != null && typeof c.layout === "object" && !Array.isArray(c.layout);
+  const wp = clampWallpaperFields(c);
   return {
     layout: hasLayout ? clampLayout(c.layout) : null,
     appearance: clampAppearanceOverride(c.appearance),
     name: strOrNull(c.name),
-    wallpaperRef: strOrNull(c.wallpaperRef, 256),
+    wallpaperRef: wp.wallpaperRef ?? null,
+    wallpaperScrim: wp.wallpaperScrim ?? null,
+    wallpaperPosition: wp.wallpaperPosition ?? null,
+    wallpaperFocalX: wp.wallpaperFocalX ?? null,
+    wallpaperFocalY: wp.wallpaperFocalY ?? null,
   };
 }
 
@@ -148,6 +186,7 @@ export function clampProfiles(input: unknown): ProfilesState {
   return {
     active: isProfileId(p.active) ? p.active : null,
     byId,
+    wallpaper: clampWallpaperFields((p.wallpaper ?? {}) as Record<string, unknown>),
     schemaVersion: Number(p.schemaVersion ?? PROFILES_SCHEMA_VERSION) || PROFILES_SCHEMA_VERSION,
   };
 }
@@ -213,8 +252,16 @@ function withConfig(
   id: ProfileId,
   mut: (c: ProfileConfig) => ProfileConfig,
 ): ProfilesState {
-  const current: ProfileConfig =
-    state.byId[id] ?? { layout: null, appearance: {}, name: null, wallpaperRef: null };
+  const current: ProfileConfig = state.byId[id] ?? {
+    layout: null,
+    appearance: {},
+    name: null,
+    wallpaperRef: null,
+    wallpaperScrim: null,
+    wallpaperPosition: null,
+    wallpaperFocalX: null,
+    wallpaperFocalY: null,
+  };
   return { ...state, byId: { ...state.byId, [id]: mut(current) } };
 }
 
@@ -248,6 +295,57 @@ export function renameProfile(
   name: string | null,
 ): ProfilesState {
   return withConfig(state, id, (c) => ({ ...c, name: name ? name.slice(0, 64) : null }));
+}
+
+/**
+ * DASH-4E — patch this profile's wallpaper fields (ref/scrim/position/focal). Only keys
+ * PRESENT in `fields` are changed; each is clamped (invalid ⇒ null). A partial patch
+ * (e.g. just the ref) never wipes the other wallpaper fields.
+ */
+export function setProfileWallpaper(
+  state: ProfilesState,
+  id: ProfileId,
+  fields: WallpaperFields,
+): ProfilesState {
+  const f = fields as Record<string, unknown>;
+  return withConfig(state, id, (c) => {
+    const next: ProfileConfig = { ...c };
+    if ("wallpaperRef" in f)
+      next.wallpaperRef = isValidWallpaperRef(f.wallpaperRef) ? (f.wallpaperRef as string) : null;
+    if ("wallpaperScrim" in f) next.wallpaperScrim = num01OrNull(f.wallpaperScrim);
+    if ("wallpaperPosition" in f)
+      next.wallpaperPosition = WALLPAPER_POSITIONS.includes(
+        f.wallpaperPosition as (typeof WALLPAPER_POSITIONS)[number],
+      )
+        ? (f.wallpaperPosition as string)
+        : null;
+    if ("wallpaperFocalX" in f) next.wallpaperFocalX = num01OrNull(f.wallpaperFocalX);
+    if ("wallpaperFocalY" in f) next.wallpaperFocalY = num01OrNull(f.wallpaperFocalY);
+    return next;
+  });
+}
+
+/** DASH-4E — set the GLOBAL default wallpaper (applied when a profile sets none). */
+export function setGlobalWallpaper(
+  state: ProfilesState,
+  fields: WallpaperFields,
+): ProfilesState {
+  return { ...state, wallpaper: clampWallpaperFields(fields as Record<string, unknown>) };
+}
+
+/** DASH-4E — the flat wallpaper fields of a profile config (for resolution). */
+export function profileWallpaperFields(
+  state: ProfilesState,
+  id: ProfileId,
+): WallpaperFields {
+  const c = state.byId[id];
+  return {
+    wallpaperRef: c?.wallpaperRef ?? null,
+    wallpaperScrim: c?.wallpaperScrim ?? null,
+    wallpaperPosition: c?.wallpaperPosition ?? null,
+    wallpaperFocalX: c?.wallpaperFocalX ?? null,
+    wallpaperFocalY: c?.wallpaperFocalY ?? null,
+  };
 }
 
 /** Reset ONLY this profile (drop its saved config) — reverts it to the preset/global. */
