@@ -46,9 +46,13 @@ import {
 } from "@/lib/dashboard/profiles";
 import {
   WALLPAPER_POSITIONS,
+  isUserWallpaperRef,
   wallpapersByCategory,
+  type WallpaperCategory,
   type WallpaperPosition,
 } from "@/lib/dashboard/wallpapers";
+import { deleteWallpaperAction, uploadWallpaperAction } from "@/app/actions/wallpaper";
+import { encodeImageFileToJpeg } from "@/lib/attachments/browserImage";
 import { LANGUAGES, type MessageKey } from "@/lib/i18n/languages";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -169,7 +173,9 @@ export default function DashboardSettings({
   const [regional, setRegional] = useState<RegionalOverride>(initial.regional);
   const [layout, setLayout] = useState<LayoutPreferences>(() => clampLayout(initial.layout));
   const [profiles, setProfiles] = useState<ProfilesState>(() => clampProfiles(initial.profiles));
-  const [wpCat, setWpCat] = useState<"hermes" | "espace">("hermes");
+  const [wpCat, setWpCat] = useState<Exclude<WallpaperCategory, "user">>("hermes");
+  const [wpUploading, setWpUploading] = useState(false);
+  const [wpError, setWpError] = useState(false);
   const version = useRef<number>(initial.version);
   const [save, setSave] = useState<SaveState>("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -348,6 +354,36 @@ export default function DashboardSettings({
     value: p,
     label: t(`wallpaper.pos.${p}` as MessageKey),
   }));
+  const currentIsUserWp = isUserWallpaperRef(currentWpRef);
+  const onUploadWallpaper = async (file: File | null | undefined) => {
+    if (!file) return;
+    setWpError(false);
+    setWpUploading(true);
+    try {
+      // Compress client-side (max edge 2560, JPEG q0.82) before upload — COST-FIRST.
+      const enc = await encodeImageFileToJpeg(file, 2560, 0.82);
+      const jpeg = new File([enc.blob], "wallpaper.jpg", { type: "image/jpeg" });
+      const fd = new FormData();
+      fd.append("file", jpeg);
+      const res = await uploadWallpaperAction(fd);
+      if (res.ok) {
+        setWp({ wallpaperRef: res.ref });
+        router.refresh(); // re-sign server-side so the dashboard shows the new fond
+      } else {
+        setWpError(true);
+      }
+    } catch {
+      setWpError(true);
+    } finally {
+      setWpUploading(false);
+    }
+  };
+  const onDeleteWallpaper = async () => {
+    if (!currentIsUserWp || !currentWpRef) return;
+    await deleteWallpaperAction(currentWpRef);
+    setWp({ wallpaperRef: null });
+    router.refresh();
+  };
 
   const saveLabel =
     save === "saving" ? t("common.save.saving")
@@ -429,7 +465,7 @@ export default function DashboardSettings({
             {t("wallpaper.activeNote", { profile: profileName(activeProfile) })}
           </p>
           <div className="wallpaper-cat-tabs" role="tablist" aria-label={t("settings.section.wallpaper")}>
-            {(["hermes", "espace"] as const).map((c) => (
+            {(["hermes", "espace", "montagne", "mer", "tropical"] as const).map((c) => (
               <button
                 key={c}
                 type="button"
@@ -437,17 +473,6 @@ export default function DashboardSettings({
                 aria-selected={wpCat === c}
                 className={`profile-chip${wpCat === c ? " is-active" : ""}`}
                 onClick={() => setWpCat(c)}
-              >
-                {t(`wallpaper.cat.${c}` as MessageKey)}
-              </button>
-            ))}
-            {(["montagne", "mer", "tropical"] as const).map((c) => (
-              <button
-                key={c}
-                type="button"
-                className="profile-chip"
-                disabled
-                title={t("wallpaper.photoSoon")}
               >
                 {t(`wallpaper.cat.${c}` as MessageKey)}
               </button>
@@ -485,6 +510,30 @@ export default function DashboardSettings({
               onChange={(e) => setWp({ wallpaperScrim: Number(e.target.value) })}
             />
           </label>
+          {/* Personal wallpaper — reuses the private storage infra (image-only,
+              tenant/user isolated, signed URLs). Compressed client-side before upload. */}
+          <label className="settings-wp-upload">
+            <span className="settings-reset">{wpUploading ? t("wallpaper.uploading") : t("wallpaper.upload")}</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              hidden
+              disabled={wpUploading}
+              onChange={(e) => {
+                void onUploadWallpaper(e.target.files?.[0]);
+                e.currentTarget.value = "";
+              }}
+            />
+          </label>
+          {wpError ? <p className="settings-savestate is-error">{t("wallpaper.uploadError")}</p> : null}
+          {currentIsUserWp ? (
+            <>
+              <p className="settings-reset-note">{t("wallpaper.userFond")}</p>
+              <button type="button" className="settings-reset" onClick={() => void onDeleteWallpaper()}>
+                {t("wallpaper.delete")}
+              </button>
+            </>
+          ) : null}
           <button
             type="button"
             className="settings-reset"
@@ -492,7 +541,6 @@ export default function DashboardSettings({
           >
             {t("wallpaper.reset")}
           </button>
-          <p className="settings-reset-note">{t("wallpaper.uploadSoon")}</p>
         </Section>
 
         <Section title={t("settings.section.appearance")}>

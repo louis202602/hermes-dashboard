@@ -26,10 +26,12 @@ export type WallpaperCategory = (typeof WALLPAPER_CATEGORIES)[number];
 export type WallpaperDef = {
   id: string;
   category: WallpaperCategory;
-  /** "gradient" = pure CSS built-in (0 asset). "image" = asset/signed-URL (future). */
+  /** "gradient" = pure CSS built-in (0 asset). "image" = asset/signed-URL. */
   kind: "gradient" | "image";
   /** Default readability scrim (0..1) suited to this wallpaper's brightness. */
   defaultScrim: number;
+  /** For kind:"image" built-ins: the local asset path (served from /public). */
+  asset?: string;
 };
 
 /**
@@ -49,6 +51,19 @@ export const WALLPAPER_REGISTRY: WallpaperDef[] = [
   // Espace / planète — spatial LANDSCAPE only (atmosphere + stars), NO central object.
   { id: "espace-atmosphere", category: "espace", kind: "gradient", defaultScrim: 0.2 },
   { id: "espace-etoiles", category: "espace", kind: "gradient", defaultScrim: 0.15 },
+  { id: "espace-planete", category: "espace", kind: "gradient", defaultScrim: 0.2 },
+  // Montagne / neige — premium CSS art (photo built-ins are a documented manifest).
+  { id: "montagne-neige", category: "montagne", kind: "gradient", defaultScrim: 0.34 },
+  { id: "montagne-alpine", category: "montagne", kind: "gradient", defaultScrim: 0.3 },
+  { id: "montagne-crepuscule", category: "montagne", kind: "gradient", defaultScrim: 0.3 },
+  // Mer / Méditerranée
+  { id: "mer-profonde", category: "mer", kind: "gradient", defaultScrim: 0.22 },
+  { id: "mer-turquoise", category: "mer", kind: "gradient", defaultScrim: 0.34 },
+  { id: "mer-couchant", category: "mer", kind: "gradient", defaultScrim: 0.3 },
+  // Tropical / soleil
+  { id: "tropical-couchant", category: "tropical", kind: "gradient", defaultScrim: 0.3 },
+  { id: "tropical-palmiers", category: "tropical", kind: "gradient", defaultScrim: 0.32 },
+  { id: "tropical-plage", category: "tropical", kind: "gradient", defaultScrim: 0.36 },
 ];
 
 /** The Hermès default wallpaper id when nothing is chosen (subtle, always readable). */
@@ -149,12 +164,45 @@ export function scrimLevel(scrim: number): 0 | 1 | 2 | 3 {
   return 3;
 }
 
-/** The CSS class list for a resolved wallpaper (built-in visual + position). */
+/** CSS class list for a GRADIENT built-in (image built-ins & user images use a URL). */
 export function wallpaperClass(config: WallpaperConfig): string | null {
-  if (!config.ref || !isBuiltinWallpaper(config.ref)) return null; // user images: future
+  const def = wallpaperById(config.ref);
+  if (!def || def.kind !== "gradient") return null;
   return `wallpaper-layer wallpaper-${config.ref} pos-${config.position}`;
+}
+
+/** Local asset path for an image BUILT-IN (served from /public), else null. */
+export function wallpaperAsset(ref: string | null | undefined): string | null {
+  const def = wallpaperById(ref);
+  return def?.kind === "image" ? (def.asset ?? null) : null;
 }
 
 export function wallpapersByCategory(category: WallpaperCategory): WallpaperDef[] {
   return WALLPAPER_REGISTRY.filter((w) => w.category === category);
+}
+
+// --- User-uploaded wallpapers: ref = "user:<storagePath>" --------------------
+
+/** The storage path inside a user wallpaper ref ("user:tenant/user/wallpapers/…"). */
+export function userWallpaperPath(ref: string | null | undefined): string | null {
+  return isUserWallpaperRef(ref) ? (ref as string).slice("user:".length) : null;
+}
+
+/**
+ * Ownership + traversal guard: a user wallpaper path MUST live under the caller's
+ * own tenant/user wallpapers prefix. Rejects "..", absolute paths, and any path that
+ * is not exactly `${tenantId}/${userId}/wallpapers/…` — so a user can never sign or
+ * delete another tenant's / user's object by crafting a ref.
+ */
+export function userWallpaperPrefix(tenantId: string, userId: string): string {
+  return `${tenantId}/${userId}/wallpapers/`;
+}
+export function isOwnedWallpaperPath(
+  path: string,
+  tenantId: string,
+  userId: string,
+): boolean {
+  if (typeof path !== "string" || path.length === 0 || path.length > 512) return false;
+  if (path.includes("..") || path.startsWith("/") || path.includes("\\")) return false;
+  return path.startsWith(userWallpaperPrefix(tenantId, userId));
 }

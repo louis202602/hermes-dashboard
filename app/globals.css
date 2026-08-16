@@ -4795,3 +4795,68 @@ html[data-reduce-transparency="1"] .context-bar { backdrop-filter: none; backgro
 .wallpaper-cat-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 
 .settings-range { width: 170px; accent-color: var(--accent); }
+
+/* --- DASH-4E increment 2: premium CSS art per category (0 asset) --- */
+.wallpaper-espace-planete {
+  background-color: #01030a;
+  background-image:
+    radial-gradient(160% 120% at 50% 150%, rgba(90,150,220,0.9) 0%, rgba(30,70,150,0.7) 18%, rgba(10,25,60,0.9) 34%, rgba(2,6,16,0) 52%),
+    radial-gradient(70% 44% at 50% 132%, rgba(190,225,255,0.7), transparent 60%),
+    radial-gradient(1px 1px at 22% 20%, rgba(255,255,255,0.8), transparent 60%),
+    radial-gradient(1px 1px at 70% 26%, rgba(255,255,255,0.7), transparent 60%),
+    linear-gradient(to top, #030916 0%, #01030c 58%, #01020a 100%);
+}
+.wallpaper-montagne-neige {
+  background-color: #b9c6d6;
+  background-image:
+    linear-gradient(180deg, #24405f 0%, #4f6d8c 26%, #8fa6bd 50%, #cdd8e5 74%, #eef2f7 100%),
+    radial-gradient(70% 30% at 50% 4%, rgba(255,220,180,0.35), transparent 60%);
+}
+.wallpaper-montagne-alpine {
+  background-color: #33455a;
+  background-image:
+    linear-gradient(180deg, #1a2634 0%, #33465c 40%, #5b7288 70%, #93a6bb 100%);
+}
+.wallpaper-montagne-crepuscule {
+  background-color: #241a2e;
+  background-image:
+    linear-gradient(180deg, #171326 0%, #3a2340 34%, #7c3b52 60%, #d07a56 82%, #2a1c2e 100%);
+}
+.wallpaper-mer-profonde {
+  background-color: #04223f;
+  background-image:
+    radial-gradient(120% 70% at 50% 6%, rgba(90,170,230,0.4), transparent 55%),
+    linear-gradient(180deg, #041a33 0%, #063457 46%, #0a4a74 100%);
+}
+.wallpaper-mer-turquoise {
+  background-color: #0d6f86;
+  background-image:
+    linear-gradient(180deg, #0a3a55 0%, #0e6f88 44%, #26a7b0 76%, #7fd7cf 100%),
+    radial-gradient(60% 26% at 50% 4%, rgba(255,240,200,0.3), transparent 60%);
+}
+.wallpaper-mer-couchant {
+  background-color: #22283f;
+  background-image:
+    linear-gradient(180deg, #14203a 0%, #3a3a63 30%, #b56a5e 62%, #e69a63 78%, #123049 100%);
+}
+.wallpaper-tropical-couchant {
+  background-color: #2a1636;
+  background-image:
+    linear-gradient(180deg, #201338 0%, #5a2a63 30%, #b24c72 56%, #e88a5a 78%, #f0b06a 100%);
+}
+.wallpaper-tropical-palmiers {
+  background-color: #22304a;
+  background-image:
+    linear-gradient(180deg, #10233f 0%, #37527d 34%, #a98a5e 70%, #e8c07a 100%);
+}
+.wallpaper-tropical-plage {
+  background-color: #7fc7cf;
+  background-image:
+    linear-gradient(180deg, #2a6f8f 0%, #4fa2b0 40%, #93d3cf 70%, #e7e0c4 100%),
+    radial-gradient(60% 24% at 50% 4%, rgba(255,240,210,0.4), transparent 60%);
+}
+/* User-image / photo wallpaper layer (background set inline from a signed URL). */
+.wallpaper-layer.wallpaper-image { background-color: #05070c; }
+
+.settings-wp-upload { display: inline-block; cursor: pointer; }
+.settings-wp-upload input { display: none; }

@@ -120,6 +120,8 @@ type DashboardShellProps = {
   // DASH-4D: profiles / modes (user-scoped, from the profiles JSONB).
   profiles: ProfilesState;
   activeProfile: ProfileId;
+  // DASH-4E: signed URLs for profiles whose wallpaper is a user image (by profile id).
+  wallpaperUrls: Record<string, string>;
 };
 
 export default function DashboardShell({
@@ -152,6 +154,7 @@ export default function DashboardShell({
   availableWidgets,
   profiles: initialProfiles,
   activeProfile: initialActiveProfile,
+  wallpaperUrls,
 }: DashboardShellProps) {
   const { t, dir } = useI18n();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -330,7 +333,7 @@ export default function DashboardShell({
   return (
     <main dir={dir} className={`dashboard-shell${collapsed ? " is-collapsed" : ""}`}>
       {/* DASH-4E: the wallpaper canvas behind the glass widgets (per active profile). */}
-      <WallpaperLayer config={wallpaper} />
+      <WallpaperLayer config={wallpaper} imageUrl={wallpaperUrls[activeProfile] ?? null} />
       {/* DASH-4A: reconcile server-canonical appearance on load + keep the cookie
           mirror fresh (init script already applied it pre-paint). Renders nothing. */}
       <AppearanceSync

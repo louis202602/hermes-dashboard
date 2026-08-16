@@ -16,6 +16,9 @@ import {
   scrimLevel,
   wallpaperClass,
   wallpapersByCategory,
+  userWallpaperPath,
+  userWallpaperPrefix,
+  isOwnedWallpaperPath,
 } from "../lib/dashboard/wallpapers.ts";
 
 test("registry: stable ids, valid categories, default is a real built-in", () => {
@@ -84,9 +87,35 @@ test("wallpaperClass: built-in ⇒ class, user/none ⇒ null (image path is futu
   assert.equal(wallpaperClass(clampWallpaper({})), null);
 });
 
-test("categories: hermes + espace populated in this increment", () => {
-  assert.ok(wallpapersByCategory("hermes").length >= 4);
-  assert.ok(wallpapersByCategory("espace").length >= 1);
+test("categories: hermes/espace/montagne/mer/tropical all populated (CSS art)", () => {
+  for (const c of ["hermes", "espace", "montagne", "mer", "tropical"] as const) {
+    assert.ok(wallpapersByCategory(c).length >= 1, `${c} has wallpapers`);
+  }
+});
+
+// --- SECURITY: user wallpaper ownership / traversal guard ---------------------
+test("userWallpaperPath extracts the storage path from a user ref", () => {
+  assert.equal(userWallpaperPath("user:T/U/wallpapers/x/y.jpg"), "T/U/wallpapers/x/y.jpg");
+  assert.equal(userWallpaperPath("hermes-noir"), null);
+  assert.equal(userWallpaperPath(null), null);
+});
+
+test("isOwnedWallpaperPath: only the caller's own tenant/user prefix; rejects traversal & cross-*", () => {
+  const T = "tenant-1", U = "user-1";
+  const prefix = userWallpaperPrefix(T, U);
+  assert.equal(prefix, "tenant-1/user-1/wallpapers/");
+  // own path OK
+  assert.ok(isOwnedWallpaperPath(`${prefix}abc/w.jpg`, T, U));
+  // cross-tenant / cross-user REJECTED
+  assert.ok(!isOwnedWallpaperPath("tenant-2/user-1/wallpapers/a/w.jpg", T, U));
+  assert.ok(!isOwnedWallpaperPath("tenant-1/user-2/wallpapers/a/w.jpg", T, U));
+  // not under wallpapers/ (e.g. a chat attachment path) REJECTED
+  assert.ok(!isOwnedWallpaperPath("tenant-1/user-1/att/a/w.jpg", T, U));
+  // traversal / absolute / backslash REJECTED
+  assert.ok(!isOwnedWallpaperPath(`${prefix}../../etc/passwd`, T, U));
+  assert.ok(!isOwnedWallpaperPath(`/${prefix}a/w.jpg`, T, U));
+  assert.ok(!isOwnedWallpaperPath(`${prefix}a\\w.jpg`, T, U));
+  assert.ok(!isOwnedWallpaperPath("", T, U));
 });
 
 test("pure module: no fetch / network / LLM", () => {

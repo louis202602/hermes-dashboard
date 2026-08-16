@@ -22,10 +22,14 @@ import {
   resolveContextConfig,
 } from "@/lib/dashboard/widgets";
 import {
+  PROFILE_IDS,
   clampProfiles,
   effectiveProfileLayout,
+  profileWallpaperFields,
   resolveActiveProfile,
 } from "@/lib/dashboard/profiles";
+import { isUserWallpaperRef, resolveWallpaper } from "@/lib/dashboard/wallpapers";
+import { signUserWallpaper } from "@/services/hermes/wallpapers";
 import { getCatalog, getLanguageDef, resolveLanguage } from "@/lib/i18n";
 import { I18nProvider } from "@/lib/i18n/I18nProvider";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -139,6 +143,21 @@ export default async function HomePage() {
   const profiles = clampProfiles(prefs.profiles);
   const activeProfile = resolveActiveProfile(profiles, globalLayout);
   const layout = effectiveProfileLayout(profiles, activeProfile, globalLayout);
+  // DASH-4E: sign every profile's user-image wallpaper server-side (short-TTL signed
+  // URL, ownership re-checked) so switching profiles shows the right fond instantly.
+  // Built-in (CSS) wallpapers need no URL. A few internal storage calls; 0 external API.
+  const wallpaperRefs = new Map<string, string>();
+  for (const id of PROFILE_IDS) {
+    const ref = resolveWallpaper(profileWallpaperFields(profiles, id), profiles.wallpaper).ref;
+    if (isUserWallpaperRef(ref)) wallpaperRefs.set(id, ref as string);
+  }
+  const wallpaperUrls: Record<string, string> = {};
+  await Promise.all(
+    [...wallpaperRefs.entries()].map(async ([id, ref]) => {
+      const url = await signUserWallpaper(ref);
+      if (url) wallpaperUrls[id] = url;
+    }),
+  );
   const capabilityKeys = new Set(
     capabilities.ok
       ? capabilities.data.capabilities.map((c) => c.actionKey)
@@ -243,6 +262,7 @@ export default async function HomePage() {
       availableWidgets={[...available]}
       profiles={profiles}
       activeProfile={activeProfile}
+      wallpaperUrls={wallpaperUrls}
     />
     </I18nProvider>
   );
