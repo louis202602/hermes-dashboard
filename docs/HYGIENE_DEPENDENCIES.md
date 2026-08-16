@@ -1,10 +1,26 @@
-# Backlog — Hygiène des dépendances
+# Hygiène des dépendances
 
-Suivi honnête des avertissements `npm audit` qui ne peuvent pas être fermés sans un
-upgrade potentiellement risqué (bump de `postcss` / `next` / toolchain). À traiter
-dans une passe dédiée, hors slice fonctionnelle.
+## État au 2026-08-15 (PR hygiène) — ✅ RÉSOLU : `npm audit` = 0 vulnérabilité
 
-## État au 2026-08-15 (DASH-4C)
+Les 6 HIGH ci-dessous ont été fermées **sans `--force`** et **sans upgrade majeur** :
+
+- **`next` 16.2.11 → 16.3.1** (minor, `isSemVerMajor: false`) → ferme `next`,
+  `postcss`, `sharp` (les 3 qui transitaient par Next). `eslint-config-next` aligné
+  sur `16.3.1`.
+- **`npm audit fix` (non-force)** → ferme `brace-expansion`, `js-yaml`, `nanoid`
+  (bumps transitifs compatibles dans le lock ; aucun `overrides` nécessaire).
+
+Vérifié : `npm audit` = **0 vulnérabilité** ; gates lint/typecheck/test (152)/build
+tous PASS ; MapLibre / dnd-kit / settings / widget registry / route `/chantiers/carte`
+intacts. Aucune dépendance ajoutée, React/MapLibre/dnd-kit inchangés.
+
+Note runtime : aucune des 6 n'était exploitable côté app (toutes build/lint-time ;
+`sharp` jamais invoqué — pas d'usage `next/image`). Le correctif est donc de
+l'hygiène, pas une remédiation d'exposition active.
+
+---
+
+### Historique — état au 2026-08-15 (DASH-4C, avant correction)
 
 `npm audit` : **6 vulnérabilités HIGH**, toutes **pré-existantes** et **build-time**
 (non exposées au runtime client) :
