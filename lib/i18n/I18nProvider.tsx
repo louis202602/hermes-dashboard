@@ -3,33 +3,36 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 
 import {
-  makeTranslator,
+  makeClientTranslator,
   type LanguageCode,
+  type Messages,
   type TranslateFn,
-} from "@/lib/i18n";
+} from "@/lib/i18n/languages";
 
 type I18nValue = { t: TranslateFn; lang: LanguageCode; dir: "ltr" | "rtl" };
 
 const I18nContext = createContext<I18nValue | null>(null);
 
 /**
- * Client i18n context. The active language is resolved SERVER-side (from the user's
- * canonical preference) and passed down, so the client only ever carries the active
- * catalog. Switching language is a server round-trip (router.refresh) — robust, no
- * divergence, no extra catalogs shipped.
+ * Client i18n context. The active language AND its catalog are resolved SERVER-side (from
+ * the user's canonical preference) and passed down as data, so the client only ever
+ * carries the ONE active catalog — never the other languages. Switching language is a
+ * server round-trip (router.refresh) — robust, no divergence, no extra catalogs shipped.
  */
 export function I18nProvider({
   lang,
   dir,
+  messages,
   children,
 }: {
   lang: LanguageCode;
   dir: "ltr" | "rtl";
+  messages: Messages;
   children: ReactNode;
 }) {
   const value = useMemo<I18nValue>(
-    () => ({ t: makeTranslator(lang), lang, dir }),
-    [lang, dir],
+    () => ({ t: makeClientTranslator(messages), lang, dir }),
+    [messages, lang, dir],
   );
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

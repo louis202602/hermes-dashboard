@@ -4,7 +4,7 @@ import { AlertTriangle, ClipboardCheck, Clock3, Flag } from "lucide-react";
 
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import type { MessageKey, TranslateFn } from "@/lib/i18n";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/languages";
 import type {
   OperationalPriorities,
   OperationalPriority,

@@ -17,7 +17,7 @@ import {
   type MapFilter,
 } from "@/lib/dashboard/chantierMap";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import type { MessageKey } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n/languages";
 
 // Free, keyless OSM vector tiles (OpenFreeMap). Overridable via env for
 // self-hosting (PMTiles / tileserver) without touching the app — future-proof, 0 €.

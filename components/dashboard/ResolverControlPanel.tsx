@@ -12,7 +12,7 @@ import {
   type OperatorResult,
 } from "@/app/actions/resolver-control";
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
-import type { MessageKey } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n/languages";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import {
   deriveResolverControl,

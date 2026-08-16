@@ -32,7 +32,7 @@ import {
   type LayoutPreferences,
   type WidgetSize,
 } from "@/lib/dashboard/widgets";
-import { LANGUAGES, type MessageKey } from "@/lib/i18n";
+import { LANGUAGES, type MessageKey } from "@/lib/i18n/languages";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";

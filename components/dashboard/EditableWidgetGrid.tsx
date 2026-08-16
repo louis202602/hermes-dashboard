@@ -27,7 +27,7 @@ import {
   type WidgetSize,
 } from "@/lib/dashboard/widgets";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import type { MessageKey } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n/languages";
 
 const SIZE_SHORT: Record<WidgetSize, string> = {
   small: "S",

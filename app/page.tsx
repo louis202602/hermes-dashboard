@@ -22,7 +22,7 @@ import {
   needsWeather,
   resolveContextConfig,
 } from "@/lib/dashboard/widgets";
-import { getLanguageDef, resolveLanguage } from "@/lib/i18n";
+import { getCatalog, getLanguageDef, resolveLanguage } from "@/lib/i18n";
 import { I18nProvider } from "@/lib/i18n/I18nProvider";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getDashboardAgenda, getUnifiedAlerts } from "@/services/hermes/agenda";
@@ -139,6 +139,9 @@ export default async function HomePage() {
   // DASH i18n: active UI language from the canonical user preference (→ tenant → default).
   const lang = resolveLanguage(reg.language, tenantSettings.locale);
   const dir = getLanguageDef(lang).dir;
+  // Resolve the active catalog server-side and pass it as data, so the client only
+  // ever ships the ONE active language (never all catalogs).
+  const messages = getCatalog(lang);
   const contextSegments = contextVisibleSegments(contextConfig);
   // Weather only when a real location is configured AND at least one weather-
   // dependent segment (weather/temperature/rain/wind) is shown — never fabricated,
@@ -200,7 +203,7 @@ export default async function HomePage() {
   });
 
   return (
-    <I18nProvider lang={lang} dir={dir}>
+    <I18nProvider lang={lang} dir={dir} messages={messages}>
     <DashboardShell
       userEmail={user.email ?? ""}
       tenant={tenant}

@@ -10,7 +10,7 @@ import {
 } from "@/app/actions/agent-actions";
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import type { TranslateFn } from "@/lib/i18n";
+import type { TranslateFn } from "@/lib/i18n/languages";
 import type { MessageKey } from "@/lib/i18n/locales/fr";
 import { TERMINAL_RESULT_STATUSES, type PendingApproval } from "@/types/agent-actions";
 
