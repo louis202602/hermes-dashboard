@@ -15,6 +15,8 @@ import ApprovalsPanel from "@/components/dashboard/ApprovalsPanel";
 import ChantierMapWidget from "@/components/dashboard/ChantierMapWidget";
 import CommercialPanel from "@/components/dashboard/CommercialPanel";
 import ContextBar from "@/components/dashboard/ContextBar";
+import DailySummaryPanel from "@/components/dashboard/DailySummaryPanel";
+import RecommendedActionsPanel from "@/components/dashboard/RecommendedActionsPanel";
 import CostGovernance from "@/components/dashboard/CostGovernance";
 import Header from "@/components/dashboard/Header";
 import HermesPanel from "@/components/dashboard/HermesPanel";
@@ -59,6 +61,9 @@ import {
   markRead as markNotificationRead,
   type Notification,
 } from "@/lib/dashboard/notifications";
+import { buildDailySummary } from "@/lib/dashboard/dailySummary";
+import { buildRecommendedActions } from "@/lib/dashboard/recommendedActions";
+import type { WorksiteWeather } from "@/lib/dashboard/worksiteWeather";
 import {
   contextVisibleSegments,
   normalizeOrder,
@@ -129,6 +134,8 @@ type DashboardShellProps = {
   activeProfile: ProfileId;
   // DASH-4E: signed URLs for profiles whose wallpaper is a user image (by profile id).
   wallpaperUrls: Record<string, string>;
+  // DASH-4G: enriched per-worksite weather (derived server-side from existing coords).
+  worksiteWeather: WorksiteWeather[];
 };
 
 export default function DashboardShell({
@@ -162,6 +169,7 @@ export default function DashboardShell({
   profiles: initialProfiles,
   activeProfile: initialActiveProfile,
   wallpaperUrls,
+  worksiteWeather,
 }: DashboardShellProps) {
   const { t, dir } = useI18n();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -342,11 +350,45 @@ export default function DashboardShell({
     [commitLayout, layout],
   );
 
+  // DASH-4G: deterministic daily intelligence — a pure client synthesis (résumé) +
+  // rule-based recommendations, derived from the SAME already-loaded snapshots (+ the
+  // enriched worksite weather). 0 extra DB read, 0 LLM. `unwrap` reads ServiceResults.
+  const unwrap = <T,>(r: ServiceResult<T>): T | null => (r.ok ? r.data : null);
+  const dailySummary = useMemo(
+    () =>
+      buildDailySummary({
+        agenda: unwrap(agenda),
+        priorities: unwrap(priorities),
+        projects: unwrap(projects),
+        alerts: unwrap(alerts),
+        commercial: unwrap(commercial),
+        worksiteWeather,
+        locale,
+      }),
+    [agenda, priorities, projects, alerts, commercial, worksiteWeather, locale],
+  );
+  const recommendedActions = useMemo(
+    () =>
+      buildRecommendedActions({
+        agenda: unwrap(agenda),
+        priorities: unwrap(priorities),
+        alerts: unwrap(alerts),
+        cost: unwrap(cost),
+        commercial: unwrap(commercial),
+        worksiteWeather,
+      }),
+    [agenda, priorities, alerts, cost, commercial, worksiteWeather],
+  );
+
   // DASH-4B: id → renderer for every registry widget. Each reads an ALREADY-loaded
   // shared snapshot (0 extra DB reads). The order + visibility come from the
   // server-resolved layout; unknown ids simply have no entry and are skipped.
   const widgetNodes: Record<string, () => React.ReactNode> = {
     kpis: () => <KpiGrid kpis={kpis} />,
+    "daily-summary": () => <DailySummaryPanel summary={dailySummary} />,
+    "recommended-actions": () => (
+      <RecommendedActionsPanel actions={recommendedActions} visibleWidgetIds={visibleWidgetIds} />
+    ),
     "system-health": () => (
       <SystemHealthPanel
         kpis={kpis}

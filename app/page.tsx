@@ -54,6 +54,7 @@ import {
   getResolverObservability,
 } from "@/services/hermes/panels";
 import { getDashboardUserPreferences } from "@/services/hermes/preferences";
+import { getWorksiteWeather } from "@/services/hermes/worksiteWeather";
 import {
   getAgentActionStats,
   getDashboardCommercial,
@@ -91,6 +92,7 @@ export default async function HomePage() {
     actionStats,
     commercial,
     preferencesResult,
+    worksiteWeather,
   ] = await Promise.all([
     getActiveTenantIdentity(),
     getPublicKpis(),
@@ -110,6 +112,9 @@ export default async function HomePage() {
     getAgentActionStats(),
     getDashboardCommercial(),
     getDashboardUserPreferences(),
+    // DASH-4G: enriched per-worksite weather — reuses existing geocoded coords +
+    // the cached free Open-Meteo integration (1 geo read; weather deduped & cached).
+    getWorksiteWeather(),
   ]);
 
   // --- DASH-1 context bar assembly (deterministic clock + cached weather) ---
@@ -263,6 +268,7 @@ export default async function HomePage() {
       profiles={profiles}
       activeProfile={activeProfile}
       wallpaperUrls={wallpaperUrls}
+      worksiteWeather={worksiteWeather}
     />
     </I18nProvider>
   );
