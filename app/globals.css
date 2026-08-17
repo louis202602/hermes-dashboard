@@ -4498,7 +4498,7 @@ html[data-reduce-transparency="1"] .context-bar { backdrop-filter: none; backgro
 .wallpaper-actionbar-state { font-size: 0.78rem; color: var(--text-muted); min-width: 0; }
 .wallpaper-actionbar-state.is-saved { color: var(--accent); font-weight: 600; }
 .wallpaper-actionbar-state.is-error { color: var(--danger); font-weight: 600; }
-.wallpaper-actionbar-btns { display: flex; gap: var(--space-2); flex: 0 0 auto; }
+.wallpaper-actionbar-btns { display: flex; gap: var(--space-2); flex: 0 0 auto; flex-wrap: wrap; }
 .wallpaper-actionbar-btns .settings-reset { width: auto; }
 .wallpaper-apply-btn {
   width: auto; padding: 10px 18px; border-radius: var(--radius-input);
@@ -4507,11 +4507,16 @@ html[data-reduce-transparency="1"] .context-bar { backdrop-filter: none; backgro
 }
 .wallpaper-apply-btn:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
 .wallpaper-apply-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-@media (max-width: 520px) {
-  .wallpaper-actionbar { flex-wrap: wrap; }
-  .wallpaper-actionbar-btns { width: 100%; }
+/* "Apply to this profile" is the secondary (outline) action; "Apply to all" is primary. */
+.wallpaper-apply-secondary { background: transparent; color: var(--accent); }
+.wallpaper-apply-secondary:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
+.wallpaper-actionbar { flex-wrap: wrap; }
+.wallpaper-actionbar-state { flex: 1 1 auto; }
+/* On narrow screens stack the three actions vertically, full-width — never cramped. */
+@media (max-width: 700px) {
+  .wallpaper-actionbar-btns { width: 100%; flex-direction: column; align-items: stretch; }
   .wallpaper-actionbar-btns .settings-reset,
-  .wallpaper-actionbar-btns .wallpaper-apply-btn { flex: 1 1 0; text-align: center; }
+  .wallpaper-actionbar-btns .wallpaper-apply-btn { width: 100%; text-align: center; }
 }
 
 @media (max-width: 820px) {

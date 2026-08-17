@@ -16,6 +16,9 @@ import {
   setActiveProfile,
   setProfileLayout,
   setProfileAppearance,
+  setProfileWallpaper,
+  setWallpaperForProfiles,
+  profileWallpaperFields,
   resetProfile,
   renameProfile,
   EMPTY_PROFILES_STATE,
@@ -201,6 +204,32 @@ test("NO_EXTRA_DB_FETCH: profiles module is pure (no fetch/network/LLM)", () => 
   assert.doesNotMatch(src, /\bfetch\s*\(/);
   assert.doesNotMatch(src, /https?:\/\//);
   assert.doesNotMatch(src, /supabase|rpc\(|openai|anthropic/i);
+});
+
+// --- DASH-4E wallpaper: apply to one vs all profiles -------------------------
+test("setWallpaperForProfiles: applies the same fond to EVERY listed profile (Apply to all)", () => {
+  const ids = [...PROFILE_IDS];
+  const next = setWallpaperForProfiles(EMPTY_PROFILES_STATE, ids, {
+    wallpaperRef: "luxury-villa-01",
+    wallpaperScrim: 0.3,
+    wallpaperPosition: "center",
+  });
+  for (const id of ids) {
+    assert.equal(profileWallpaperFields(next, id).wallpaperRef, "luxury-villa-01", `${id} got the fond`);
+  }
+});
+
+test("setProfileWallpaper: applies ONLY to the active profile (others untouched)", () => {
+  const next = setProfileWallpaper(EMPTY_PROFILES_STATE, "direction", { wallpaperRef: "luxury-villa-01" });
+  assert.equal(profileWallpaperFields(next, "direction").wallpaperRef, "luxury-villa-01");
+  assert.equal(profileWallpaperFields(next, "commercial").wallpaperRef, null);
+});
+
+test("setWallpaperForProfiles: invalid ref is nulled (defense in depth), de-dups ids", () => {
+  const next = setWallpaperForProfiles(EMPTY_PROFILES_STATE, ["direction", "direction"], {
+    wallpaperRef: "not-a-real-wallpaper",
+  });
+  assert.equal(profileWallpaperFields(next, "direction").wallpaperRef, null);
 });
 
 // --- exhaustive id list ------------------------------------------------------
