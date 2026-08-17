@@ -400,18 +400,31 @@ export default function DashboardSettings({
   // button and the upload/delete actions (they must be saved deterministically before a
   // server re-sign). Distinct from the debounced optimistic path used elsewhere.
   const persistProfilesDirect = useCallback(async (next: ProfilesState): Promise<boolean> => {
-    const res = await saveDashboardPreferencesAction(
-      { profiles: next, schema_version: PREFERENCES_SCHEMA_VERSION },
-      version.current,
-    );
-    if (res.ok && typeof res.version === "number") {
-      version.current = res.version;
-      setProfiles(next);
-      return true;
-    }
-    if (res.status === "VERSION_CONFLICT") {
-      setSave("conflict");
-      setTimeout(() => window.location.reload(), 1400);
+    // BUGFIX — "Appliquer" silently failed when the stored version had advanced (the home
+    // shell and this page keep independent version counters, so `version.current` drifts).
+    // The RPC reports the CURRENT version on a conflict, so adopt it and retry ONCE instead
+    // of reloading the page (which looked like "nothing happened"). Bounded to one retry.
+    let expected = version.current;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = await saveDashboardPreferencesAction(
+        { profiles: next, schema_version: PREFERENCES_SCHEMA_VERSION },
+        expected,
+      );
+      if (res.ok && typeof res.version === "number") {
+        version.current = res.version;
+        setProfiles(next);
+        return true;
+      }
+      if (
+        res.status === "VERSION_CONFLICT" &&
+        typeof res.version === "number" &&
+        res.version !== expected
+      ) {
+        expected = res.version; // re-sync to the server's current version, then retry
+        version.current = res.version;
+        continue;
+      }
+      break;
     }
     return false;
   }, []);
@@ -490,7 +503,7 @@ export default function DashboardSettings({
       setWpDraft(null);
       setWpApply(scope === "all" ? "savedAll" : "saved");
       router.refresh();
-      setTimeout(() => setWpApply("idle"), 1800);
+      setTimeout(() => setWpApply("idle"), 2600);
     } else {
       setWpApply("error");
     }
@@ -747,15 +760,15 @@ export default function DashboardSettings({
               className={`wallpaper-actionbar-state is-${wpApply}`}
               aria-live="polite"
             >
-              {wpApply === "saved"
-                ? t("wallpaper.appliedThis")
-                : wpApply === "savedAll"
-                  ? t("wallpaper.appliedAll")
-                  : wpApply === "error"
-                    ? t("wallpaper.applyError")
-                    : wpDirty
-                      ? t("wallpaper.unsaved")
-                      : ""}
+              {wpApply === "saved" || wpApply === "savedAll"
+                ? `✓ ${t("wallpaper.applySuccess")} ${
+                    wpApply === "savedAll" ? t("wallpaper.appliedAll") : t("wallpaper.appliedThis")
+                  }`
+                : wpApply === "error"
+                  ? t("wallpaper.applyError")
+                  : wpDirty
+                    ? t("wallpaper.unsaved")
+                    : ""}
             </span>
             <div className="wallpaper-actionbar-btns">
               <button

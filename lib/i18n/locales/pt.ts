@@ -290,6 +290,7 @@ export const pt: Messages = {
   "wallpaper.applyAll": "Aplicar a todos os perfis",
   "wallpaper.appliedThis": "Fundo aplicado a este perfil",
   "wallpaper.appliedAll": "Fundo aplicado a todos os perfis",
+  "wallpaper.applySuccess": "Fundo aplicado com sucesso",
   "wallpaper.default": "Padrão Hermès",
   "wallpaper.photoSoon": "Fotos — em breve",
   "wallpaper.photoPending": "Fotos reais a fornecer para esta categoria (ver docs/wallpaper-assets.md).",
