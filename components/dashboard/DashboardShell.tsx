@@ -2,7 +2,7 @@
 
 import { Check, Pencil } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { saveDashboardPreferencesAction } from "@/app/actions/dashboard-preferences";
 import ActionAuditTrail from "@/components/dashboard/ActionAuditTrail";
@@ -85,7 +85,7 @@ import {
   type ProfileId,
   type ProfilesState,
 } from "@/lib/dashboard/profiles";
-import { resolveWallpaper } from "@/lib/dashboard/wallpapers";
+import { DEFAULT_WALLPAPER_REF, resolveWallpaper } from "@/lib/dashboard/wallpapers";
 import ProfileSwitcher from "@/components/dashboard/ProfileSwitcher";
 import WallpaperLayer from "@/components/dashboard/WallpaperLayer";
 import type { ContextBarModel } from "@/lib/dashboard/contextBar";
@@ -213,6 +213,20 @@ export default function DashboardShell({
     () => resolveWallpaper(profileWallpaperFields(profiles, activeProfile), profiles.wallpaper),
     [profiles, activeProfile],
   );
+  // BUGFIX — a CUSTOM wallpaper was masked by the page's opaque anthracite background
+  // (`body { background: var(--bg-gradient) }`, which paints over the fixed z-index:-1
+  // wallpaper). When (and only when) a wallpaper is actually selected, flag <html> so the
+  // page background goes transparent and the WallpaperLayer becomes the sole backdrop —
+  // behind the glass cards, which keep their own semi-transparent surfaces. With no custom
+  // wallpaper the flag is absent, so the historical Hermès anthracite is unchanged. The
+  // flag is scoped to the mounted dashboard (removed on unmount → other routes untouched).
+  const wallpaperActive = wallpaper.ref !== DEFAULT_WALLPAPER_REF;
+  useEffect(() => {
+    const el = document.documentElement;
+    if (wallpaperActive) el.setAttribute("data-wallpaper-active", "true");
+    else el.removeAttribute("data-wallpaper-active");
+    return () => el.removeAttribute("data-wallpaper-active");
+  }, [wallpaperActive]);
 
   const availableSet = useMemo(
     () => new Set(availableWidgets),
