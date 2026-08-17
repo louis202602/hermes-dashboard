@@ -29,6 +29,10 @@ type Props = {
   onClose: () => void;
   onMarkAllRead: () => void;
   onMarkRead: (n: Notification) => void;
+  /** "overlay" (default) = the header bell dropdown (modal, Escape-to-close). "page" =
+   *  the /notifications route: the SAME list rendered inline, full-width, no overlay/
+   *  dialog/close — one implementation, two presentations. */
+  variant?: "overlay" | "page";
 };
 
 function severityIcon(sev: AlertSeverity) {
@@ -59,8 +63,10 @@ export default function NotificationCenter({
   onClose,
   onMarkAllRead,
   onMarkRead,
+  variant = "overlay",
 }: Props) {
   const { t, dir } = useI18n();
+  const isPage = variant === "page";
   const [filter, setFilter] = useState<NotificationFilter>("all");
   const panelRef = useRef<HTMLDivElement | null>(null);
   const visible = useMemo(() => new Set(visibleWidgetIds), [visibleWidgetIds]);
@@ -70,28 +76,20 @@ export default function NotificationCenter({
   const shown = filterNotifications(notifications, activeFilter);
   const hasUnread = notifications.some((n) => !n.read);
 
-  // Escape closes; focus moves into the panel on open (a11y).
+  // Overlay only: Escape closes and focus moves into the panel on open (a11y). On the
+  // page variant there is no modal, so neither applies.
   useEffect(() => {
+    if (isPage) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
     panelRef.current?.focus();
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, isPage]);
 
-  return (
-    <div className="notif-overlay" onClick={onClose}>
-      <div
-        ref={panelRef}
-        className="notif-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("notifications.title")}
-        dir={dir}
-        tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
-      >
+  const body = (
+    <>
         <div className="notif-head">
           <h2>{t("notifications.title")}</h2>
           <div className="notif-head-actions">
@@ -106,14 +104,16 @@ export default function NotificationCenter({
               <CheckCheck size={15} strokeWidth={1.9} aria-hidden />
               <span className="notif-markall-label">{t("notifications.markAllRead")}</span>
             </button>
-            <button
-              type="button"
-              className="hos-icon-btn notif-close"
-              aria-label={t("notifications.close")}
-              onClick={onClose}
-            >
-              <X size={18} strokeWidth={1.9} />
-            </button>
+            {isPage ? null : (
+              <button
+                type="button"
+                className="hos-icon-btn notif-close"
+                aria-label={t("notifications.close")}
+                onClick={onClose}
+              >
+                <X size={18} strokeWidth={1.9} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -198,6 +198,31 @@ export default function NotificationCenter({
             })}
           </ul>
         )}
+    </>
+  );
+
+  // Page variant: the same list rendered inline (glass card), no overlay/dialog.
+  if (isPage) {
+    return (
+      <section className="dashboard-card notif-panel notif-panel-page" dir={dir}>
+        {body}
+      </section>
+    );
+  }
+
+  return (
+    <div className="notif-overlay" onClick={onClose}>
+      <div
+        ref={panelRef}
+        className="notif-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("notifications.title")}
+        dir={dir}
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {body}
       </div>
     </div>
   );

@@ -39,15 +39,15 @@ type SidebarProps = {
 // i18n keys (localized at render); routes/icons are stable.
 const NAV: { key: MessageKey; icon: typeof LayoutDashboard; href?: string }[] = [
   { key: "nav.commandCenter", icon: LayoutDashboard, href: "/" },
-  { key: "nav.chat", icon: Sparkles },
-  { key: "nav.activity", icon: Activity },
-  { key: "nav.company", icon: Building2 },
-  { key: "nav.agents", icon: Bot },
-  { key: "nav.approvals", icon: ClipboardCheck },
-  { key: "nav.security", icon: Shield },
-  { key: "nav.integrations", icon: Blocks },
-  { key: "header.notifications", icon: Bell },
-  { key: "nav.billing", icon: CreditCard },
+  { key: "nav.chat", icon: Sparkles, href: "/chat" },
+  { key: "nav.activity", icon: Activity, href: "/activite" },
+  { key: "nav.company", icon: Building2, href: "/entreprise" },
+  { key: "nav.agents", icon: Bot, href: "/agents" },
+  { key: "nav.approvals", icon: ClipboardCheck, href: "/approbations" },
+  { key: "nav.security", icon: Shield, href: "/securite" },
+  { key: "nav.integrations", icon: Blocks, href: "/integrations" },
+  { key: "header.notifications", icon: Bell, href: "/notifications" },
+  { key: "nav.billing", icon: CreditCard, href: "/facturation" },
   { key: "nav.settings", icon: Settings, href: "/parametres/dashboard" },
 ];
 
@@ -129,15 +129,15 @@ export default function Sidebar({
       </nav>
 
       <div className="hos-sidebar-foot">
-        <button
-          type="button"
-          className="hos-nav-item is-soon"
-          disabled
-          title={t("header.notifications.soon")}
+        <Link
+          href="/aide"
+          className={`hos-nav-item${isActive("/aide") ? " is-active" : ""}`}
+          aria-current={isActive("/aide") ? "page" : undefined}
+          onClick={onNavigate}
         >
           <HelpCircle size={19} strokeWidth={1.8} />
           <span className="hos-nav-label">{t("sidebar.help")}</span>
-        </button>
+        </Link>
 
         <div className="hos-profile" title={email || undefined}>
           <span className="hos-avatar">{initials(email)}</span>

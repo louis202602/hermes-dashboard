@@ -10,17 +10,11 @@ import ProfileSwitcher from "@/components/dashboard/ProfileSwitcher";
 import Sidebar from "@/components/dashboard/Sidebar";
 import WallpaperLayer from "@/components/dashboard/WallpaperLayer";
 import type { UnifiedAlerts } from "@/lib/dashboard/agenda";
-import {
-  buildNotificationsFromResult,
-  markAllRead as markAllNotificationsRead,
-  markRead as markNotificationRead,
-  type Notification,
-} from "@/lib/dashboard/notifications";
+import { useNotificationCursor } from "@/lib/dashboard/useNotificationCursor";
 import {
   PREFERENCES_SCHEMA_VERSION,
   type Appearance,
   type Behavior,
-  type NotificationCursor,
 } from "@/lib/dashboard/preferences";
 import {
   effectiveProfileAppearance,
@@ -112,49 +106,13 @@ export default function DashboardChrome({
 
   // DASH-4F — notification center, derived from the SAME already-loaded alerts snapshot.
   // On the épuré Home there is no widget grid, so no notification deep-links to a widget
-  // target: `visibleWidgetIds` is empty and the bell simply lists the alerts.
-  const [cursor, setCursor] = useState<NotificationCursor>(behavior.notifications);
-  const cursorRef = useRef<NotificationCursor>(behavior.notifications);
-  const cursorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const notifications = useMemo(
-    () => buildNotificationsFromResult(alerts, cursor),
-    [alerts, cursor],
-  );
-  const persistCursor = useCallback(
-    (next: NotificationCursor) => {
-      if (cursorTimer.current) clearTimeout(cursorTimer.current);
-      cursorTimer.current = setTimeout(async () => {
-        const res = await saveDashboardPreferencesAction(
-          {
-            behavior: { ...behavior, notifications: next },
-            schema_version: PREFERENCES_SCHEMA_VERSION,
-          },
-          versionRef.current,
-        );
-        if (res.ok && typeof res.version === "number") {
-          versionRef.current = res.version;
-        } else if (res.status === "VERSION_CONFLICT") {
-          window.location.reload();
-        }
-      }, 500);
-    },
-    [behavior],
-  );
-  const applyCursor = useCallback(
-    (next: NotificationCursor) => {
-      cursorRef.current = next;
-      setCursor(next);
-      persistCursor(next);
-    },
-    [persistCursor],
-  );
-  const onMarkAllRead = useCallback(
-    () => applyCursor(markAllNotificationsRead(cursorRef.current, notifications)),
-    [applyCursor, notifications],
-  );
-  const onMarkRead = useCallback(
-    (n: Notification) => applyCursor(markNotificationRead(cursorRef.current, n)),
-    [applyCursor],
+  // target: `visibleWidgetIds` is empty and the bell simply lists the alerts. The read
+  // cursor + persistence are shared with the /notifications page via one hook.
+  const { notifications, onMarkRead, onMarkAllRead } = useNotificationCursor(
+    alerts,
+    behavior,
+    preferencesVersion,
+    versionRef, // shared counter: profile + cursor writes advance ONE version
   );
 
   const profileNames = useMemo(() => {
