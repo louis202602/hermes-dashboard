@@ -629,6 +629,25 @@ export function setProfileWallpaper(
   });
 }
 
+/**
+ * DASH-4E — apply the SAME wallpaper fields to several profiles in one shot
+ * ("Apply to all profiles"). Folds `setProfileWallpaper` over the given ids so every
+ * listed profile gets identical wallpaperRef/scrim/position — a single new state to
+ * persist in ONE save. Ids are de-duplicated; unknown fields are ignored downstream.
+ */
+export function setWallpaperForProfiles(
+  state: ProfilesState,
+  ids: ProfileId[],
+  fields: WallpaperFields,
+): ProfilesState {
+  const seen = new Set<ProfileId>();
+  return ids.reduce((acc, id) => {
+    if (seen.has(id)) return acc;
+    seen.add(id);
+    return setProfileWallpaper(acc, id, fields);
+  }, state);
+}
+
 /** DASH-4E — the flat wallpaper fields of a profile config (for resolution). */
 export function profileWallpaperFields(
   state: ProfilesState,

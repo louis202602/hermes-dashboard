@@ -50,6 +50,7 @@ import {
   setActiveProfile,
   setProfileAppearance,
   setProfileWallpaper,
+  setWallpaperForProfiles,
   type ProfileId,
   type ProfilesState,
 } from "@/lib/dashboard/profiles";
@@ -74,7 +75,8 @@ type Opt = { value: string; label: string };
 // DASH-4E — wallpaper DRAFT: the pending (previewed, not-yet-persisted) fields of the
 // active profile. `null` = no pending change (UNCHANGED). Explicit "Appliquer" persists it.
 type WpDraft = { ref: string | null; scrim: number | null; pos: WallpaperPosition | null };
-type WpApplyState = "idle" | "saving" | "saved" | "error";
+// "saved" = applied to the active profile; "savedAll" = applied to every offered profile.
+type WpApplyState = "idle" | "saving" | "saved" | "savedAll" | "error";
 
 const SIZE_SHORT: Record<string, string> = { small: "S", medium: "M", large: "L" };
 
@@ -468,21 +470,27 @@ export default function DashboardSettings({
   }));
   // The delete/"personal photo" affordances operate on the PERSISTED stored object.
   const currentIsUserWp = isUserWallpaperRef(persistedWp.ref);
-  // Apply the staged draft: persist the active profile's wallpaper fields, then clear draft.
-  const applyWallpaper = async () => {
+  // Apply the staged draft to one or many profiles, then clear the draft. "all" writes the
+  // same fond to EVERY offered profile in ONE save — so the home shows it whichever profile
+  // opens (fixes "applied but absent" when the home opens a different profile).
+  const applyWallpaper = async (scope: "this" | "all") => {
     if (!wpDirty || !wpDraft) return;
     setWpApply("saving");
-    const next = setProfileWallpaper(profiles, activeProfile, {
+    const fields = {
       wallpaperRef: wpDraft.ref,
       wallpaperScrim: wpDraft.scrim,
       wallpaperPosition: wpDraft.pos,
-    });
+    };
+    const next =
+      scope === "all"
+        ? setWallpaperForProfiles(profiles, profileOptionIds, fields)
+        : setProfileWallpaper(profiles, activeProfile, fields);
     const ok = await persistProfilesDirect(next);
     if (ok) {
       setWpDraft(null);
-      setWpApply("saved");
+      setWpApply(scope === "all" ? "savedAll" : "saved");
       router.refresh();
-      setTimeout(() => setWpApply("idle"), 1600);
+      setTimeout(() => setWpApply("idle"), 1800);
     } else {
       setWpApply("error");
     }
@@ -732,19 +740,22 @@ export default function DashboardSettings({
             {t("wallpaper.reset")}
           </button>
           {/* Sticky action bar — PREVIEW ≠ PERSISTENCE. Apply persists the draft to the
-              active profile; Cancel reverts to the last saved fond. Disabled when clean. */}
-          <div className="wallpaper-actionbar" role="group" aria-label={t("wallpaper.apply")}>
+              active profile OR to every offered profile; Cancel reverts to the last saved
+              fond. Disabled when clean. */}
+          <div className="wallpaper-actionbar" role="group" aria-label={t("wallpaper.applyThis")}>
             <span
               className={`wallpaper-actionbar-state is-${wpApply}`}
               aria-live="polite"
             >
               {wpApply === "saved"
-                ? t("wallpaper.applied")
-                : wpApply === "error"
-                  ? t("wallpaper.applyError")
-                  : wpDirty
-                    ? t("wallpaper.unsaved")
-                    : ""}
+                ? t("wallpaper.appliedThis")
+                : wpApply === "savedAll"
+                  ? t("wallpaper.appliedAll")
+                  : wpApply === "error"
+                    ? t("wallpaper.applyError")
+                    : wpDirty
+                      ? t("wallpaper.unsaved")
+                      : ""}
             </span>
             <div className="wallpaper-actionbar-btns">
               <button
@@ -757,15 +768,19 @@ export default function DashboardSettings({
               </button>
               <button
                 type="button"
+                className="wallpaper-apply-btn wallpaper-apply-secondary"
+                disabled={!wpDirty || wpApply === "saving"}
+                onClick={() => void applyWallpaper("this")}
+              >
+                {t("wallpaper.applyThis")}
+              </button>
+              <button
+                type="button"
                 className="wallpaper-apply-btn"
                 disabled={!wpDirty || wpApply === "saving"}
-                onClick={() => void applyWallpaper()}
+                onClick={() => void applyWallpaper("all")}
               >
-                {wpApply === "saving"
-                  ? t("wallpaper.applying")
-                  : wpApply === "saved"
-                    ? t("wallpaper.applied")
-                    : t("wallpaper.apply")}
+                {wpApply === "saving" ? t("wallpaper.applying") : t("wallpaper.applyAll")}
               </button>
             </div>
           </div>
