@@ -649,6 +649,11 @@ export default function HermesPanel() {
     (!!activeAction &&
       (lastAssistant?.lifecycle === "QUEUED" ||
         lastAssistant?.lifecycle === "RUNNING"));
+  // The "Hermès is composing a reply" window: while the message is being sent or the
+  // resolver is still thinking (BEFORE the answer text lands). An animated typing
+  // indicator shows in the thread during this window — the little life the chat was
+  // missing. Action queue/running already has its own lifecycle badge, so it is excluded.
+  const thinking = sending || !!activeResolve;
   // Send is blocked while any attachment is still uploading or has failed;
   // UPLOADED attachments are transmitted with the message.
   const attachmentsBusy = attachments.some((a) => a.state === "UPLOADING");
@@ -1024,10 +1029,11 @@ export default function HermesPanel() {
           </div>
 
           <div className="hermes-thread" ref={threadRef} data-testid="hermes-thread">
-            {turns.length === 0 ? (
+            {turns.length === 0 && !thinking ? (
               <p className="hermes-thread-empty">{t("chat.thread.empty")}</p>
             ) : (
-              turns.map((turn) => (
+              <>
+              {turns.map((turn) => (
                 <div
                   key={turn.id}
                   className={`hermes-bubble is-${turn.role}`}
@@ -1079,7 +1085,22 @@ export default function HermesPanel() {
                     </button>
                   ) : null}
                 </div>
-              ))
+              ))}
+              {thinking ? (
+                <div
+                  className="hermes-bubble is-assistant hermes-typing"
+                  data-testid="hermes-typing"
+                  aria-live="polite"
+                >
+                  <span className="hermes-typing-dots" aria-hidden>
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                  <span className="hermes-typing-text">{t("chat.voice.thinking")}</span>
+                </div>
+              ) : null}
+              </>
             )}
           </div>
         </aside>
