@@ -144,6 +144,16 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* DASH-4E — when a wallpaper is ACTIVE (a custom fond selected), the opaque anthracite
+   page background is removed so the fixed WallpaperLayer (z-index:-1) shows behind the
+   WHOLE page. The flag is set on <html> by DashboardShell only while it is mounted and a
+   custom wallpaper is active, so non-dashboard routes and the default Hermès background
+   are unchanged. Glass cards/scrim/borders are untouched (they keep their own surfaces). */
+html[data-wallpaper-active="true"] body {
+  background-color: transparent;
+  background-image: none;
+}
+
 button,
 input,
 textarea {
