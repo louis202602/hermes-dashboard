@@ -14,15 +14,19 @@
   /* --- official DARK palette --- */
   --bg-primary: #06121f;
   --bg-secondary: #0b1b2e;
-  --surface: rgba(12, 28, 47, 0.82);
-  --surface-strong: rgba(10, 25, 44, 0.90);
+  /* Glass surfaces — a touch denser (+0.04 / +0.03 alpha) so text stays legible over
+     busy/bright wallpapers, while staying clearly translucent (wallpaper still visible). */
+  --surface: rgba(12, 28, 47, 0.86);
+  --surface-strong: rgba(10, 25, 44, 0.93);
   --surface-soft: rgba(150, 195, 245, 0.05);
   --surface-hover: rgba(150, 195, 245, 0.09);
-  --border: rgba(120, 175, 230, 0.18);
+  /* Slightly more defined card edge over photographic wallpapers. */
+  --border: rgba(120, 175, 230, 0.22);
   --border-strong: rgba(90, 215, 255, 0.34);
   --text-primary: #f4f8fc;
-  --text-secondary: #9fb3c7;
-  --text-muted: #6f829a;
+  --text-secondary: #a6bacf;
+  /* Muted text nudged lighter for contrast over bright wallpaper zones (not pure white). */
+  --text-muted: #8194ab;
   --hermes-blue: #3498ff;
   --hermes-cyan: #5ad7ff;
   --purple: #a084ff;
@@ -53,7 +57,7 @@
   --radius-modal: 28px;
   --radius-input: 16px;
   --radius-pill: 999px;
-  --glass-blur: 20px;
+  --glass-blur: 22px;
 
   /* --- spacing scale (4/8/12/16/24/32/48/64) --- */
   --space-1: 4px;
@@ -187,8 +191,9 @@ a {
   padding: 22px 17px 18px;
   background:
     linear-gradient(180deg, rgba(11, 18, 34, 0.98), rgba(6, 11, 23, 0.98));
-  border-right: 1px solid var(--border);
-  box-shadow: 18px 0 45px rgba(0, 0, 0, 0.16);
+  /* Slightly more detached from the wallpaper: a touch stronger edge + depth shadow. */
+  border-right: 1px solid var(--border-strong);
+  box-shadow: 18px 0 48px rgba(0, 0, 0, 0.24);
   overflow-y: auto;
 }
 
@@ -4357,7 +4362,7 @@ html[data-contrast="high"] :focus-visible { outline-width: 3px; }
 /* --- Card transparency + blur --- */
 html[data-blur="none"]     { --glass-blur: 0px; }
 html[data-blur="low"]      { --glass-blur: 8px; }
-html[data-blur="standard"] { --glass-blur: 20px; }
+html[data-blur="standard"] { --glass-blur: 22px; }
 html[data-blur="high"]     { --glass-blur: 32px; }
 html[data-transparency="solid"] { --glass-blur: 0px; }
 html[data-transparency="solid"] .dashboard-card,
