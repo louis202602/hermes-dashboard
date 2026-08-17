@@ -472,6 +472,7 @@ export default function DashboardShell({
           userEmail={userEmail}
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed((value) => !value)}
+          onNavigate={() => setMobileMenuOpen(false)}
         />
       </div>
 
