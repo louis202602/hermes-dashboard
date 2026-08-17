@@ -1608,6 +1608,261 @@ html[data-reduce-motion="1"] .hermes-typing-dots span {
   }
 }
 
+/* ══ Hermès premium chat — presence (orb), messages, movement ═══════════════ */
+
+/* — Orb: the AI identity. Calm sphere + halo + slow inner sheen, GPU-only. — */
+.hermes-orb {
+  position: relative;
+  width: var(--orb-size, 28px);
+  height: var(--orb-size, 28px);
+  border-radius: 50%;
+  display: inline-block;
+  flex: 0 0 auto;
+  isolation: isolate;
+}
+.hermes-orb-core {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 32% 28%,
+    #f2fdff 0%,
+    var(--hermes-cyan) 38%,
+    var(--hermes-blue) 72%,
+    #0a2036 100%
+  );
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    inset -2px -3px 6px rgba(4, 16, 32, 0.55),
+    0 0 12px rgba(90, 215, 255, 0.42),
+    0 0 24px rgba(52, 152, 255, 0.26);
+}
+.hermes-orb-ring {
+  position: absolute;
+  inset: -2%;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(234, 249, 255, 0.5) 42deg,
+    transparent 120deg
+  );
+  mix-blend-mode: screen;
+  opacity: 0.5;
+  -webkit-mask: radial-gradient(circle, transparent 52%, #000 60%);
+  mask: radial-gradient(circle, transparent 52%, #000 60%);
+  animation: hermes-orb-spin 9s linear infinite;
+}
+.hermes-orb::after {
+  content: "";
+  position: absolute;
+  inset: -24%;
+  border-radius: 50%;
+  z-index: -1;
+  background: radial-gradient(circle, rgba(90, 215, 255, 0.32), transparent 68%);
+  animation: hermes-orb-breathe 6.5s ease-in-out infinite;
+}
+.hermes-orb.is-idle .hermes-orb-core {
+  animation: hermes-orb-breathe-core 6.5s ease-in-out infinite;
+}
+.hermes-orb.is-thinking .hermes-orb-core {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.25),
+    inset -2px -3px 6px rgba(4, 16, 32, 0.5),
+    0 0 16px rgba(90, 215, 255, 0.7),
+    0 0 34px rgba(52, 152, 255, 0.5);
+  animation: hermes-orb-pulse 1.6s ease-in-out infinite;
+}
+.hermes-orb.is-thinking .hermes-orb-ring {
+  animation-duration: 3.2s;
+  opacity: 0.78;
+}
+.hermes-orb.is-thinking::after {
+  animation-duration: 2.4s;
+  background: radial-gradient(circle, rgba(90, 215, 255, 0.5), transparent 70%);
+}
+@keyframes hermes-orb-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes hermes-orb-breathe {
+  0%,
+  100% {
+    transform: scale(0.9);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.9;
+  }
+}
+@keyframes hermes-orb-breathe-core {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03);
+  }
+}
+@keyframes hermes-orb-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.07);
+  }
+}
+
+/* — Header identity: orb + titles side by side. — */
+.hermes-head-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.hermes-head-orb {
+  filter: drop-shadow(0 4px 14px rgba(52, 152, 255, 0.32));
+}
+
+/* — Message rows: avatar + bubble + discreet timestamp. — */
+.hermes-turn {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 100%;
+}
+.hermes-turn.is-user {
+  justify-content: flex-end;
+}
+.hermes-turn.is-assistant {
+  justify-content: flex-start;
+}
+.hermes-turn-avatar {
+  flex: 0 0 auto;
+  margin-bottom: 3px;
+}
+.hermes-turn-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  max-width: 82%;
+}
+.hermes-turn.is-user .hermes-turn-main {
+  align-items: flex-end;
+}
+.hermes-turn.is-assistant .hermes-turn-main {
+  align-items: flex-start;
+}
+.hermes-turn-time {
+  font-size: 8.5px;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  padding: 0 4px;
+}
+
+/* — Premium bubbles: light for the user, glass + cyan accent for Hermès. — */
+.hermes-turn-main .hermes-bubble {
+  max-width: 100%;
+  width: fit-content;
+  padding: 9px 12px;
+  border-radius: 14px;
+}
+.hermes-turn-main .hermes-bubble p {
+  font-size: 11px;
+  line-height: 1.6;
+}
+.hermes-turn-main .hermes-bubble.is-user {
+  align-self: flex-end;
+  border-bottom-right-radius: 5px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--hermes-blue) 22%, transparent),
+    color-mix(in srgb, var(--hermes-blue) 11%, transparent)
+  );
+  border: 1px solid color-mix(in srgb, var(--hermes-cyan) 32%, transparent);
+  color: var(--text-primary);
+}
+.hermes-turn-main .hermes-bubble.is-assistant {
+  align-self: flex-start;
+  border-bottom-left-radius: 5px;
+  background: var(--surface-strong);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--border);
+  border-left: 2px solid color-mix(in srgb, var(--hermes-cyan) 55%, transparent);
+}
+.hermes-bubble.is-user {
+  animation: hermes-bubble-in-user 260ms ease-out;
+}
+@keyframes hermes-bubble-in-user {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* — Thinking bubble: subtle shimmer sweep over the dots. — */
+.hermes-typing {
+  position: relative;
+  overflow: hidden;
+}
+.hermes-typing::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 28%,
+    rgba(90, 215, 255, 0.14) 50%,
+    transparent 72%
+  );
+  transform: translateX(-100%);
+  animation: hermes-shimmer 1.9s ease-in-out infinite;
+}
+@keyframes hermes-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* — Mobile: smaller orbs, comfortable widths, no overflow. — */
+@media (max-width: 560px) {
+  .hermes-head-identity {
+    gap: 11px;
+  }
+  .hermes-head-orb {
+    --orb-size: 38px !important;
+  }
+  .hermes-turn-main {
+    max-width: 84%;
+  }
+}
+
+/* — Reduced motion: freeze all chat motion, keep the orb legible. — */
+@media (prefers-reduced-motion: reduce) {
+  .hermes-orb-ring,
+  .hermes-orb::after,
+  .hermes-orb-core,
+  .hermes-typing::before,
+  .hermes-bubble.is-assistant,
+  .hermes-bubble.is-user {
+    animation: none !important;
+  }
+}
+html[data-reduce-motion="1"] .hermes-orb-ring,
+html[data-reduce-motion="1"] .hermes-typing::before {
+  animation: none !important;
+  opacity: 0.4;
+}
+
 .hermes-lifecycle {
   display: inline-flex;
   align-items: center;
