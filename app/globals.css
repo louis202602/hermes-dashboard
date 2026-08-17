@@ -685,6 +685,20 @@ html[data-theme="light"] .dashboard-sidebar {
   list-style: none;
 }
 
+/* Command Center tablet (≤1024, e.g. 900): clean single-column stacking of the
+   overview and priorities zones, and KPI in a 2×2 grid — collapsing earlier than
+   the global 820 breakpoint so the cockpit never crowds at tablet width. */
+@media (max-width: 1024px) {
+  .cc-overview,
+  .cc-priorities {
+    grid-template-columns: 1fr;
+  }
+
+  .command-center .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .dashboard-intro {
   display: flex;
   align-items: flex-end;
