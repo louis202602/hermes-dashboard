@@ -4483,6 +4483,37 @@ html[data-reduce-transparency="1"] .context-bar { backdrop-filter: none; backgro
 .settings-reset:hover { background: color-mix(in srgb, var(--danger) 10%, transparent); }
 .settings-reset-note { margin-top: var(--space-2); font-size: 0.74rem; color: var(--text-muted); }
 
+/* DASH-4E — wallpaper apply/cancel sticky action bar (PREVIEW ≠ PERSISTENCE).
+   Sticks to the bottom of the wallpaper section so the Apply/Cancel controls stay
+   reachable on small screens without hunting for where to save. */
+.wallpaper-actionbar {
+  position: sticky; bottom: 0; z-index: 3;
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  margin-top: var(--space-3); padding: 10px 12px;
+  border-radius: var(--radius-input);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
+  backdrop-filter: blur(10px);
+}
+.wallpaper-actionbar-state { font-size: 0.78rem; color: var(--text-muted); min-width: 0; }
+.wallpaper-actionbar-state.is-saved { color: var(--accent); font-weight: 600; }
+.wallpaper-actionbar-state.is-error { color: var(--danger); font-weight: 600; }
+.wallpaper-actionbar-btns { display: flex; gap: var(--space-2); flex: 0 0 auto; }
+.wallpaper-actionbar-btns .settings-reset { width: auto; }
+.wallpaper-apply-btn {
+  width: auto; padding: 10px 18px; border-radius: var(--radius-input);
+  border: 1px solid var(--accent); background: var(--accent); color: #fff;
+  font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.wallpaper-apply-btn:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
+.wallpaper-apply-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+@media (max-width: 520px) {
+  .wallpaper-actionbar { flex-wrap: wrap; }
+  .wallpaper-actionbar-btns { width: 100%; }
+  .wallpaper-actionbar-btns .settings-reset,
+  .wallpaper-actionbar-btns .wallpaper-apply-btn { flex: 1 1 0; text-align: center; }
+}
+
 @media (max-width: 820px) {
   .settings-body { grid-template-columns: 1fr; }
   .settings-select { max-width: 55%; }
