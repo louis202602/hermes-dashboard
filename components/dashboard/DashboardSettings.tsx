@@ -44,7 +44,6 @@ import {
 import {
   PROFILE_IDS,
   clampProfiles,
-  profileWallpaperFields,
   renameProfile,
   resetProfile,
   resolveActiveProfile,
@@ -72,6 +71,10 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
 type Opt = { value: string; label: string };
+// DASH-4E — wallpaper DRAFT: the pending (previewed, not-yet-persisted) fields of the
+// active profile. `null` = no pending change (UNCHANGED). Explicit "Appliquer" persists it.
+type WpDraft = { ref: string | null; scrim: number | null; pos: WallpaperPosition | null };
+type WpApplyState = "idle" | "saving" | "saved" | "error";
 
 const SIZE_SHORT: Record<string, string> = { small: "S", medium: "M", large: "L" };
 
@@ -220,6 +223,10 @@ export default function DashboardSettings({
   const [wpCat, setWpCat] = useState<Exclude<WallpaperCategory, "user">>("hermes");
   const [wpUploading, setWpUploading] = useState(false);
   const [wpError, setWpError] = useState(false);
+  // DASH-4E — wallpaper preview≠persistence: a per-profile DRAFT, and the apply state
+  // for the explicit "Appliquer le fond" button (UNCHANGED/DIRTY/SAVING/SAVED/ERROR).
+  const [wpDraft, setWpDraft] = useState<WpDraft | null>(null);
+  const [wpApply, setWpApply] = useState<WpApplyState>("idle");
   const version = useRef<number>(initial.version);
   const [save, setSave] = useState<SaveState>("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -387,6 +394,25 @@ export default function DashboardSettings({
     },
     [persistPatch],
   );
+  // DASH-4E — explicit (awaited) profiles persistence used by the wallpaper "Appliquer"
+  // button and the upload/delete actions (they must be saved deterministically before a
+  // server re-sign). Distinct from the debounced optimistic path used elsewhere.
+  const persistProfilesDirect = useCallback(async (next: ProfilesState): Promise<boolean> => {
+    const res = await saveDashboardPreferencesAction(
+      { profiles: next, schema_version: PREFERENCES_SCHEMA_VERSION },
+      version.current,
+    );
+    if (res.ok && typeof res.version === "number") {
+      version.current = res.version;
+      setProfiles(next);
+      return true;
+    }
+    if (res.status === "VERSION_CONFLICT") {
+      setSave("conflict");
+      setTimeout(() => window.location.reload(), 1400);
+    }
+    return false;
+  }, []);
   const profileName = (id: ProfileId): string =>
     profiles.byId[id]?.name?.trim() || t(`profile.${id}` as MessageKey);
   const profileOverride = profiles.byId[activeProfile]?.appearance ?? {};
@@ -398,20 +424,39 @@ export default function DashboardSettings({
   const setProfileAccent = (v: string) =>
     commitProfiles(setProfileAppearance(profiles, activeProfile, { accent: v ? (v as Appearance["accent"]) : undefined }));
 
-  // --- DASH-4E wallpaper (per active profile) ---
+  // --- DASH-4E wallpaper (per active profile) — PREVIEW (draft) ≠ PERSISTENCE (apply) ---
   const profWp = profiles.byId[activeProfile];
-  const currentWpRef = profWp?.wallpaperRef ?? null;
-  const currentWpScrim = profWp?.wallpaperScrim ?? 0.2;
-  const currentWpPos = (profWp?.wallpaperPosition as WallpaperPosition) ?? "center";
-  const setWp = (fields: Parameters<typeof setProfileWallpaper>[2]) =>
-    commitProfiles(setProfileWallpaper(profiles, activeProfile, fields));
-  // BUGFIX — live wallpaper PREVIEW. The picker updates the active profile's wallpaper in
-  // local state (optimistic) via commitProfiles; resolve it the same way the dashboard
-  // does so the change is visible IMMEDIATELY on this page (before the server save). A
-  // user-upload ref needs its signed URL; built-in images resolve their /public asset
-  // inside WallpaperLayer, so their preview needs no URL.
+  // Persisted (saved) wallpaper fields of the active profile — the source of truth.
+  const persistedWp: WpDraft = {
+    ref: profWp?.wallpaperRef ?? null,
+    scrim: profWp?.wallpaperScrim ?? null,
+    pos: (profWp?.wallpaperPosition as WallpaperPosition) ?? null,
+  };
+  // Effective (shown) fields = draft if the user has a pending change, else persisted.
+  const effWp: WpDraft = wpDraft ?? persistedWp;
+  const currentWpRef = effWp.ref;
+  const currentWpScrim = effWp.scrim ?? 0.2;
+  const currentWpPos = effWp.pos ?? "center";
+  // A clic on a thumbnail / position / scrim only stages a DRAFT + immediate preview.
+  const setWpDraftField = (patch: Partial<WpDraft>) => setWpDraft({ ...effWp, ...patch });
+  // DIRTY only when the draft actually differs from what is persisted.
+  const wpDirty =
+    wpDraft !== null &&
+    (wpDraft.ref !== persistedWp.ref ||
+      wpDraft.scrim !== persistedWp.scrim ||
+      wpDraft.pos !== persistedWp.pos);
+  // Live PREVIEW resolves the EFFECTIVE (draft-or-persisted) fields exactly like the
+  // dashboard does, so the pick is visible immediately — without persisting. A user photo
+  // needs its signed URL; the gallery only offers built-ins (no URL needed), so a draft
+  // ref is always built-in and the signed URL only applies to the persisted user photo.
   const previewWallpaper = resolveWallpaper(
-    profileWallpaperFields(profiles, activeProfile),
+    {
+      wallpaperRef: effWp.ref,
+      wallpaperScrim: effWp.scrim,
+      wallpaperPosition: effWp.pos,
+      wallpaperFocalX: profWp?.wallpaperFocalX ?? null,
+      wallpaperFocalY: profWp?.wallpaperFocalY ?? null,
+    },
     profiles.wallpaper,
   );
   const previewWallpaperUrl = isUserWallpaperRef(previewWallpaper.ref)
@@ -421,7 +466,31 @@ export default function DashboardSettings({
     value: p,
     label: t(`wallpaper.pos.${p}` as MessageKey),
   }));
-  const currentIsUserWp = isUserWallpaperRef(currentWpRef);
+  // The delete/"personal photo" affordances operate on the PERSISTED stored object.
+  const currentIsUserWp = isUserWallpaperRef(persistedWp.ref);
+  // Apply the staged draft: persist the active profile's wallpaper fields, then clear draft.
+  const applyWallpaper = async () => {
+    if (!wpDirty || !wpDraft) return;
+    setWpApply("saving");
+    const next = setProfileWallpaper(profiles, activeProfile, {
+      wallpaperRef: wpDraft.ref,
+      wallpaperScrim: wpDraft.scrim,
+      wallpaperPosition: wpDraft.pos,
+    });
+    const ok = await persistProfilesDirect(next);
+    if (ok) {
+      setWpDraft(null);
+      setWpApply("saved");
+      router.refresh();
+      setTimeout(() => setWpApply("idle"), 1600);
+    } else {
+      setWpApply("error");
+    }
+  };
+  const cancelWallpaper = () => {
+    setWpDraft(null);
+    setWpApply("idle");
+  };
   // A `user:` object is safe to delete only if NO other profile — nor the global
   // default — still references it (refs can be shared across profiles).
   const isOrphanAfterReplace = (ref: string | null): ref is string => {
@@ -444,15 +513,24 @@ export default function DashboardSettings({
       fd.append("file", jpeg);
       const res = await uploadWallpaperAction(fd);
       if (res.ok) {
-        const previousRef = currentWpRef;
-        setWp({ wallpaperRef: res.ref });
-        // ORPHAN_POLICY (V1, no cron/GC): replacing this profile's own photo deletes
-        // the previous object when nothing else references it — bounds stored user
-        // wallpapers to ≤ profile count. Ownership is re-checked server-side.
-        if (isOrphanAfterReplace(previousRef)) {
-          void deleteWallpaperAction(previousRef);
+        const previousRef = persistedWp.ref;
+        // An explicit file pick is applied immediately (deterministic save so the server
+        // can re-sign the new object's URL); it also clears any pending gallery draft.
+        const ok = await persistProfilesDirect(
+          setProfileWallpaper(profiles, activeProfile, { wallpaperRef: res.ref }),
+        );
+        if (ok) {
+          setWpDraft(null);
+          // ORPHAN_POLICY (V1, no cron/GC): replacing this profile's own photo deletes
+          // the previous object when nothing else references it — bounds stored user
+          // wallpapers to ≤ profile count. Ownership is re-checked server-side.
+          if (isOrphanAfterReplace(previousRef)) {
+            void deleteWallpaperAction(previousRef);
+          }
+          router.refresh(); // re-sign server-side so the dashboard shows the new fond
+        } else {
+          setWpError(true);
         }
-        router.refresh(); // re-sign server-side so the dashboard shows the new fond
       } else {
         setWpError(true);
       }
@@ -463,10 +541,15 @@ export default function DashboardSettings({
     }
   };
   const onDeleteWallpaper = async () => {
-    if (!currentIsUserWp || !currentWpRef) return;
-    await deleteWallpaperAction(currentWpRef);
-    setWp({ wallpaperRef: null });
-    router.refresh();
+    if (!currentIsUserWp || !persistedWp.ref) return;
+    await deleteWallpaperAction(persistedWp.ref);
+    const ok = await persistProfilesDirect(
+      setProfileWallpaper(profiles, activeProfile, { wallpaperRef: null }),
+    );
+    if (ok) {
+      setWpDraft(null);
+      router.refresh();
+    }
   };
 
   const saveLabel =
@@ -503,7 +586,13 @@ export default function DashboardSettings({
                   type="button"
                   className={`profile-chip${id === activeProfile ? " is-active" : ""}`}
                   aria-pressed={id === activeProfile}
-                  onClick={() => commitProfiles(setActiveProfile(profiles, id))}
+                  onClick={() => {
+                    // CHANGEMENT DE PROFIL: abandon the pending wallpaper draft and load
+                    // the new profile's persisted wallpaper (no cross-profile contamination).
+                    setWpDraft(null);
+                    setWpApply("idle");
+                    commitProfiles(setActiveProfile(profiles, id));
+                  }}
                 >
                   {profileName(id)}
                 </button>
@@ -540,7 +629,11 @@ export default function DashboardSettings({
           <button
             type="button"
             className="settings-reset"
-            onClick={() => commitProfiles(resetProfile(profiles, activeProfile))}
+            onClick={() => {
+              setWpDraft(null);
+              setWpApply("idle");
+              commitProfiles(resetProfile(profiles, activeProfile));
+            }}
           >
             {t("profile.settings.reset")}
           </button>
@@ -577,7 +670,7 @@ export default function DashboardSettings({
                   aria-pressed={currentWpRef === w.id}
                   aria-label={name}
                   title={w.provenance ? `${name} — ${w.provenance}` : name}
-                  onClick={() => setWp({ wallpaperRef: w.id })}
+                  onClick={() => setWpDraftField({ ref: w.id })}
                 >
                   {thumb ? (
                     // Real photo: lazy-loaded lightweight thumbnail (never the HD asset).
@@ -592,7 +685,7 @@ export default function DashboardSettings({
             label={t("wallpaper.position")}
             value={currentWpPos}
             options={wpPosOpts}
-            onChange={(v) => setWp({ wallpaperPosition: v })}
+            onChange={(v) => setWpDraftField({ pos: v as WallpaperPosition })}
           />
           <label className="settings-row">
             <span className="settings-row-label">{t("wallpaper.scrim")}</span>
@@ -604,7 +697,7 @@ export default function DashboardSettings({
               step={0.02}
               value={currentWpScrim}
               aria-label={t("wallpaper.scrim")}
-              onChange={(e) => setWp({ wallpaperScrim: Number(e.target.value) })}
+              onChange={(e) => setWpDraftField({ scrim: Number(e.target.value) })}
             />
           </label>
           {/* Personal wallpaper — reuses the private storage infra (image-only,
@@ -634,10 +727,48 @@ export default function DashboardSettings({
           <button
             type="button"
             className="settings-reset"
-            onClick={() => setWp({ wallpaperRef: null, wallpaperScrim: null, wallpaperPosition: null })}
+            onClick={() => setWpDraftField({ ref: null, scrim: null, pos: null })}
           >
             {t("wallpaper.reset")}
           </button>
+          {/* Sticky action bar — PREVIEW ≠ PERSISTENCE. Apply persists the draft to the
+              active profile; Cancel reverts to the last saved fond. Disabled when clean. */}
+          <div className="wallpaper-actionbar" role="group" aria-label={t("wallpaper.apply")}>
+            <span
+              className={`wallpaper-actionbar-state is-${wpApply}`}
+              aria-live="polite"
+            >
+              {wpApply === "saved"
+                ? t("wallpaper.applied")
+                : wpApply === "error"
+                  ? t("wallpaper.applyError")
+                  : wpDirty
+                    ? t("wallpaper.unsaved")
+                    : ""}
+            </span>
+            <div className="wallpaper-actionbar-btns">
+              <button
+                type="button"
+                className="settings-reset"
+                disabled={!wpDirty || wpApply === "saving"}
+                onClick={cancelWallpaper}
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                className="wallpaper-apply-btn"
+                disabled={!wpDirty || wpApply === "saving"}
+                onClick={() => void applyWallpaper()}
+              >
+                {wpApply === "saving"
+                  ? t("wallpaper.applying")
+                  : wpApply === "saved"
+                    ? t("wallpaper.applied")
+                    : t("wallpaper.apply")}
+              </button>
+            </div>
+          </div>
         </Section>
 
         <Section title={t("settings.section.appearance")}>
