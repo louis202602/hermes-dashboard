@@ -15,6 +15,12 @@ import type { ServiceResult } from "@/types/hermes";
 
 type Props = {
   alerts: ServiceResult<UnifiedAlerts>;
+  /** Cockpit summary — keep only the actionable severities (CRITICAL + HIGH) in the
+   *  list. The severity counters above stay the full totals. */
+  criticalOnly?: boolean;
+  /** Cockpit summary — cap the number of alert rows shown. Omitted ⇒ up to 6 (the
+   *  historical default, unchanged for every existing caller). */
+  limit?: number;
 };
 
 function severityIcon(sev: AlertSeverity) {
@@ -40,7 +46,7 @@ function Frame({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function AlertsPanel({ alerts }: Props) {
+export default function AlertsPanel({ alerts, criticalOnly = false, limit }: Props) {
   const { t } = useI18n();
 
   if (!alerts.ok || alerts.data.resolutionStatus !== "OK") {
@@ -52,7 +58,13 @@ export default function AlertsPanel({ alerts }: Props) {
   }
 
   const { alerts: list, summary, unavailable } = alerts.data;
-  const shown: UnifiedAlert[] = sortAlerts(list).slice(0, 6);
+  // Cockpit summary keeps only the two escalated severities so the Home surface shows
+  // what actually needs a decision; the counters above still reflect the full picture.
+  const filtered = criticalOnly
+    ? list.filter((a) => a.severity === "CRITICAL" || a.severity === "HIGH")
+    : list;
+  const cap = typeof limit === "number" && limit >= 0 ? limit : 6;
+  const shown: UnifiedAlert[] = sortAlerts(filtered).slice(0, cap);
 
   return (
     <Frame>

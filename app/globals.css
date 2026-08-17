@@ -609,6 +609,82 @@ html[data-theme="light"] .dashboard-sidebar {
   padding: 18px 24px 40px;
 }
 
+/* ── Command Center (épuré cockpit Home) ─────────────────────────────────────
+   Six synthetic zones, NOT a widget grid. Deliberately narrower than the full
+   content width and built from translucent glass with generous gaps, so a real
+   active wallpaper stays visible around and through the cockpit (breathing room,
+   never an opaque anthracite slab). */
+.command-center {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.cc-zone {
+  /* Layout wrapper only — no surface of its own; the wallpaper shows through the
+     gaps and the cards keep their own semi-transparent glass. */
+  background: transparent;
+}
+
+/* Z2 — tenant identity + condensed platform state, paired on one row. */
+.cc-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 420px);
+  gap: 14px;
+  align-items: center;
+}
+
+.cc-overview .dashboard-intro-compact {
+  padding: 4px 2px;
+}
+
+/* The condensed system-health card never stretches to a full panel height. */
+.sysh-card-summary {
+  align-self: start;
+}
+
+/* Z5 — critical alerts / priorities / compact approvals, three balanced columns. */
+.cc-priorities {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+/* Compact approvals — a counter badge + capped, still-actionable rows. */
+.approvals-count-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--danger, #d9534f);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.approvals-card-compact .approvals-list {
+  gap: 8px;
+}
+
+.approval-more {
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  list-style: none;
+}
+
 .dashboard-intro {
   display: flex;
   align-items: flex-end;
@@ -2222,6 +2298,12 @@ html[data-theme="light"] .dashboard-sidebar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  /* Command Center — Z2 and Z5 collapse to a single column; KPI stays 2×2. */
+  .cc-overview,
+  .cc-priorities {
+    grid-template-columns: 1fr;
+  }
+
   /* Below tablet landscape, the alert pair stacks. */
   .exec-grid-2 {
     grid-template-columns: 1fr;
@@ -2258,6 +2340,29 @@ html[data-theme="light"] .dashboard-sidebar {
 
   .kpi-grid {
     grid-template-columns: 1fr;
+  }
+
+  /* Command Center — mobile priority order: context, then Hermès → alertes →
+     actions → KPI, with the overview last. `.command-center` is a flex column so
+     `order` reflows the zones without changing the DOM (desktop keeps DOM order,
+     every zone at the default order:0). */
+  .context-bar {
+    order: 0;
+  }
+  .cc-ask {
+    order: 1;
+  }
+  .cc-priorities {
+    order: 2;
+  }
+  .cc-actions {
+    order: 3;
+  }
+  .cc-kpis {
+    order: 4;
+  }
+  .cc-overview {
+    order: 5;
   }
 
   .dashboard-card,

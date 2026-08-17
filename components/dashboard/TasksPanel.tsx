@@ -13,6 +13,10 @@ import type {
 
 type TasksPanelProps = {
   priorities: ServiceResult<OperationalPriorities>;
+  /** Cockpit summary — cap the number of priority rows shown (Command Center Home).
+   *  The summary counters above the list are always the full totals. Omitted ⇒
+   *  the full list (unchanged for every existing caller). */
+  limit?: number;
 };
 
 function severityIcon(severity: OperationalPriority["severity"]) {
@@ -46,7 +50,7 @@ function Frame({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function TasksPanel({ priorities }: TasksPanelProps) {
+export default function TasksPanel({ priorities, limit }: TasksPanelProps) {
   const { t } = useI18n();
 
   if (!priorities.ok) {
@@ -57,7 +61,9 @@ export default function TasksPanel({ priorities }: TasksPanelProps) {
     );
   }
 
-  const { resolutionStatus, summary, items } = priorities.data;
+  const { resolutionStatus, summary, items: allItems } = priorities.data;
+  const items =
+    typeof limit === "number" && limit >= 0 ? allItems.slice(0, limit) : allItems;
 
   if (resolutionStatus !== "OK") {
     return (

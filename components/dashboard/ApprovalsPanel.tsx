@@ -55,7 +55,16 @@ function decisionMessage(
   }
 }
 
-export default function ApprovalsPanel() {
+type ApprovalsPanelProps = {
+  /** Command Center Home — compact cockpit variant: a pending-count badge in the
+   *  header and at most COMPACT_LIMIT rows (still fully actionable). Omitted ⇒ the
+   *  full panel (unchanged for the Paramètres / detailed usage). */
+  compact?: boolean;
+};
+
+const COMPACT_LIMIT = 3;
+
+export default function ApprovalsPanel({ compact = false }: ApprovalsPanelProps) {
   const { t } = useI18n();
   const [approvals, setApprovals] = useState<PendingApproval[]>([]);
   const [loading, setLoading] = useState(true);
@@ -145,14 +154,31 @@ export default function ApprovalsPanel() {
     await refresh();
   }
 
+  // Compact cockpit variant caps the visible rows; the header badge always shows the
+  // full pending total so nothing is hidden silently.
+  const visibleApprovals = compact ? approvals.slice(0, COMPACT_LIMIT) : approvals;
+  const overflow = compact ? approvals.length - visibleApprovals.length : 0;
+
   return (
-    <section className="dashboard-card approvals-card">
+    <section
+      className={`dashboard-card approvals-card${compact ? " approvals-card-compact" : ""}`}
+    >
       <div className="dashboard-card-header">
-        <div>
+        <div className="approvals-title">
           <span className="panel-eyebrow">{t("appr.eyebrow")}</span>
           <h3>{t("appr.title")}</h3>
         </div>
-        <ProvenanceBadge provenance="REAL" />
+        {compact && approvals.length > 0 ? (
+          <span
+            className="approvals-count-badge"
+            aria-label={t("appr.title")}
+            title={t("appr.title")}
+          >
+            {approvals.length}
+          </span>
+        ) : (
+          <ProvenanceBadge provenance="REAL" />
+        )}
       </div>
 
       {banner ? (
@@ -167,7 +193,7 @@ export default function ApprovalsPanel() {
         <p className="projects-empty">{t("appr.empty")}</p>
       ) : (
         <ul className="approvals-list">
-          {approvals.map((a) => (
+          {visibleApprovals.map((a) => (
             <li key={a.requestId} className="approval-item">
               <div className="approval-info">
                 <strong>{a.summary}</strong>
@@ -233,6 +259,11 @@ export default function ApprovalsPanel() {
               )}
             </li>
           ))}
+          {overflow > 0 ? (
+            <li className="approval-more" aria-hidden>
+              +{overflow}
+            </li>
+          ) : null}
         </ul>
       )}
 

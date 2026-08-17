@@ -31,6 +31,10 @@ type Props = {
   locale: string;
   timezone: string;
   hour12: boolean;
+  /** Command Center Home — "summary" renders the condensed état global: the platform
+   *  health line, the 3 headline metrics and the resolver one-liner only (no action-
+   *  queue grid, no cost grid). Omitted / "full" ⇒ the complete panel (unchanged). */
+  variant?: "full" | "summary";
 };
 
 function fmtUsd(n: number | null): string {
@@ -65,8 +69,10 @@ export default function SystemHealthPanel({
   locale,
   timezone,
   hour12,
+  variant = "full",
 }: Props) {
   const { t } = useI18n();
+  const summary = variant === "summary";
   const health = classifyPlatformHealth(platformHealth);
   const healthLabel =
     health.status === "UNAVAILABLE"
@@ -94,7 +100,7 @@ export default function SystemHealthPanel({
     : null;
 
   return (
-    <section className="dashboard-card sysh-card">
+    <section className={`dashboard-card sysh-card${summary ? " sysh-card-summary" : ""}`}>
       <div className="dashboard-card-header">
         <div>
           <span className="panel-eyebrow">{t("health.eyebrow")}</span>
@@ -141,6 +147,31 @@ export default function SystemHealthPanel({
         />
       </div>
 
+      {summary ? (
+        <div className="sysh-row">
+          <span className="sysh-row-item">
+            <CircuitBoard size={14} strokeWidth={1.8} />
+            {t("health.resolver")} :{" "}
+            <strong>
+              {res.available
+                ? t("health.resolverSummary", {
+                    state: res.enabled ? t("health.enabled") : t("health.disabled"),
+                    circuit:
+                      res.circuit === "OPEN"
+                        ? t("health.circuitOpen")
+                        : t("health.circuitClosed"),
+                    queue: res.queueDepth ?? "—",
+                    running: res.running ?? "—",
+                    deadLetter: res.deadLetter ?? "—",
+                  })
+                : "—"}
+            </strong>
+          </span>
+        </div>
+      ) : null}
+
+      {summary ? null : (
+      <>
       <div className="sysh-subtitle">
         <Cpu size={14} strokeWidth={1.8} /> <span>{t("health.actionQueues")}</span>
       </div>
@@ -191,6 +222,8 @@ export default function SystemHealthPanel({
         </div>
       ) : (
         <p className="sysh-note">{t("health.costUnavailable")}</p>
+      )}
+      </>
       )}
     </section>
   );
