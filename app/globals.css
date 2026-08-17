@@ -4496,7 +4496,12 @@ html[data-reduce-transparency="1"] .context-bar { backdrop-filter: none; backgro
   backdrop-filter: blur(10px);
 }
 .wallpaper-actionbar-state { font-size: 0.78rem; color: var(--text-muted); min-width: 0; }
-.wallpaper-actionbar-state.is-saved { color: var(--accent); font-weight: 600; }
+.wallpaper-actionbar-state.is-saved,
+.wallpaper-actionbar-state.is-savedAll {
+  color: #fff; font-weight: 700;
+  background: color-mix(in srgb, var(--accent) 85%, transparent);
+  padding: 4px 10px; border-radius: 999px;
+}
 .wallpaper-actionbar-state.is-error { color: var(--danger); font-weight: 600; }
 .wallpaper-actionbar-btns { display: flex; gap: var(--space-2); flex: 0 0 auto; flex-wrap: wrap; }
 .wallpaper-actionbar-btns .settings-reset { width: auto; }

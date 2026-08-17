@@ -307,6 +307,7 @@ export const fr = {
   "wallpaper.applyAll": "Appliquer à tous les profils",
   "wallpaper.appliedThis": "Fond appliqué à ce profil",
   "wallpaper.appliedAll": "Fond appliqué à tous les profils",
+  "wallpaper.applySuccess": "Fond d’écran appliqué avec succès",
   "wallpaper.default": "Défaut Hermès",
   "wallpaper.photoSoon": "Photos — bientôt",
   "wallpaper.photoPending": "Photos réelles à fournir pour cette catégorie (voir docs/wallpaper-assets.md).",
