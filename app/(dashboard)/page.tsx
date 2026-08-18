@@ -16,6 +16,7 @@ import { effectiveProfileLayout } from "@/lib/dashboard/profiles";
 import {
   getCapabilitiesCached,
   getDashboardContextSettingsCached,
+  getPhotoModuleStateCached,
   getUnifiedAlertsCached,
 } from "@/lib/dashboard/requestScope";
 import {
@@ -59,6 +60,7 @@ export default async function CommandCenterPage() {
     capabilities,
     contextSettingsResult,
     preferencesResult,
+    photoModule,
   ] = await Promise.all([
     getActiveTenantIdentity(),
     getPublicKpis(),
@@ -70,6 +72,7 @@ export default async function CommandCenterPage() {
     getCapabilitiesCached(),
     getDashboardContextSettingsCached(),
     getDashboardUserPreferences(),
+    getPhotoModuleStateCached(),
   ]);
 
   const prefs = preferencesResult.ok
@@ -96,6 +99,7 @@ export default async function CommandCenterPage() {
   const { globalLayout, profiles, activeProfile } = resolveHomeProfileContext(
     prefs,
     capabilities,
+    photoModule.enabled,
   );
   const layout = effectiveProfileLayout(profiles, activeProfile, globalLayout);
   const contextConfig = resolveContextConfig(layout.context);

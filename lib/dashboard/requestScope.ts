@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getUnifiedAlerts } from "@/services/hermes/agenda";
 import { getDashboardContextSettings } from "@/services/hermes/contextBar";
 import { getAvailableCapabilities } from "@/services/hermes/panels";
+import { getPhotoModuleState } from "@/services/hermes/photo";
 
 // PHASE-1 COST-FIRST — the shared dashboard chrome (route-group `layout.tsx`) and the
 // Command Center page (`page.tsx`) render in the SAME request but are separate server
@@ -38,3 +39,8 @@ export const getUnifiedAlertsCached = cache(getUnifiedAlerts);
  *  i18n language + notification-locale fallback; the page uses them for the context bar.
  *  One RPC per request. */
 export const getDashboardContextSettingsCached = cache(getDashboardContextSettings);
+
+/** PHOTO-P0 — activation de la verticale Studio pour le tenant. Lecture minuscule
+ *  (un booléen), `cache()`-partagée entre le chrome et la page : UNE seule RPC par
+ *  requête. C'est le seul coût ajouté par la verticale aux tenants qui ne l'ont pas. */
+export const getPhotoModuleStateCached = cache(getPhotoModuleState);

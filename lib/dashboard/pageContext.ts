@@ -4,9 +4,11 @@ import {
   resolveUnitPreferences,
 } from "@/lib/dashboard/contextBar";
 import { HERMES_DEFAULT_PREFERENCES } from "@/lib/dashboard/preferences";
+import { hasPhotoStudio, photoGateKeys } from "@/lib/dashboard/photoAccess";
 import {
   getCapabilitiesCached,
   getDashboardContextSettingsCached,
+  getPhotoModuleStateCached,
 } from "@/lib/dashboard/requestScope";
 import { availableWidgetIds } from "@/lib/dashboard/widgets";
 import { getDashboardUserPreferences } from "@/services/hermes/preferences";
@@ -28,11 +30,14 @@ export async function resolvePageContext(): Promise<{
   capabilities: ServiceResult<AvailableCapabilities>;
   capabilityKeys: Set<string>;
   available: Set<string>;
+  /** PHOTO-P0 — la verticale Studio est-elle activée pour ce tenant ? */
+  photoEnabled: boolean;
 }> {
-  const [prefsResult, contextSettingsResult, capabilities] = await Promise.all([
+  const [prefsResult, contextSettingsResult, capabilities, photoModule] = await Promise.all([
     getDashboardUserPreferences(),
     getDashboardContextSettingsCached(),
     getCapabilitiesCached(),
+    getPhotoModuleStateCached(),
   ]);
 
   const prefs = prefsResult.ok ? prefsResult.data : HERMES_DEFAULT_PREFERENCES;
@@ -49,8 +54,11 @@ export async function resolvePageContext(): Promise<{
   const units = resolveUnitPreferences(locale, country, {
     ...(reg.hourCycle ? { hourCycle: reg.hourCycle } : {}),
   });
-  const capabilityKeys = new Set(
+  // `capabilityKeys` = clés de PORTILLON (capacités réelles + activation photo).
+  // La clé synthétique `photo.studio` n'exécute rien : elle n'ouvre que l'affichage.
+  const capabilityKeys = photoGateKeys(
     capabilities.ok ? capabilities.data.capabilities.map((c) => c.actionKey) : [],
+    photoModule.enabled,
   );
 
   return {
@@ -62,5 +70,6 @@ export async function resolvePageContext(): Promise<{
     capabilities,
     capabilityKeys,
     available: availableWidgetIds(capabilityKeys),
+    photoEnabled: hasPhotoStudio(capabilityKeys),
   };
 }

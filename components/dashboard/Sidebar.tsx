@@ -8,6 +8,7 @@ import {
   Blocks,
   Bot,
   Building2,
+  Camera,
   ClipboardCheck,
   CreditCard,
   HelpCircle,
@@ -18,6 +19,7 @@ import {
   Settings,
   Shield,
   Sparkles,
+  Users,
 } from "lucide-react";
 
 import { signOutAction } from "@/app/login/actions";
@@ -31,15 +33,31 @@ type SidebarProps = {
   onToggleCollapse?: () => void;
   /** Close the mobile drawer after a client-side navigation. */
   onNavigate?: () => void;
+  /**
+   * PHOTO-P0 — la verticale Studio est-elle activée pour ce tenant ? Faux par
+   * défaut : les entrées photo n'apparaissent pour personne tant qu'un opérateur
+   * n'a pas activé la verticale. Capability-first, comme les widgets.
+   */
+  showPhotoStudio?: boolean;
 };
 
 // The official Hermès OS navigation. Items with a built route (`href`) are real
 // Next.js links; destinations whose page does not exist yet carry NO href and stay
 // disabled with a "Bientôt disponible" hint — never a fake, dead link. Labels are
 // i18n keys (localized at render); routes/icons are stable.
-const NAV: { key: MessageKey; icon: typeof LayoutDashboard; href?: string }[] = [
+type NavItem = {
+  key: MessageKey;
+  icon: typeof LayoutDashboard;
+  href?: string;
+  /** Rendue uniquement quand la verticale Studio est activée (capability-first). */
+  photoOnly?: boolean;
+};
+
+const NAV: NavItem[] = [
   { key: "nav.commandCenter", icon: LayoutDashboard, href: "/" },
   { key: "nav.chat", icon: Sparkles, href: "/chat" },
+  { key: "nav.photoSessions", icon: Camera, href: "/seances", photoOnly: true },
+  { key: "nav.photoClients", icon: Users, href: "/clients", photoOnly: true },
   { key: "nav.activity", icon: Activity, href: "/activite" },
   { key: "nav.company", icon: Building2, href: "/entreprise" },
   { key: "nav.agents", icon: Bot, href: "/agents" },
@@ -71,9 +89,13 @@ export default function Sidebar({
   collapsed = false,
   onToggleCollapse,
   onNavigate,
+  showPhotoStudio = false,
 }: SidebarProps) {
   const { t } = useI18n();
   const pathname = usePathname();
+  // Capability-first : une entrée de verticale non activée n'est pas rendue du tout
+  // (ni active, ni grisée) — elle n'existe simplement pas pour ce tenant.
+  const navItems = NAV.filter((item) => !item.photoOnly || showPhotoStudio);
   const email = userEmail ?? "";
   const name = displayName(email) || t("sidebar.userFallback");
   const isActive = (href: string): boolean =>
@@ -94,7 +116,7 @@ export default function Sidebar({
       </div>
 
       <nav className="hos-nav" aria-label={t("sidebar.navAria")}>
-        {NAV.map((item) => {
+        {navItems.map((item) => {
           const Icon = item.icon;
           // Route exists → a real navigable link; otherwise a disabled "coming soon" button.
           if (item.href) {

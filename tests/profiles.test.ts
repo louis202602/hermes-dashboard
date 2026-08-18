@@ -243,7 +243,11 @@ test("PROFILE_IDS: universal set, legacy ids kept (persisted keys only ever grow
     [...PROFILE_IDS],
     [
       "direction", "commercial", "operations", "chantier", "immobilier", "restaurant",
-      "ecommerce", "logistique", "finance", "marketing", "support", "custom",
+      "ecommerce", "logistique", "finance", "marketing", "support",
+      // PHOTO-P0 — verticale Hermès Studio, ajoutée AVANT "custom" (qui reste le
+      // dernier). Les ids déjà persistés sont inchangés : la liste ne fait que croître.
+      "photographe",
+      "custom",
     ],
   );
 });

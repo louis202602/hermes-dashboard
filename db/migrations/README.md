@@ -752,3 +752,94 @@ Canonical geographic source for the free (MapLibre + OpenStreetMap) worksite map
   overridable for self-hosted PMTiles/tileserver). MapLibre + the map data load ONLY
   when the opt-in `chantiers-map` widget is added or the `/chantiers/carte` page is
   opened. External routing = an "Ouvrir l'itinéraire" link (no paid API).
+
+## PHOTO-P0 — Verticale Hermès Studio (2026-08-18) — **NON APPLIQUÉE**
+
+Construction préparatoire de la verticale photographe décrite dans
+`docs/hermes-studio-photographe-architecture.md`. **`GO_LIVE = NO` :** ces six
+fichiers ne sont **pas** appliqués — ils constituent le diff à examiner avant
+toute migration réelle.
+
+| Fichier | Contenu |
+|------|---------|
+| `20260818_photo_studio_1_schema.sql` | 14 tables `photo_*` (activation, clients, membres, séances, assets, signaux, verdicts, consignes, profils de style, jobs d'édition, galeries, opportunités, consentement, brouillons marketing). RLS **enabled sans policy** ⇒ deny-all ; accès par façade uniquement. Aucune colonne ne stocke un RAW ni un gabarit biométrique. |
+| `20260818_photo_studio_2_services.sql` | Services métier canoniques : `photo_session_status_rank`, `compute_photo_session_state` (**le « Studio Director » = une projection SQL, pas un second orchestrateur**), `verifier_consentement_photo` (gate fail-closed), `detect_photo_upsell_opportunities` (SQL pur, lecture seule), `derive_photo_culling_verdicts` (**unique implémentation** des seuils de tri). |
+| `20260818_photo_studio_3_facades.sql` | 1 garde partagée + 14 façades `public.*` (8 lectures, 6 écritures). SECURITY DEFINER, `search_path` verrouillé, REVOKE PUBLIC / GRANT `authenticated`, tenant résolu par `resolve_active_tenant` — **aucune n'accepte de `tenant_id` du client**. |
+| `20260818_photo_studio_4_storage_proxies.sql` | Bucket **privé** `hermes-photo-proxies` (6 MiB, jpeg/webp) + RLS `storage.objects` dérivant le tenant de la clé d'objet, **sans policy DELETE**. Façades finalize / failed / purge, bornées et appelables — aucun worker, aucun scheduler. Réutilise `hermes_os.is_active_tenant_member` (ardoise pièces jointes) sans la redéfinir. |
+| `20260818_photo_studio_5_dormant_registry.sql` | 11 actions catalogue **`enabled = false`**, 6 configurations d'exécution `enabled = false`, 11 politiques SW15 `DISABLED`, 5 abonnés SW20 `DISABLED`, 4 définitions de métriques SW19 additives, 1 budget SW23 conditionnel (`on conflict do nothing`). |
+| `20260818_photo_studio_9_rollback.sql` | Teardown intégral, ordre inverse des dépendances. Ne touche PAS aux briques partagées d'une autre ardoise. |
+
+### Invariants (vérifiés mécaniquement par `tests/photo-migrations.test.ts`)
+
+- **Dormance prouvée.** `hermes_os.request_agent_action` filtre
+  `where action_key = … and enabled = true` : une action photo répond donc
+  `UNKNOWN_ACTION` même à un appelant authentifié, membre et autorisé. Par
+  conséquent `get_available_capabilities()` ne la renvoie pas, et **aucun widget,
+  profil, menu ou route photo n'apparaît** tant qu'un opérateur n'a pas activé.
+- **Aucune suppression de photo.** Il n'existe aucun `DELETE` sur
+  `photo_session_assets` ni sur les verdicts. « Écarter » écrit
+  `human_decision = 'DISCARD'` ; la purge de proxy passe le statut à `PURGED` et
+  oublie les chemins, en conservant la ligne d'inventaire. Le fichier d'origine
+  n'a jamais quitté le poste de la photographe.
+- **Protection prioritaire.** Dans `derive_photo_culling_verdicts`, la branche
+  « couverte par une consigne PROTECT » est évaluée **avant** toute branche de
+  rejet, et une décision humaine déjà prise n'est jamais écrasée.
+- **RGPD.** Contrainte de table `photo_consent_minors_need_guardian` (mineurs ⇒
+  consentement du représentant légal obligatoire), `identity_scope` par défaut
+  `NONE`, aucune reconnaissance faciale, aucune lecture GPS des EXIF, minimisation
+  sur `photo_client_members` (prénom + mois/année seulement).
+- **Non-régression assumée.** `component_registry` n'est **pas** alimenté :
+  `get_platform_health()` compte toutes ses lignes sans filtre de visibilité, et y
+  déclarer des agents encore inexistants changerait un chiffre affiché.
+
+### Écarts assumés par rapport au rapport d'architecture
+
+1. **Les écritures déterministes ne passent pas par `request_agent_action`.**
+   `agent_action_catalog` porte `CHECK (target_kind = 'N8N_WORKFLOW')` : une action
+   dont le runner est une fonction Postgres n'y est pas représentable sans modifier
+   une contrainte existante. Ces écritures suivent donc le patron déjà en place
+   (`upsert_dashboard_user_preferences`, `upsert_chantier_geocode`,
+   `finalize_hermes_attachment`) : façade fail-closed pilotée par l'utilisateur. Les
+   actions pilotées par un AGENT restent réservées à la passerelle unique.
+2. **Table d'activation dédiée** plutôt que `tenant_module_activation`, dont la FK
+   vers `component_registry` imposerait précisément l'inflation de KPI écartée
+   ci-dessus.
+3. **Lectures galeries / revenus / marketing non livrées.** Leurs tables ne peuvent
+   être alimentées que par un consumer n8n : livrer des lecteurs sur des tables
+   toujours vides produirait des panneaux décoratifs.
+
+### Ce qui a réellement été vérifié
+
+Le SQL n'a **pas** été appliqué à la production. Il a en revanche été exécuté sur
+un **PostgreSQL 16 local et jetable** (schémas Hermès stubés), ce qui a validé :
+application des 5 lots · **ré-application** des 5 lots (idempotence) · rollback
+complet · seconde application/rollback. Deux défauts réels ont été trouvés par
+cette exécution et corrigés :
+
+1. `derive_photo_culling_verdicts` imbriquait `lag()` dans `sum() over` — interdit
+   par Postgres ; le décalage est désormais matérialisé dans un CTE `base`.
+2. `sw15_policies` / `sw20_subscribers` n'ont aucune contrainte d'unicité :
+   `on conflict do nothing` n'y protégeait de rien et les lignes se dupliquaient à
+   la ré-application ; remplacé par une anti-jointure `where not exists`.
+   `create policy` n'acceptant pas `if not exists`, le lot 4 retire désormais ses
+   policies avant de les recréer.
+
+Les deux régressions sont verrouillées par `tests/photo-migrations.test.ts`.
+
+Comportement vérifié sur ce banc d'essai : portillon d'activation (toutes les
+façades répondent `MODULE_DISABLED` avant activation) · idempotence de la création
+de séance et de l'import · **consigne PROTECT** (contre-épreuve : sans la consigne
+la photo est `REJECTED_SUGGESTION`, avec elle `KEEP_SUGGESTION`) · **aucune
+suppression** (4 assets avant / 4 après avoir tout écarté ; purge de proxy sans
+perte de la ligne) · décision humaine non écrasée par une ré-exécution du tri ·
+verrou mineurs · gate de consentement fail-closed · **isolation cross-tenant avec
+les deux tenants activés** (0 séance, 0 client, `found=false`, écriture croisée
+`NOT_FOUND`) · non authentifié et sans tenant refusés · chemin de stockage forgé
+refusé (`PATH_OUT_OF_SCOPE`).
+
+### Protocole de vérification
+
+`db/tests/photo_studio_isolation.test.sql` — assertions d'isolation, de
+fail-closed, de consentement et de non-suppression, à jouer **au moment** de la
+première migration. Elles n'ont pas encore été exécutées et rien n'est présenté
+ici comme constaté.
