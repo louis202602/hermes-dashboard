@@ -157,7 +157,9 @@ test("la phrase de repli est littérale et propose de transmettre", () => {
 });
 
 // --- Incertitude --------------------------------------------------------------------
-test("sous le seuil de confiance, on ne devine pas : on fait rappeler", () => {
+test("sous le seuil de confiance, on ne devine pas : on passe la main à un humain", () => {
+  // Volontairement SANS numéro de transfert : l'escalade ne dépend pas de la
+  // configuration, car on ne peut pas se fier au numéro qu'on a cru entendre.
   const d = decideTurn({
     utterance: "…grésillement…",
     slots: empty,
@@ -167,7 +169,21 @@ test("sous le seuil de confiance, on ne devine pas : on fait rappeler", () => {
     confidence: LOW_CONFIDENCE_THRESHOLD - 0.01,
   });
   assert.equal(d.handoffReason, "LOW_CONFIDENCE");
-  assert.equal(d.disposition, "CALLBACK_REQUESTED");
+  assert.equal(d.disposition, "HUMAN_REQUIRED");
+});
+
+test("le seuil de confiance est testé des deux côtés de la frontière", () => {
+  const at = (confidence: number) =>
+    decideTurn({
+      utterance: "Bonjour, je cherche une photographe pour mon mariage",
+      slots: { ...empty, serviceType: "MARIAGE" },
+      transferNumber: "+33499000000",
+      allowedTopics: [],
+      hasGroundedAnswer: false,
+      confidence,
+    });
+  assert.equal(at(LOW_CONFIDENCE_THRESHOLD - 0.01).handoffReason, "LOW_CONFIDENCE");
+  assert.equal(at(LOW_CONFIDENCE_THRESHOLD).handoffReason, "NONE", "au seuil, on continue");
 });
 
 test("la sécurité humaine passe AVANT le seuil de confiance", () => {
@@ -222,4 +238,63 @@ test("aucun secret fournisseur n'entre dans le dépôt", () => {
       assert.ok(!pattern.test(src), `${f} : secret potentiel détecté`);
     }
   }
+});
+
+// --- SCÉNARIOS D'AUDIT (exigés à la revue de la PR #58) ------------------------
+// Les six cas ci-dessous sont la formulation littérale de l'audit. Ils sont
+// figés en tests pour qu'aucune régression future ne puisse les rouvrir.
+
+const auditTurn = (over: Partial<Parameters<typeof decideTurn>[0]>) =>
+  decideTurn({
+    utterance: "Combien coûte un reportage de mariage ?",
+    slots: empty,
+    transferNumber: "+33499000000",
+    allowedTopics: ["TARIF"],
+    hasGroundedAnswer: false,
+    confidence: 0.95,
+    ...over,
+  });
+
+test("AUDIT 1 — tarif absent (price NULL, non citable) ⇒ aucun prix annoncé", () => {
+  // price_from_eur = NULL et quotable_by_phone = false ⇒ la façade SQL ne
+  // renvoie PAS l'offre, donc hasGroundedAnswer = false.
+  const d = auditTurn({ hasGroundedAnswer: false });
+  assert.equal(d.action, "HANDOFF");
+  assert.equal(d.outOfScope, true);
+});
+
+test("AUDIT 2 — tarif présent MAIS non autorisé ⇒ les 900 € ne sortent pas", () => {
+  // quotable_by_phone = false ⇒ l'offre est filtrée en base (o.quotable_by_phone),
+  // donc aucune donnée ancrée ne remonte, même si le prix existe.
+  const d = auditTurn({ hasGroundedAnswer: false, allowedTopics: ["TARIF"] });
+  assert.notEqual(d.action, "ANSWER", "un prix non citable ne doit jamais être annoncé");
+  assert.equal(d.handoffReason, "OUT_OF_CATALOG");
+});
+
+test("AUDIT 3 — tarif présent ET autorisé ⇒ citable", () => {
+  const d = auditTurn({ hasGroundedAnswer: true, allowedTopics: ["TARIF"] });
+  assert.equal(d.action, "ANSWER");
+  assert.equal(d.outOfScope, false);
+});
+
+test("AUDIT 4 — disponibilité inconnue ⇒ aucune réservation affirmée", () => {
+  const d = auditTurn({
+    utterance: "Vous êtes libre le 12 juin ?",
+    allowedTopics: ["DISPONIBILITE"],
+    hasGroundedAnswer: false,
+  });
+  assert.equal(d.action, "HANDOFF", "sans agenda ancré, on ne confirme rien");
+  assert.notEqual(d.action, "CONFIRM");
+});
+
+test("AUDIT 5 — aucun numéro de transfert ⇒ CALLBACK, jamais un faux LIVE_TRANSFER", () => {
+  const d = auditTurn({ utterance: "Je veux parler à quelqu'un", transferNumber: null });
+  assert.equal(d.disposition, "CALLBACK_REQUESTED");
+  assert.notEqual(d.disposition, "LIVE_TRANSFER_REQUESTED");
+});
+
+test("AUDIT 6 — forte incertitude ⇒ HUMAN_REQUIRED", () => {
+  const d = auditTurn({ utterance: "…grésillement…", confidence: 0.2 });
+  assert.equal(d.handoffReason, "LOW_CONFIDENCE");
+  assert.equal(d.disposition, "HUMAN_REQUIRED");
 });

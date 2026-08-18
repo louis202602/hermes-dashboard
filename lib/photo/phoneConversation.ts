@@ -112,7 +112,11 @@ const HANDOFF_TO_DISPOSITION: Record<PhotoHandoffReason, PhotoCallDisposition> =
   COMPLEX_CONTRACT: "HUMAN_REQUIRED",
   EMOTIONALLY_SENSITIVE: "HUMAN_REQUIRED",
   OUT_OF_CATALOG: "CALLBACK_REQUESTED",
-  LOW_CONFIDENCE: "CALLBACK_REQUESTED",
+  // Forte incertitude ⇒ HUMAIN, et non un simple rappel : si l'agent n'a pas
+  // compris l'appelant, il a pu tout aussi mal entendre son NUMÉRO. Promettre
+  // un rappel sur une donnée dont on doute reviendrait à perdre l'appel en
+  // silence ; escalader vers un humain ne présume, lui, d'aucune capture.
+  LOW_CONFIDENCE: "HUMAN_REQUIRED",
   BOOKING_NEEDS_HUMAN: "CALLBACK_REQUESTED",
   NONE: "AI_HANDLED",
 };
