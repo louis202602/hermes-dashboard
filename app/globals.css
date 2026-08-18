@@ -704,14 +704,6 @@ html[data-theme="light"] .dashboard-sidebar {
   color: var(--warning);
 }
 
-/* Reduced hero microcopy — the single premium prompt above the composer. */
-.cc-hero-prompt {
-  margin: -2px 0 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-  letter-spacing: 0.01em;
-}
-
 /* Hero ask — the HermesPanel hero variant sits INSIDE the hero glass, so the panel
    itself is transparent (no nested card) and shows only the composer. */
 .hermes-panel-hero {
@@ -724,12 +716,19 @@ html[data-theme="light"] .dashboard-sidebar {
   backdrop-filter: none !important;
 }
 .hermes-panel-hero .hermes-panel-header,
-.hermes-panel-hero .hermes-insight-top {
+.hermes-panel-hero .hermes-insight-top,
+.hermes-panel-hero .hermes-composer-eyebrow,
+.hermes-panel-hero .hermes-command-left {
+  /* Minimalist Home command post: no header, no eyebrow, no attach/read-aloud/hint —
+     only the identity (hero orb), the input, and the mic + send buttons. */
   display: none;
 }
 .hermes-panel-hero .hermes-exec-grid {
   grid-template-columns: 1fr;
   gap: 12px;
+}
+.hermes-panel-hero .hermes-command-actions {
+  justify-content: flex-end;
 }
 .hermes-panel-hero .hermes-thread {
   max-height: 148px;
@@ -1893,6 +1892,40 @@ html[data-reduce-motion="1"] .hermes-typing-dots span {
   animation-duration: 2.4s;
   background: radial-gradient(circle, rgba(90, 215, 255, 0.5), transparent 70%);
 }
+
+/* The star inside the sphere — calm at rest, alive while thinking. */
+.hermes-orb-star {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 52%;
+  height: 52%;
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+  fill: #eaf9ff;
+  opacity: 0.6;
+  filter: drop-shadow(0 0 2px rgba(234, 249, 255, 0.65));
+  pointer-events: none;
+}
+.hermes-orb.is-thinking .hermes-orb-star {
+  opacity: 0.96;
+  filter: drop-shadow(0 0 5px rgba(170, 238, 255, 0.95));
+  animation: hermes-star-think 2.4s ease-in-out infinite;
+}
+@keyframes hermes-star-think {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg) scale(0.9);
+    opacity: 0.72;
+  }
+  50% {
+    transform: translate(-50%, -50%) rotate(45deg) scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(90deg) scale(0.9);
+    opacity: 0.72;
+  }
+}
 @keyframes hermes-orb-spin {
   to {
     transform: rotate(360deg);
@@ -2063,6 +2096,7 @@ html[data-reduce-motion="1"] .hermes-typing-dots span {
   .hermes-orb-ring,
   .hermes-orb::after,
   .hermes-orb-core,
+  .hermes-orb-star,
   .hermes-typing::before,
   .hermes-bubble.is-assistant,
   .hermes-bubble.is-user {

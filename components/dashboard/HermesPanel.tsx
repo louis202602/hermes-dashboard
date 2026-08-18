@@ -177,9 +177,15 @@ type HermesPanelProps = {
    *  (header + live-state aside are hidden via CSS since the Home hero carries the
    *  identity/état). Omitted / "full" = the complete panel (chat sub-page). */
   variant?: "full" | "hero";
+  /** Reports when Hermès is composing a reply, so a parent (the Home hero) can animate
+   *  its own identity orb (the star inside the sphere) while thinking. */
+  onThinkingChange?: (thinking: boolean) => void;
 };
 
-export default function HermesPanel({ variant = "full" }: HermesPanelProps) {
+export default function HermesPanel({
+  variant = "full",
+  onThinkingChange,
+}: HermesPanelProps) {
   const { t } = useI18n();
 
   // Display-only helpers (closures over `t`); the underlying state/kind tokens
@@ -677,6 +683,10 @@ export default function HermesPanel({ variant = "full" }: HermesPanelProps) {
   // indicator shows in the thread during this window — the little life the chat was
   // missing. Action queue/running already has its own lifecycle badge, so it is excluded.
   const thinking = sending || !!activeResolve;
+  // Let a parent (Home hero) drive its identity orb's star from Hermès' thinking state.
+  useEffect(() => {
+    onThinkingChange?.(thinking);
+  }, [thinking, onThinkingChange]);
   // Send is blocked while any attachment is still uploading or has failed;
   // UPLOADED attachments are transmitted with the message.
   const attachmentsBusy = attachments.some((a) => a.state === "UPLOADING");
@@ -763,7 +773,11 @@ export default function HermesPanel({ variant = "full" }: HermesPanelProps) {
             name="command"
             aria-label={t("chat.composer.ariaLabel")}
             className="hermes-composer-input"
-            placeholder={t("chat.composer.placeholder")}
+            placeholder={
+              variant === "hero"
+                ? t("home.hero.prompt")
+                : t("chat.composer.placeholder")
+            }
             rows={2}
             value={input}
             onChange={(event) => setInput(event.target.value)}
