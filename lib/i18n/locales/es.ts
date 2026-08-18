@@ -856,4 +856,12 @@ export const es: Messages = {
   "settings.row.defaultHome": "Modo de inicio predeterminado",
   "settings.quickActions.note": "Elija los accesos directos en «Acciones disponibles». Vacío = todas las acciones permitidas.",
   "settings.favorites.note": "Fija tus widgets y accesos favoritos (máx. 8).",
+  "home.hero.title": "Puesto de mando",
+  "home.hero.operational": "Operativo",
+  "home.hero.prompt": "¿Qué desea hacer?",
+  "home.stat.alerts": "Alertas",
+  "home.stat.todo": "Por tratar",
+  "home.stat.approvals": "Aprobaciones",
+  "home.stat.agents": "Agentes activos",
+  "home.actions.more": "Ver más",
 };

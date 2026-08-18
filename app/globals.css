@@ -623,6 +623,201 @@ html[data-theme="light"] .dashboard-sidebar {
   margin: 0 auto;
 }
 
+/* ══ Home PREMIUM — cockpit de synthèse (4 zones flottantes) ═════════════════
+   Volontairement étroit, verre léger et très espacé pour que le wallpaper reste
+   largement visible autour et à travers les surfaces. Aucune grande carte lourde. */
+.cc-premium {
+  max-width: 1060px;
+  gap: 22px;
+}
+
+/* Z1 — la barre de contexte flotte : verre plus léger encore. */
+.cc-premium > .context-bar {
+  background: color-mix(in srgb, var(--surface) 52%, transparent);
+  border-color: color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+/* Z2 — hero « poste de commande ». Verre léger, généreux, une seule surface. */
+.cc-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 26px 28px;
+  border-radius: 26px;
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--surface-strong) 60%, transparent),
+    color-mix(in srgb, var(--surface) 38%, transparent)
+  );
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  box-shadow: 0 30px 70px rgba(0, 8, 20, 0.34);
+}
+.cc-hero-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.cc-hero-orb {
+  filter: drop-shadow(0 6px 22px rgba(52, 152, 255, 0.34));
+}
+.cc-hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.cc-hero-copy > :first-child {
+  align-self: flex-start;
+}
+.cc-hero-title {
+  margin: 3px 0 0;
+  font-size: clamp(26px, 3.4vw, 40px);
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  line-height: 1.04;
+  color: var(--text-primary);
+}
+.cc-hero-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.cc-hero-state .status-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+/* Hero ask — the HermesPanel hero variant sits INSIDE the hero glass, so the panel
+   itself is transparent (no nested card) and shows only the composer. */
+.hermes-panel-hero {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  min-height: 0 !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+.hermes-panel-hero .hermes-panel-header,
+.hermes-panel-hero .hermes-insight-top {
+  display: none;
+}
+.hermes-panel-hero .hermes-exec-grid {
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+.hermes-panel-hero .hermes-thread {
+  max-height: 148px;
+}
+
+/* Z3 — synthèse : compteurs compacts (pas de listes). */
+.cc-synthese {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.cc-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface) 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+}
+.cc-stat strong {
+  font-size: 30px;
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--text-primary);
+}
+.cc-stat span {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+.cc-stat.is-critical strong {
+  color: var(--danger);
+}
+.cc-stat.is-warning strong {
+  color: var(--warning);
+}
+.cc-stat-kpi strong {
+  color: var(--hermes-cyan);
+}
+
+/* Z4 — actions rapides : chips premium compactes. */
+.cc-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.cc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 44%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
+}
+.cc-chip:hover {
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+  border-color: var(--border-strong);
+}
+.cc-chip svg {
+  color: var(--hermes-cyan);
+}
+.cc-chip-more {
+  color: var(--text-secondary);
+}
+
+/* Tablet — synthèse 2×2, hero un peu plus compact. */
+@media (max-width: 900px) {
+  .cc-synthese {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Mobile — DOM order already = contexte → hero → synthèse → chips (priorité voulue). */
+@media (max-width: 560px) {
+  .cc-premium {
+    gap: 16px;
+  }
+  .cc-hero {
+    padding: 20px 18px;
+    border-radius: 22px;
+  }
+  .cc-hero-title {
+    font-size: 27px;
+  }
+  .cc-stat {
+    padding: 13px 14px;
+  }
+  .cc-stat strong {
+    font-size: 25px;
+  }
+}
+
 .cc-zone {
   /* Layout wrapper only — no surface of its own; the wallpaper shows through the
      gaps and the cards keep their own semi-transparent glass. */

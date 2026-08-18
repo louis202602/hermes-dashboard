@@ -172,7 +172,14 @@ function newRequestId(): string {
   return `hermes-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-export default function HermesPanel() {
+type HermesPanelProps = {
+  /** "hero" = the épuré Home command post: a lighter surface with only the composer
+   *  (header + live-state aside are hidden via CSS since the Home hero carries the
+   *  identity/état). Omitted / "full" = the complete panel (chat sub-page). */
+  variant?: "full" | "hero";
+};
+
+export default function HermesPanel({ variant = "full" }: HermesPanelProps) {
   const { t } = useI18n();
 
   // Display-only helpers (closures over `t`); the underlying state/kind tokens
@@ -716,7 +723,9 @@ export default function HermesPanel() {
   else if (micRequested) micPhase = "REQUESTING_PERMISSION";
 
   return (
-    <section className="hermes-panel hermes-panel-exec">
+    <section
+      className={`hermes-panel hermes-panel-exec${variant === "hero" ? " hermes-panel-hero" : ""}`}
+    >
       <div className="hermes-panel-header">
         <div className="hermes-head-identity">
           <HermesOrb

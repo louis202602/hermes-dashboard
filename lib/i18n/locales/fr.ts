@@ -873,6 +873,14 @@ export const fr = {
   "settings.row.defaultHome": "Mode d’ouverture par défaut",
   "settings.quickActions.note": "Choisissez les raccourcis affichés dans « Actions disponibles ». Vide = toutes les actions autorisées.",
   "settings.favorites.note": "Épinglez vos widgets et raccourcis favoris (max 8).",
+  "home.hero.title": "Poste de commande",
+  "home.hero.operational": "Opérationnel",
+  "home.hero.prompt": "Que voulez-vous faire ?",
+  "home.stat.alerts": "Alertes",
+  "home.stat.todo": "À traiter",
+  "home.stat.approvals": "Approbations",
+  "home.stat.agents": "Agents actifs",
+  "home.actions.more": "Voir plus",
 };
 
 export type Messages = typeof fr;

@@ -856,4 +856,12 @@ export const en: Messages = {
   "settings.row.defaultHome": "Default opening mode",
   "settings.quickActions.note": "Choose the shortcuts shown in ‘Available actions’. Empty = all permitted actions.",
   "settings.favorites.note": "Pin your favorite widgets and shortcuts (max 8).",
+  "home.hero.title": "Command post",
+  "home.hero.operational": "Operational",
+  "home.hero.prompt": "What would you like to do?",
+  "home.stat.alerts": "Alerts",
+  "home.stat.todo": "To handle",
+  "home.stat.approvals": "Approvals",
+  "home.stat.agents": "Active agents",
+  "home.actions.more": "See more",
 };
