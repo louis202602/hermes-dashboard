@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   Activity,
   Bell,
@@ -27,24 +29,26 @@ type SidebarProps = {
   userEmail?: string;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  /** Close the mobile drawer after a client-side navigation. */
+  onNavigate?: () => void;
 };
 
-// The official Hermès OS navigation. Only "Command Center" (the current Accueil)
-// is built; the other destinations are shown per the master mockup but are
-// disabled with a "Bientôt disponible" hint — never a fake, working button.
-// Labels are i18n keys (localized at render); routes/icons are stable.
-const NAV: { key: MessageKey; icon: typeof LayoutDashboard; active?: boolean }[] = [
-  { key: "nav.commandCenter", icon: LayoutDashboard, active: true },
-  { key: "nav.chat", icon: Sparkles },
-  { key: "nav.activity", icon: Activity },
-  { key: "nav.company", icon: Building2 },
-  { key: "nav.agents", icon: Bot },
-  { key: "nav.approvals", icon: ClipboardCheck },
-  { key: "nav.security", icon: Shield },
-  { key: "nav.integrations", icon: Blocks },
-  { key: "header.notifications", icon: Bell },
-  { key: "nav.billing", icon: CreditCard },
-  { key: "nav.settings", icon: Settings },
+// The official Hermès OS navigation. Items with a built route (`href`) are real
+// Next.js links; destinations whose page does not exist yet carry NO href and stay
+// disabled with a "Bientôt disponible" hint — never a fake, dead link. Labels are
+// i18n keys (localized at render); routes/icons are stable.
+const NAV: { key: MessageKey; icon: typeof LayoutDashboard; href?: string }[] = [
+  { key: "nav.commandCenter", icon: LayoutDashboard, href: "/" },
+  { key: "nav.chat", icon: Sparkles, href: "/chat" },
+  { key: "nav.activity", icon: Activity, href: "/activite" },
+  { key: "nav.company", icon: Building2, href: "/entreprise" },
+  { key: "nav.agents", icon: Bot, href: "/agents" },
+  { key: "nav.approvals", icon: ClipboardCheck, href: "/approbations" },
+  { key: "nav.security", icon: Shield, href: "/securite" },
+  { key: "nav.integrations", icon: Blocks, href: "/integrations" },
+  { key: "header.notifications", icon: Bell, href: "/notifications" },
+  { key: "nav.billing", icon: CreditCard, href: "/facturation" },
+  { key: "nav.settings", icon: Settings, href: "/parametres/dashboard" },
 ];
 
 function initials(email: string): string {
@@ -66,10 +70,14 @@ export default function Sidebar({
   userEmail,
   collapsed = false,
   onToggleCollapse,
+  onNavigate,
 }: SidebarProps) {
   const { t } = useI18n();
+  const pathname = usePathname();
   const email = userEmail ?? "";
   const name = displayName(email) || t("sidebar.userFallback");
+  const isActive = (href: string): boolean =>
+    href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   return (
     <aside className={`hos-sidebar${collapsed ? " is-collapsed" : ""}`}>
@@ -88,18 +96,30 @@ export default function Sidebar({
       <nav className="hos-nav" aria-label={t("sidebar.navAria")}>
         {NAV.map((item) => {
           const Icon = item.icon;
-          const soon = !item.active;
+          // Route exists → a real navigable link; otherwise a disabled "coming soon" button.
+          if (item.href) {
+            const active = isActive(item.href);
+            return (
+              <Link
+                key={item.key}
+                href={item.href}
+                className={`hos-nav-item${active ? " is-active" : ""}`}
+                aria-current={active ? "page" : undefined}
+                onClick={onNavigate}
+              >
+                <Icon size={19} strokeWidth={1.8} />
+                <span className="hos-nav-label">{t(item.key)}</span>
+              </Link>
+            );
+          }
           return (
             <button
               type="button"
               key={item.key}
-              className={`hos-nav-item${item.active ? " is-active" : ""}${
-                soon ? " is-soon" : ""
-              }`}
-              disabled={soon}
-              aria-disabled={soon || undefined}
-              aria-current={item.active ? "page" : undefined}
-              title={soon ? t("header.notifications.soon") : undefined}
+              className="hos-nav-item is-soon"
+              disabled
+              aria-disabled
+              title={t("header.notifications.soon")}
             >
               <Icon size={19} strokeWidth={1.8} />
               <span className="hos-nav-label">{t(item.key)}</span>
@@ -109,15 +129,15 @@ export default function Sidebar({
       </nav>
 
       <div className="hos-sidebar-foot">
-        <button
-          type="button"
-          className="hos-nav-item is-soon"
-          disabled
-          title={t("header.notifications.soon")}
+        <Link
+          href="/aide"
+          className={`hos-nav-item${isActive("/aide") ? " is-active" : ""}`}
+          aria-current={isActive("/aide") ? "page" : undefined}
+          onClick={onNavigate}
         >
           <HelpCircle size={19} strokeWidth={1.8} />
           <span className="hos-nav-label">{t("sidebar.help")}</span>
-        </button>
+        </Link>
 
         <div className="hos-profile" title={email || undefined}>
           <span className="hos-avatar">{initials(email)}</span>

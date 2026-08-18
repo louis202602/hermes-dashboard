@@ -8,11 +8,14 @@ import type { PublicKpis, ServiceResult } from "@/types/hermes";
 
 type KpiGridProps = {
   kpis: ServiceResult<PublicKpis>;
+  /** Cockpit summary — cap the number of KPI cards shown (Command Center Home).
+   *  Omitted ⇒ the full set (unchanged for every existing caller). */
+  limit?: number;
 };
 
 const numberFormat = new Intl.NumberFormat("fr-FR");
 
-export default function KpiGrid({ kpis }: KpiGridProps) {
+export default function KpiGrid({ kpis, limit }: KpiGridProps) {
   const { t } = useI18n();
 
   if (!kpis.ok) {
@@ -65,9 +68,12 @@ export default function KpiGrid({ kpis }: KpiGridProps) {
     },
   ];
 
+  const shown =
+    typeof limit === "number" && limit >= 0 ? cards.slice(0, limit) : cards;
+
   return (
     <section className="kpi-grid" aria-label={t("kpi.ariaReal")}>
-      {cards.map((card) => {
+      {shown.map((card) => {
         const Icon = card.icon;
 
         return (

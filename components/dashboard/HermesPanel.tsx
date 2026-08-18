@@ -37,6 +37,7 @@ import {
 } from "@/lib/attachments/attachments";
 import { encodeImageFileToJpeg } from "@/lib/attachments/browserImage";
 import { attachInputConfig, type AttachMenuKind } from "@/lib/attachments/scan";
+import HermesOrb from "@/components/dashboard/HermesOrb";
 import ScanDocumentModal from "@/components/dashboard/ScanDocumentModal";
 import type { AttachmentUploadState } from "@/types/hermes-attachments";
 import { useVoice } from "@/lib/voice/useVoice";
@@ -65,7 +66,20 @@ type Turn = {
   userText?: string; // the user message that produced this turn (for retry)
   attachmentNames?: string[]; // filenames attached to this user turn
   attachmentNote?: string; // honest note if linking failed after send
+  createdAt?: number; // client clock at turn creation — display-only (discreet timestamp)
 };
+
+// Discreet HH:MM in the viewer's locale. Display-only; never affects logic or history.
+function formatTurnTime(ts: number | undefined): string | null {
+  if (!ts) return null;
+  try {
+    return new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit" }).format(
+      new Date(ts),
+    );
+  } catch {
+    return null;
+  }
+}
 
 // A composer attachment (Phase B — really uploaded). `state` is the TRANSPORT
 // lifecycle only: LOCAL → UPLOADING → UPLOADED (stored privately, not yet
@@ -554,6 +568,7 @@ export default function HermesPanel() {
       role: "user",
       text,
       attachmentNames: uploaded.length > 0 ? uploaded.map((a) => a.name) : undefined,
+      createdAt: Date.now(),
     };
     setTurns((prev) => [...prev, userTurn]);
     setSending(true);
@@ -614,6 +629,7 @@ export default function HermesPanel() {
       confidence: res.confidence,
       userText: text,
       lifecycle: res.outcome === "ACTION" ? res.status ?? "QUEUED" : resolving ? "RESOLVING" : undefined,
+      createdAt: Date.now(),
     };
     setTurns((prev) => [...prev, assistantTurn]);
 
@@ -649,6 +665,11 @@ export default function HermesPanel() {
     (!!activeAction &&
       (lastAssistant?.lifecycle === "QUEUED" ||
         lastAssistant?.lifecycle === "RUNNING"));
+  // The "Hermès is composing a reply" window: while the message is being sent or the
+  // resolver is still thinking (BEFORE the answer text lands). An animated typing
+  // indicator shows in the thread during this window — the little life the chat was
+  // missing. Action queue/running already has its own lifecycle badge, so it is excluded.
+  const thinking = sending || !!activeResolve;
   // Send is blocked while any attachment is still uploading or has failed;
   // UPLOADED attachments are transmitted with the message.
   const attachmentsBusy = attachments.some((a) => a.state === "UPLOADING");
@@ -697,10 +718,17 @@ export default function HermesPanel() {
   return (
     <section className="hermes-panel hermes-panel-exec">
       <div className="hermes-panel-header">
-        <div className="hermes-head-titles">
-          <span className="panel-eyebrow">{t("chat.header.eyebrow")}</span>
-          <h2>Hermès</h2>
-          <p>{t("chat.header.intro")}</p>
+        <div className="hermes-head-identity">
+          <HermesOrb
+            size={44}
+            state={inFlight ? "thinking" : "idle"}
+            className="hermes-head-orb"
+          />
+          <div className="hermes-head-titles">
+            <span className="panel-eyebrow">{t("chat.header.eyebrow")}</span>
+            <h2>Hermès</h2>
+            <p>{t("chat.header.intro")}</p>
+          </div>
         </div>
 
         <div className="hermes-head-meta">
@@ -1024,62 +1052,97 @@ export default function HermesPanel() {
           </div>
 
           <div className="hermes-thread" ref={threadRef} data-testid="hermes-thread">
-            {turns.length === 0 ? (
+            {turns.length === 0 && !thinking ? (
               <p className="hermes-thread-empty">{t("chat.thread.empty")}</p>
             ) : (
-              turns.map((turn) => (
-                <div
-                  key={turn.id}
-                  className={`hermes-bubble is-${turn.role}`}
-                  data-testid={turn.role === "assistant" ? "hermes-assistant" : "hermes-user"}
-                  data-outcome={turn.outcome ?? ""}
-                >
-                  <p>{turn.text}</p>
-                  {turn.role === "user" && turn.attachmentNames?.length ? (
-                    <span className="hermes-bubble-attachments">
-                      {turn.attachmentNames.map((n, i) => (
-                        <span key={`${turn.id}-att-${i}`} className="hermes-bubble-attachment">
-                          <FileIcon size={11} strokeWidth={2} />
-                          {n}
-                        </span>
-                      ))}
+              <>
+              {turns.map((turn) => {
+                const time = formatTurnTime(turn.createdAt);
+                return (
+                <div key={turn.id} className={`hermes-turn is-${turn.role}`}>
+                  {turn.role === "assistant" ? (
+                    <span className="hermes-turn-avatar" aria-hidden>
+                      <HermesOrb size={26} />
                     </span>
                   ) : null}
-                  {turn.role === "user" && turn.attachmentNote ? (
-                    <span className="hermes-bubble-attachment-note">{turn.attachmentNote}</span>
-                  ) : null}
-                  {turn.role === "assistant" && turn.lifecycle ? (
-                    <span className={`hermes-lifecycle is-${toneFor(turn.lifecycle)}`}>
-                      {STATE_LABEL[turn.lifecycle]
-                        ? t(STATE_LABEL[turn.lifecycle] as MessageKey)
-                        : turn.lifecycle}
-                      {turn.chantierId
-                        ? ` · ${t("chat.lifecycle.worksite", { id: turn.chantierId })}`
-                        : ""}
-                    </span>
-                  ) : null}
-                  {turn.role === "assistant" && turn.lifecycle === "PENDING_APPROVAL" ? (
-                    <span className="hermes-lifecycle-hint">
-                      {t("chat.approval.hint")}
-                    </span>
-                  ) : null}
-                  {turn.role === "assistant" && turn.requestId ? (
-                    <span className="agent-req">
-                      {t("chat.ref", { id: turn.requestId })}
-                    </span>
-                  ) : null}
-                  {turn.role === "assistant" && turn.outcome === "ERROR" && turn.userText ? (
-                    <button
-                      type="button"
-                      className="hermes-retry-button"
-                      disabled={inFlight}
-                      onClick={() => send(turn.userText as string)}
+                  <div className="hermes-turn-main">
+                    <div
+                      className={`hermes-bubble is-${turn.role}`}
+                      data-testid={turn.role === "assistant" ? "hermes-assistant" : "hermes-user"}
+                      data-outcome={turn.outcome ?? ""}
                     >
-                      {t("common.retry")}
-                    </button>
-                  ) : null}
+                      <p>{turn.text}</p>
+                      {turn.role === "user" && turn.attachmentNames?.length ? (
+                        <span className="hermes-bubble-attachments">
+                          {turn.attachmentNames.map((n, i) => (
+                            <span key={`${turn.id}-att-${i}`} className="hermes-bubble-attachment">
+                              <FileIcon size={11} strokeWidth={2} />
+                              {n}
+                            </span>
+                          ))}
+                        </span>
+                      ) : null}
+                      {turn.role === "user" && turn.attachmentNote ? (
+                        <span className="hermes-bubble-attachment-note">{turn.attachmentNote}</span>
+                      ) : null}
+                      {turn.role === "assistant" && turn.lifecycle ? (
+                        <span className={`hermes-lifecycle is-${toneFor(turn.lifecycle)}`}>
+                          {STATE_LABEL[turn.lifecycle]
+                            ? t(STATE_LABEL[turn.lifecycle] as MessageKey)
+                            : turn.lifecycle}
+                          {turn.chantierId
+                            ? ` · ${t("chat.lifecycle.worksite", { id: turn.chantierId })}`
+                            : ""}
+                        </span>
+                      ) : null}
+                      {turn.role === "assistant" && turn.lifecycle === "PENDING_APPROVAL" ? (
+                        <span className="hermes-lifecycle-hint">
+                          {t("chat.approval.hint")}
+                        </span>
+                      ) : null}
+                      {turn.role === "assistant" && turn.requestId ? (
+                        <span className="agent-req">
+                          {t("chat.ref", { id: turn.requestId })}
+                        </span>
+                      ) : null}
+                      {turn.role === "assistant" && turn.outcome === "ERROR" && turn.userText ? (
+                        <button
+                          type="button"
+                          className="hermes-retry-button"
+                          disabled={inFlight}
+                          onClick={() => send(turn.userText as string)}
+                        >
+                          {t("common.retry")}
+                        </button>
+                      ) : null}
+                    </div>
+                    {time ? <span className="hermes-turn-time">{time}</span> : null}
+                  </div>
                 </div>
-              ))
+                );
+              })}
+              {thinking ? (
+                <div className="hermes-turn is-assistant is-thinking">
+                  <span className="hermes-turn-avatar" aria-hidden>
+                    <HermesOrb size={26} state="thinking" />
+                  </span>
+                  <div className="hermes-turn-main">
+                    <div
+                      className="hermes-bubble is-assistant hermes-typing"
+                      data-testid="hermes-typing"
+                      aria-live="polite"
+                    >
+                      <span className="hermes-typing-dots" aria-hidden>
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                      <span className="hermes-typing-text">{t("chat.voice.thinking")}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              </>
             )}
           </div>
         </aside>
