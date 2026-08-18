@@ -549,13 +549,27 @@ begin
   end if;
 
   -- Client : réutilisé s'il existe (clé naturelle), créé sinon.
+  --
+  -- CONCURRENCE : deux créations simultanées pour un client NOUVEAU (double-clic,
+  -- deux onglets) peuvent toutes deux passer le SELECT avant que l'une n'ait
+  -- committé. `on conflict do nothing` + relecture rend donc cette section
+  -- réellement idempotente au lieu de faire remonter une violation d'unicité.
   select c.id into v_client from hermes_os.photo_clients c
    where c.tenant_id = v_t and lower(btrim(c.display_name)) = lower(v_name)
    limit 1;
   if v_client is null then
     insert into hermes_os.photo_clients (tenant_id, display_name)
     values (v_t, v_name)
+    on conflict do nothing
     returning id into v_client;
+  end if;
+  if v_client is null then
+    select c.id into v_client from hermes_os.photo_clients c
+     where c.tenant_id = v_t and lower(btrim(c.display_name)) = lower(v_name)
+     limit 1;
+  end if;
+  if v_client is null then
+    return jsonb_build_object('ok', false, 'code', 'CLIENT_RESOLUTION_FAILED');
   end if;
 
   insert into hermes_os.photo_sessions

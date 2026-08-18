@@ -212,6 +212,79 @@ test("TRI: une photo protégée ne peut jamais être suggérée au rejet", () =>
   assert.ok(derive.includes("human_decision is null"));
 });
 
+// --- MOINDRE PRIVILÈGE (défaut trouvé à l'audit final) -----------------------
+test("PRIVILÈGE: chaque fonction interne `hermes_os` révoque PUBLIC", () => {
+  // `authenticated` détient USAGE sur le schéma `hermes_os` en production, et
+  // toutes les fonctions internes existantes y sont explicitement restreintes
+  // (ACL constatées : postgres=X, parfois service_role=X). Ces fonctions prennent
+  // un TENANT EN PARAMÈTRE : sans REVOKE, elles seraient un contournement
+  // d'isolation dès qu'un chemin d'appel apparaîtrait.
+  const created = [...ALL_UP.matchAll(/create or replace function hermes_os\.(\w+)\(/g)].map(
+    (m) => m[1],
+  );
+  assert.ok(created.length >= 6, `attendu ≥6 fonctions internes, trouvé ${created.length}`);
+  for (const fn of new Set(created)) {
+    assert.ok(
+      new RegExp(`revoke all on function hermes_os\\.${fn}\\(`).test(ALL_UP),
+      `hermes_os.${fn} : REVOKE PUBLIC manquant`,
+    );
+    assert.ok(
+      !new RegExp(`grant execute on function hermes_os\\.${fn}\\(`).test(ALL_UP),
+      `hermes_os.${fn} : aucune fonction interne ne doit être accordée à un rôle client`,
+    );
+  }
+});
+
+// --- VERROU MARKETING (structurel, pas déclaratif) ---------------------------
+test("MARKETING: un déclencheur revalide LE consentement référencé à la publication", () => {
+  assert.ok(SERVICES.includes("create or replace function hermes_os.photo_marketing_publish_guard()"));
+  assert.ok(
+    SERVICES.includes("before insert or update on hermes_os.photo_marketing_draft"),
+    "le verrou doit s'appliquer à tout écrivain, pas seulement à la façade",
+  );
+  // Il refuse chaque façon de contourner le consentement.
+  for (const code of [
+    "PHOTO_MARKETING_NO_CONSENT",
+    "PHOTO_MARKETING_CONSENT_NOT_FOUND",
+    "PHOTO_MARKETING_CONSENT_CLIENT_MISMATCH",
+    "PHOTO_MARKETING_CONSENT_REVOKED",
+    "PHOTO_MARKETING_CONSENT_EXPIRED",
+    "PHOTO_MARKETING_USE_CASE_NOT_GRANTED",
+    "PHOTO_MARKETING_MINOR_WITHOUT_GUARDIAN",
+    "PHOTO_MARKETING_IDENTITY_SCOPE_EXCEEDED",
+  ]) {
+    assert.ok(SERVICES.includes(code), `refus manquant : ${code}`);
+  }
+  // Il ne bloque QUE la publication : un brouillon reste possible.
+  assert.ok(SERVICES.includes("if new.status is distinct from 'PUBLISHED' then"));
+  assert.ok(ROLLBACK.includes("drop trigger if exists photo_marketing_publish_guard"));
+  assert.ok(ROLLBACK.includes("drop function if exists hermes_os.photo_marketing_publish_guard()"));
+});
+
+// --- CONCURRENCE -------------------------------------------------------------
+test("CONCURRENCE: la création de client est idempotente sous course", () => {
+  const block = FACADES.slice(
+    FACADES.indexOf("-- CRÉATION : le nom du client"),
+    FACADES.indexOf("insert into hermes_os.photo_sessions"),
+  );
+  assert.ok(block.includes("on conflict do nothing"), "insertion de client non protégée");
+  assert.ok(
+    (block.match(/select c\.id into v_client/g) ?? []).length >= 2,
+    "une relecture après conflit est nécessaire",
+  );
+  assert.ok(block.includes("CLIENT_RESOLUTION_FAILED"), "échec résiduel non fail-closed");
+});
+
+// --- HONNÊTETÉ DES SEUILS ----------------------------------------------------
+test("HONNÊTETÉ: les seuils de tri sont déclarés NON CALIBRÉS", () => {
+  assert.ok(SERVICES.includes("SEUILS NON CALIBRÉS"), "le SQL doit le dire");
+  const ui = readFileSync(
+    fileURLToPath(new URL("../components/dashboard/PhotoCullingReview.tsx", import.meta.url)),
+    "utf8",
+  );
+  assert.ok(ui.includes("non encore calibrés"), "l'interface doit le dire à la photographe");
+});
+
 // --- RÉVERSIBILITÉ -----------------------------------------------------------
 test("ROLLBACK: chaque table créée est supprimée", () => {
   const tables = [...SCHEMA.matchAll(/create table if not exists hermes_os\.(photo_\w+)/g)].map(

@@ -67,6 +67,10 @@ drop function if exists public.get_photo_module_state();
 drop function if exists hermes_os.photo_guard();
 
 -- --- Lot 2 : services canoniques ------------------------------------------
+-- Le déclencheur d'abord : sa fonction ne peut pas être supprimée tant qu'il
+-- l'utilise, et la table qui le porte n'est supprimée qu'en toute fin.
+drop trigger if exists photo_marketing_publish_guard on hermes_os.photo_marketing_draft;
+drop function if exists hermes_os.photo_marketing_publish_guard();
 drop function if exists hermes_os.derive_photo_culling_verdicts(text, uuid);
 drop function if exists hermes_os.detect_photo_upsell_opportunities(text, date);
 drop function if exists hermes_os.verifier_consentement_photo(text, uuid, text, text, text, timestamptz);

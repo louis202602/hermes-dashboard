@@ -177,6 +177,14 @@ grant execute on function public.mark_photo_proxy_failed(uuid) to authenticated;
 --    `mark_photo_proxy_purged` oublie le dérivé (chemins effacés, statut PURGED)
 --    SANS supprimer la ligne d'inventaire et sans jamais toucher au fichier
 --    original, qui n'a jamais quitté le poste de la photographe.
+--
+--    ⚠️ ORDRE OBLIGATOIRE : lister → supprimer les objets Storage → marquer purgé.
+--    `mark_photo_proxy_purged` efface les chemins ; l'appeler AVANT la suppression
+--    physique rendrait l'objet définitivement orphelin (plus aucune référence).
+--
+--    ⚠️ PHASE 1 : ces deux façades ne sont câblées à AUCUN appelant. Le TTL de
+--    90 jours est donc posé mais PAS appliqué automatiquement — conforme à
+--    « aucun worker, aucun scheduler », à câbler explicitement au go-live.
 -- ---------------------------------------------------------------------------
 create or replace function public.list_expired_photo_proxies(p_limit integer default 200)
 returns jsonb

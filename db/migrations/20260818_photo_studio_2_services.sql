@@ -391,7 +391,13 @@ $function$;
 --        verdicts.
 --
 --    Rafale = photos consécutives (par `captured_at`) espacées de ≤ 2 s.
---    Quasi-doublon = distance de Hamming ≤ 6 bits sur le dHash, dans la rafale.
+--
+--    ⚠️ SEUILS NON CALIBRÉS. 0.35 (rejet), 0.55 (plus faible d'une rafale), 2 s
+--    (fenêtre de rafale) et `SHARPNESS_REFERENCE` côté navigateur sont des points
+--    de départ RAISONNÉS, jamais mesurés sur de vraies séances. Ils ne doivent
+--    pas être présentés comme des seuils de qualité validés tant que le
+--    shadow-mode SW17 n'a pas comparé ce tri au tri manuel de la photographe.
+--    Conséquence de conception : ils ne peuvent produire qu'une SUGGESTION.
 -- ---------------------------------------------------------------------------
 create or replace function hermes_os.derive_photo_culling_verdicts(
   p_tenant     text,
@@ -511,5 +517,95 @@ begin
     'rejected', v_rejected, 'best_of_series', v_best, 'protected', v_protected);
 end;
 $function$;
+
+-- ---------------------------------------------------------------------------
+-- 6. VERROU DE PUBLICATION MARKETING — structurel, pas déclaratif.
+--
+--    La contrainte de table n'exige qu'un `consent_id` NON NUL : un consentement
+--    RÉVOQUÉ ou EXPIRÉ la satisfait. Ce déclencheur ferme le trou pour de bon en
+--    revalidant, à l'instant de la publication, LE consentement référencé —
+--    pas « un » consentement du client.
+--
+--    Portée : tout écrivain, présent ou futur — façade, consumer n8n, opérateur
+--    en SQL direct. Aucun module marketing ne pourra contourner la règle, même
+--    en n'appelant pas la façade prévue.
+-- ---------------------------------------------------------------------------
+create or replace function hermes_os.photo_marketing_publish_guard()
+returns trigger
+language plpgsql
+set search_path to 'hermes_os', 'pg_catalog', 'pg_temp'
+as $function$
+declare
+  v_c        hermes_os.photo_media_consent%rowtype;
+  v_session_client uuid;
+  v_want int; v_have int;
+begin
+  if new.status is distinct from 'PUBLISHED' then
+    return new;
+  end if;
+
+  if new.consent_id is null then
+    raise exception 'PHOTO_MARKETING_NO_CONSENT' using errcode = 'check_violation';
+  end if;
+
+  select c.* into v_c
+    from hermes_os.photo_media_consent c
+   where c.id = new.consent_id and c.tenant_id = new.tenant_id;
+  if not found then
+    raise exception 'PHOTO_MARKETING_CONSENT_NOT_FOUND' using errcode = 'check_violation';
+  end if;
+
+  -- Le consentement doit porter sur le client DE CETTE séance.
+  select s.client_id into v_session_client
+    from hermes_os.photo_sessions s
+   where s.id = new.session_id and s.tenant_id = new.tenant_id;
+  if v_session_client is null or v_session_client is distinct from v_c.client_id then
+    raise exception 'PHOTO_MARKETING_CONSENT_CLIENT_MISMATCH' using errcode = 'check_violation';
+  end if;
+
+  if v_c.status <> 'GRANTED' or v_c.revoked_at is not null then
+    raise exception 'PHOTO_MARKETING_CONSENT_REVOKED' using errcode = 'check_violation';
+  end if;
+  if v_c.expires_at is not null and v_c.expires_at <= now() then
+    raise exception 'PHOTO_MARKETING_CONSENT_EXPIRED' using errcode = 'check_violation';
+  end if;
+  if not (new.use_case = any (v_c.use_cases_granted)) then
+    raise exception 'PHOTO_MARKETING_USE_CASE_NOT_GRANTED' using errcode = 'check_violation';
+  end if;
+  if v_c.includes_minors and not v_c.guardian_consent then
+    raise exception 'PHOTO_MARKETING_MINOR_WITHOUT_GUARDIAN' using errcode = 'check_violation';
+  end if;
+
+  v_want := case new.identity_scope when 'NONE' then 0 when 'SILHOUETTE' then 1 when 'FACE' then 2 end;
+  v_have := case v_c.identity_scope when 'NONE' then 0 when 'SILHOUETTE' then 1 when 'FACE' then 2 end;
+  if v_want is null or v_have is null or v_want > v_have then
+    raise exception 'PHOTO_MARKETING_IDENTITY_SCOPE_EXCEEDED' using errcode = 'check_violation';
+  end if;
+
+  return new;
+end;
+$function$;
+
+-- `create trigger` n'accepte pas `if not exists` : on retire d'abord (idempotence).
+drop trigger if exists photo_marketing_publish_guard on hermes_os.photo_marketing_draft;
+create trigger photo_marketing_publish_guard
+  before insert or update on hermes_os.photo_marketing_draft
+  for each row execute function hermes_os.photo_marketing_publish_guard();
+
+-- ---------------------------------------------------------------------------
+-- 7. MOINDRE PRIVILÈGE — aucune de ces fonctions internes n'est appelable par un
+--    rôle client. `authenticated` DÉTIENT `USAGE` sur le schéma `hermes_os` (état
+--    constaté en production) : sans ce REVOKE, `PUBLIC` conserverait EXECUTE et
+--    des fonctions qui PRENNENT UN TENANT EN PARAMÈTRE — donc sans contrôle
+--    d'appelant — deviendraient un contournement d'isolation dès qu'un chemin
+--    d'appel existerait. C'est la posture uniforme du reste du schéma.
+--    Elles restent appelables par les façades, qui s'exécutent comme propriétaire.
+-- ---------------------------------------------------------------------------
+revoke all on function hermes_os.photo_session_status_rank(text) from public;
+revoke all on function hermes_os.compute_photo_session_state(text, uuid) from public;
+revoke all on function hermes_os.verifier_consentement_photo(text, uuid, text, text, text, timestamptz) from public;
+revoke all on function hermes_os.detect_photo_upsell_opportunities(text, date) from public;
+revoke all on function hermes_os.derive_photo_culling_verdicts(text, uuid) from public;
+revoke all on function hermes_os.photo_marketing_publish_guard() from public;
 
 commit;

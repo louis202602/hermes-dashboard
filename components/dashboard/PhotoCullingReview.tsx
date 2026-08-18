@@ -146,6 +146,10 @@ export default function PhotoCullingReview({
           « Écarter » retire la photo de la sélection. Aucun fichier n’est supprimé, ni
           maintenant ni plus tard.
         </p>
+        <p className="photo-note">
+          Les suggestions reposent sur des seuils <strong>non encore calibrés</strong> sur
+          vos séances : traitez-les comme un premier tri, pas comme un jugement de qualité.
+        </p>
 
         <div className="photo-actions">
           <button

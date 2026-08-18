@@ -843,3 +843,48 @@ refusé (`PATH_OUT_OF_SCOPE`).
 fail-closed, de consentement et de non-suppression, à jouer **au moment** de la
 première migration. Elles n'ont pas encore été exécutées et rien n'est présenté
 ici comme constaté.
+
+### Audit final avant migration (2026-08-18)
+
+Confrontation des migrations au **vrai schéma Supabase en lecture seule**
+(`information_schema`, `pg_proc`, `pg_constraint`, `pg_policies`) puis nouveau cycle
+complet sur PostgreSQL local jetable. **Compatibilité : 12/12 dépendances OK, aucune
+collision de nom, aucune colonne NOT NULL sans défaut non fournie.**
+
+Trois défauts réels ont été trouvés et corrigés :
+
+1. **Moindre privilège (HAUT).** `authenticated` détient `USAGE` sur le schéma
+   `hermes_os` en production, et toutes les fonctions internes existantes y sont
+   explicitement restreintes (`postgres=X`, parfois `service_role=X`). Les 6 nouvelles
+   fonctions internes n'avaient pas de `REVOKE` : `PUBLIC` conservait `EXECUTE` sur des
+   fonctions qui **prennent un tenant en paramètre**, donc sans contrôle d'appelant.
+   `REVOKE ALL … FROM public` ajouté sur les 6 ; ACL vérifiées `postgres=X/postgres`.
+2. **Verrou de publication marketing (MOYEN).** La contrainte de table n'exigeait qu'un
+   `consent_id` NON NUL — un consentement **révoqué ou expiré** la satisfaisait. Un
+   déclencheur `BEFORE INSERT OR UPDATE` revalide désormais **le** consentement référencé
+   au moment du passage à `PUBLISHED` (client, statut, révocation, expiration, usage,
+   mineurs, portée d'identité). Il s'applique à tout écrivain, y compris un `INSERT` SQL
+   direct qui n'appellerait pas la façade — vérifié en contournant délibérément celle-ci.
+3. **Course sur la création de client (MOYEN).** Deux créations simultanées pour un client
+   nouveau pouvaient toutes deux franchir le `SELECT` et provoquer une violation
+   d'unicité. `on conflict do nothing` + relecture + refus fail-closed résiduel.
+
+Deux clarifications d'honnêteté ont aussi été ajoutées : les seuils de tri
+(0.35 / 0.55 / rafale 2 s / `SHARPNESS_REFERENCE`) sont désormais marqués **NON CALIBRÉS**
+dans le SQL **et** affichés comme tels dans l'interface de revue ; l'ordre obligatoire de
+purge (lister → supprimer l'objet → marquer purgé) est documenté, ainsi que le fait que le
+TTL de 90 jours n'est **pas** appliqué automatiquement en Phase 1.
+
+### Décision — passerelle des actions déterministes
+
+`DETERMINISTIC_ACTION_GATEWAY_DECISION = KEEP_DIRECT_SQL` pour la Phase 1.
+
+Fait déterminant relevé en base : **`request_agent_action` ne lit pas `target_kind`**, et
+`claim_agent_action` ne fait que le **recopier** dans son JSONB de retour — aucune fonction
+ne branche dessus. Étendre la contrainte à `POSTGRES_FUNCTION` serait donc un `ALTER` isolé
+et sans effet sur les actions existantes. Mais **aucun dispatcher ne saurait exécuter** une
+action `POSTGRES_FUNCTION` : une requête resterait `QUEUED` indéfiniment tant qu'un runner
+(n8n, indisponible) ou un nouveau composant ne la réclame pas. Faire transiter une écriture
+CRUD synchrone par une file asynchrone transformerait par ailleurs « créer une séance » en
+attente de résultat. La convergence reste possible et documentée ; elle n'a pas sa place
+dans une phase qui doit rester dormante.
