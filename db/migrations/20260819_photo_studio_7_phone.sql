@@ -65,12 +65,27 @@ create table if not exists hermes_os.photo_phone_config (
   -- AUTORISATION donnée par la photographe : l'agent a-t-il le droit de lire
   -- l'agenda ? Distinct de la connexion effective ci-dessous.
   agenda_lookup_allowed     boolean not null default false,
-  -- ÉTAT de la connexion OAuth de SON agenda (régime ② ci-dessus). Aucun jeton,
-  -- aucun secret ici : uniquement le fait qu'une connexion existe. Tant que ce
-  -- drapeau est faux, l'agent ne peut ni annoncer une disponibilité ni
-  -- confirmer un créneau — il enregistre la demande et propose un rappel.
+  -- ⚠️ MIROIR D'AFFICHAGE UNIQUEMENT. L'ÉTAT FAISANT AUTORITÉ est
+  -- `hermes_os.tenant_integration_connections` (migration integrations_1), et
+  -- la décision revient à `hermes_os.integration_is_usable(tenant,
+  -- 'google_calendar')` — pas à ce drapeau, qu'un opérateur pourrait
+  -- désynchroniser. Conservé pour un rendu sans jointure ; jamais consulté
+  -- seul pour autoriser une lecture d'agenda.
   calendar_connected        boolean not null default false,
   confirmation_send_allowed boolean not null default false,
+  -- --- Paramètres métier du standard, réglables par la photographe ---------
+  -- Numéro entrant qui sonne chez elle. L'AGENT Retell rattaché à ce numéro
+  -- est provisionné côté Hermès (cf. hermes_os.phone_provisioning) : aucune
+  -- référence fournisseur n'entre dans cette table de configuration métier.
+  incoming_number           text check (incoming_number is null or length(incoming_number) <= 40),
+  language                  text not null default 'fr-FR'
+                              check (language in ('fr-FR', 'en-US', 'es-ES', 'de-DE', 'it-IT', 'pt-PT')),
+  -- Étiquette de voix (ex. 'feminine_chaleureuse'). PAS un identifiant
+  -- fournisseur : la correspondance vers la voix réelle vit côté Hermès.
+  voice_profile             text check (voice_profile is null or length(voice_profile) <= 60),
+  -- Règles de rappel et de transfert, structurées et bornées.
+  callback_rules            jsonb not null default '{}'::jsonb,
+  transfer_rules            jsonb not null default '{}'::jsonb,
   -- Sujets autorisés. Vide = l'agent ne s'engage sur RIEN de commercial.
   allowed_topics            text[] not null default '{}',
   -- Plafond de sécurité : au-delà, l'appel est clos et un rappel est proposé.
@@ -113,7 +128,15 @@ create table if not exists hermes_os.photo_calls (
   started_at         timestamptz not null default now(),
   ended_at           timestamptz,
   duration_seconds   integer check (duration_seconds is null or duration_seconds >= 0),
+  -- --- COÛTS RÉELS, ventilés. NULL = NON RAPPORTÉ, jamais 0 ----------------
+  -- Aucune estimation n'entre ici : un coût absent reste NULL pour que
+  -- l'agrégat sache dire « non mesuré » plutôt que d'afficher un faux zéro.
   cost_usd           numeric(10,4) check (cost_usd is null or cost_usd >= 0),
+  retell_cost_usd    numeric(10,4) check (retell_cost_usd is null or retell_cost_usd >= 0),
+  telephony_cost_usd numeric(10,4) check (telephony_cost_usd is null or telephony_cost_usd >= 0),
+  llm_cost_usd       numeric(10,4) check (llm_cost_usd is null or llm_cost_usd >= 0),
+  -- Vrai seulement quand le fournisseur a réellement facturé cet appel.
+  cost_reported      boolean not null default false,
   provider           text check (provider is null or length(provider) <= 40),
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now(),
