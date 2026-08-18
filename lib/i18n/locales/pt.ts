@@ -341,6 +341,11 @@ export const pt: Messages = {
   "profile.commercial": "Comercial",
   "profile.chantier": "Obra",
   "profile.finance": "Finanças",
+  // PHOTO-P0 — verticale Hermès Studio (profil + navigation).
+  "profile.photographe": "Fotógrafo",
+  "profile.photographe.desc": "Foco estúdio fotográfico: sessões, seleção, clientes e aprovações.",
+  "nav.photoSessions": "Sessões",
+  "nav.photoClients": "Clientes",
   "profile.custom": "Personalizado",
   "profile.operations": "Operações",
   "profile.immobilier": "Imobiliário",

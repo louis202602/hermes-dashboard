@@ -27,6 +27,7 @@ export const WIDGET_CATEGORIES = [
   "chantiers",
   "btp",
   "immobilier",
+  "photo",
 ] as const;
 export type WidgetCategory = (typeof WIDGET_CATEGORIES)[number];
 
@@ -81,6 +82,13 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   // CARTE-1: opt-in (default hidden) — it lazy-loads MapLibre + self-fetches its data,
   // so it costs nothing on the dashboard until a user adds it from the gallery.
   { id: "chantiers-map", label: "Carte des chantiers", category: "chantiers", supportedSizes: ["medium", "large"], defaultSize: "large", span: "full", snapshotKeys: ["chantiersMap"], defaultHidden: true, requiredCapabilityPrefix: "btp." },
+  // PHOTO-P0 — verticale Hermès Studio. Le préfixe `photo.` n'est satisfait que
+  // lorsque la verticale est ACTIVÉE pour le tenant (clé synthétique `photo.studio`
+  // dérivée de `photo_studio_activation`, cf. lib/dashboard/photoAccess.ts). Tant
+  // qu'elle ne l'est pas — c'est-à-dire par défaut — ces widgets n'existent pas.
+  { id: "photo-today", label: "Studio — aujourd’hui", category: "photo", supportedSizes: ["medium", "large"], defaultSize: "large", span: "full", snapshotKeys: ["photoToday"], requiredCapabilityPrefix: "photo." },
+  { id: "photo-sessions", label: "Studio — séances", category: "photo", supportedSizes: ["medium", "large"], defaultSize: "large", span: "full", snapshotKeys: ["photoToday"], requiredCapabilityPrefix: "photo." },
+  { id: "photo-culling-queue", label: "Studio — photos à trier", category: "photo", supportedSizes: ["small", "medium"], defaultSize: "medium", span: "half", snapshotKeys: ["photoToday"], requiredCapabilityPrefix: "photo." },
 ];
 
 export const LAYOUT_SCHEMA_VERSION = 1;

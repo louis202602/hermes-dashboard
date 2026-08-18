@@ -752,3 +752,139 @@ Canonical geographic source for the free (MapLibre + OpenStreetMap) worksite map
   overridable for self-hosted PMTiles/tileserver). MapLibre + the map data load ONLY
   when the opt-in `chantiers-map` widget is added or the `/chantiers/carte` page is
   opened. External routing = an "Ouvrir l'itinéraire" link (no paid API).
+
+## PHOTO-P0 — Verticale Hermès Studio (2026-08-18) — **NON APPLIQUÉE**
+
+Construction préparatoire de la verticale photographe décrite dans
+`docs/hermes-studio-photographe-architecture.md`. **`GO_LIVE = NO` :** ces six
+fichiers ne sont **pas** appliqués — ils constituent le diff à examiner avant
+toute migration réelle.
+
+| Fichier | Contenu |
+|------|---------|
+| `20260818_photo_studio_1_schema.sql` | 14 tables `photo_*` (activation, clients, membres, séances, assets, signaux, verdicts, consignes, profils de style, jobs d'édition, galeries, opportunités, consentement, brouillons marketing). RLS **enabled sans policy** ⇒ deny-all ; accès par façade uniquement. Aucune colonne ne stocke un RAW ni un gabarit biométrique. |
+| `20260818_photo_studio_2_services.sql` | Services métier canoniques : `photo_session_status_rank`, `compute_photo_session_state` (**le « Studio Director » = une projection SQL, pas un second orchestrateur**), `verifier_consentement_photo` (gate fail-closed), `detect_photo_upsell_opportunities` (SQL pur, lecture seule), `derive_photo_culling_verdicts` (**unique implémentation** des seuils de tri). |
+| `20260818_photo_studio_3_facades.sql` | 1 garde partagée + 14 façades `public.*` (8 lectures, 6 écritures). SECURITY DEFINER, `search_path` verrouillé, REVOKE PUBLIC / GRANT `authenticated`, tenant résolu par `resolve_active_tenant` — **aucune n'accepte de `tenant_id` du client**. |
+| `20260818_photo_studio_4_storage_proxies.sql` | Bucket **privé** `hermes-photo-proxies` (6 MiB, jpeg/webp) + RLS `storage.objects` dérivant le tenant de la clé d'objet, **sans policy DELETE**. Façades finalize / failed / purge, bornées et appelables — aucun worker, aucun scheduler. Réutilise `hermes_os.is_active_tenant_member` (ardoise pièces jointes) sans la redéfinir. |
+| `20260818_photo_studio_5_dormant_registry.sql` | 11 actions catalogue **`enabled = false`**, 6 configurations d'exécution `enabled = false`, 11 politiques SW15 `DISABLED`, 5 abonnés SW20 `DISABLED`, 4 définitions de métriques SW19 additives, 1 budget SW23 conditionnel (`on conflict do nothing`). |
+| `20260818_photo_studio_9_rollback.sql` | Teardown intégral, ordre inverse des dépendances. Ne touche PAS aux briques partagées d'une autre ardoise. |
+
+### Invariants (vérifiés mécaniquement par `tests/photo-migrations.test.ts`)
+
+- **Dormance prouvée.** `hermes_os.request_agent_action` filtre
+  `where action_key = … and enabled = true` : une action photo répond donc
+  `UNKNOWN_ACTION` même à un appelant authentifié, membre et autorisé. Par
+  conséquent `get_available_capabilities()` ne la renvoie pas, et **aucun widget,
+  profil, menu ou route photo n'apparaît** tant qu'un opérateur n'a pas activé.
+- **Aucune suppression de photo.** Il n'existe aucun `DELETE` sur
+  `photo_session_assets` ni sur les verdicts. « Écarter » écrit
+  `human_decision = 'DISCARD'` ; la purge de proxy passe le statut à `PURGED` et
+  oublie les chemins, en conservant la ligne d'inventaire. Le fichier d'origine
+  n'a jamais quitté le poste de la photographe.
+- **Protection prioritaire.** Dans `derive_photo_culling_verdicts`, la branche
+  « couverte par une consigne PROTECT » est évaluée **avant** toute branche de
+  rejet, et une décision humaine déjà prise n'est jamais écrasée.
+- **RGPD.** Contrainte de table `photo_consent_minors_need_guardian` (mineurs ⇒
+  consentement du représentant légal obligatoire), `identity_scope` par défaut
+  `NONE`, aucune reconnaissance faciale, aucune lecture GPS des EXIF, minimisation
+  sur `photo_client_members` (prénom + mois/année seulement).
+- **Non-régression assumée.** `component_registry` n'est **pas** alimenté :
+  `get_platform_health()` compte toutes ses lignes sans filtre de visibilité, et y
+  déclarer des agents encore inexistants changerait un chiffre affiché.
+
+### Écarts assumés par rapport au rapport d'architecture
+
+1. **Les écritures déterministes ne passent pas par `request_agent_action`.**
+   `agent_action_catalog` porte `CHECK (target_kind = 'N8N_WORKFLOW')` : une action
+   dont le runner est une fonction Postgres n'y est pas représentable sans modifier
+   une contrainte existante. Ces écritures suivent donc le patron déjà en place
+   (`upsert_dashboard_user_preferences`, `upsert_chantier_geocode`,
+   `finalize_hermes_attachment`) : façade fail-closed pilotée par l'utilisateur. Les
+   actions pilotées par un AGENT restent réservées à la passerelle unique.
+2. **Table d'activation dédiée** plutôt que `tenant_module_activation`, dont la FK
+   vers `component_registry` imposerait précisément l'inflation de KPI écartée
+   ci-dessus.
+3. **Lectures galeries / revenus / marketing non livrées.** Leurs tables ne peuvent
+   être alimentées que par un consumer n8n : livrer des lecteurs sur des tables
+   toujours vides produirait des panneaux décoratifs.
+
+### Ce qui a réellement été vérifié
+
+Le SQL n'a **pas** été appliqué à la production. Il a en revanche été exécuté sur
+un **PostgreSQL 16 local et jetable** (schémas Hermès stubés), ce qui a validé :
+application des 5 lots · **ré-application** des 5 lots (idempotence) · rollback
+complet · seconde application/rollback. Deux défauts réels ont été trouvés par
+cette exécution et corrigés :
+
+1. `derive_photo_culling_verdicts` imbriquait `lag()` dans `sum() over` — interdit
+   par Postgres ; le décalage est désormais matérialisé dans un CTE `base`.
+2. `sw15_policies` / `sw20_subscribers` n'ont aucune contrainte d'unicité :
+   `on conflict do nothing` n'y protégeait de rien et les lignes se dupliquaient à
+   la ré-application ; remplacé par une anti-jointure `where not exists`.
+   `create policy` n'acceptant pas `if not exists`, le lot 4 retire désormais ses
+   policies avant de les recréer.
+
+Les deux régressions sont verrouillées par `tests/photo-migrations.test.ts`.
+
+Comportement vérifié sur ce banc d'essai : portillon d'activation (toutes les
+façades répondent `MODULE_DISABLED` avant activation) · idempotence de la création
+de séance et de l'import · **consigne PROTECT** (contre-épreuve : sans la consigne
+la photo est `REJECTED_SUGGESTION`, avec elle `KEEP_SUGGESTION`) · **aucune
+suppression** (4 assets avant / 4 après avoir tout écarté ; purge de proxy sans
+perte de la ligne) · décision humaine non écrasée par une ré-exécution du tri ·
+verrou mineurs · gate de consentement fail-closed · **isolation cross-tenant avec
+les deux tenants activés** (0 séance, 0 client, `found=false`, écriture croisée
+`NOT_FOUND`) · non authentifié et sans tenant refusés · chemin de stockage forgé
+refusé (`PATH_OUT_OF_SCOPE`).
+
+### Protocole de vérification
+
+`db/tests/photo_studio_isolation.test.sql` — assertions d'isolation, de
+fail-closed, de consentement et de non-suppression, à jouer **au moment** de la
+première migration. Elles n'ont pas encore été exécutées et rien n'est présenté
+ici comme constaté.
+
+### Audit final avant migration (2026-08-18)
+
+Confrontation des migrations au **vrai schéma Supabase en lecture seule**
+(`information_schema`, `pg_proc`, `pg_constraint`, `pg_policies`) puis nouveau cycle
+complet sur PostgreSQL local jetable. **Compatibilité : 12/12 dépendances OK, aucune
+collision de nom, aucune colonne NOT NULL sans défaut non fournie.**
+
+Trois défauts réels ont été trouvés et corrigés :
+
+1. **Moindre privilège (HAUT).** `authenticated` détient `USAGE` sur le schéma
+   `hermes_os` en production, et toutes les fonctions internes existantes y sont
+   explicitement restreintes (`postgres=X`, parfois `service_role=X`). Les 6 nouvelles
+   fonctions internes n'avaient pas de `REVOKE` : `PUBLIC` conservait `EXECUTE` sur des
+   fonctions qui **prennent un tenant en paramètre**, donc sans contrôle d'appelant.
+   `REVOKE ALL … FROM public` ajouté sur les 6 ; ACL vérifiées `postgres=X/postgres`.
+2. **Verrou de publication marketing (MOYEN).** La contrainte de table n'exigeait qu'un
+   `consent_id` NON NUL — un consentement **révoqué ou expiré** la satisfaisait. Un
+   déclencheur `BEFORE INSERT OR UPDATE` revalide désormais **le** consentement référencé
+   au moment du passage à `PUBLISHED` (client, statut, révocation, expiration, usage,
+   mineurs, portée d'identité). Il s'applique à tout écrivain, y compris un `INSERT` SQL
+   direct qui n'appellerait pas la façade — vérifié en contournant délibérément celle-ci.
+3. **Course sur la création de client (MOYEN).** Deux créations simultanées pour un client
+   nouveau pouvaient toutes deux franchir le `SELECT` et provoquer une violation
+   d'unicité. `on conflict do nothing` + relecture + refus fail-closed résiduel.
+
+Deux clarifications d'honnêteté ont aussi été ajoutées : les seuils de tri
+(0.35 / 0.55 / rafale 2 s / `SHARPNESS_REFERENCE`) sont désormais marqués **NON CALIBRÉS**
+dans le SQL **et** affichés comme tels dans l'interface de revue ; l'ordre obligatoire de
+purge (lister → supprimer l'objet → marquer purgé) est documenté, ainsi que le fait que le
+TTL de 90 jours n'est **pas** appliqué automatiquement en Phase 1.
+
+### Décision — passerelle des actions déterministes
+
+`DETERMINISTIC_ACTION_GATEWAY_DECISION = KEEP_DIRECT_SQL` pour la Phase 1.
+
+Fait déterminant relevé en base : **`request_agent_action` ne lit pas `target_kind`**, et
+`claim_agent_action` ne fait que le **recopier** dans son JSONB de retour — aucune fonction
+ne branche dessus. Étendre la contrainte à `POSTGRES_FUNCTION` serait donc un `ALTER` isolé
+et sans effet sur les actions existantes. Mais **aucun dispatcher ne saurait exécuter** une
+action `POSTGRES_FUNCTION` : une requête resterait `QUEUED` indéfiniment tant qu'un runner
+(n8n, indisponible) ou un nouveau composant ne la réclame pas. Faire transiter une écriture
+CRUD synchrone par une file asynchrone transformerait par ailleurs « créer une séance » en
+attente de résultat. La convergence reste possible et documentée ; elle n'a pas sa place
+dans une phase qui doit rester dormante.

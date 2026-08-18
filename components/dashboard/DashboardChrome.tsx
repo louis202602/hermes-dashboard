@@ -47,6 +47,8 @@ type DashboardChromeProps = {
   // DASH-4F: the notification feed is DERIVED client-side from this already-loaded
   // alerts snapshot (0 extra DB read, 0 polling, 0 LLM).
   alerts: ServiceResult<UnifiedAlerts>;
+  /** PHOTO-P0 — verticale Studio activée pour ce tenant (capability-first). */
+  showPhotoStudio?: boolean;
   children: React.ReactNode;
 };
 
@@ -68,6 +70,7 @@ export default function DashboardChrome({
   availableProfiles,
   wallpaperUrls,
   alerts,
+  showPhotoStudio = false,
   children,
 }: DashboardChromeProps) {
   const { t, dir } = useI18n();
@@ -181,6 +184,7 @@ export default function DashboardChrome({
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed((value) => !value)}
           onNavigate={() => setMobileMenuOpen(false)}
+          showPhotoStudio={showPhotoStudio}
         />
       </div>
 

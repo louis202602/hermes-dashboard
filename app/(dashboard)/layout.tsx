@@ -14,6 +14,7 @@ import {
   getAuthedUser,
   getCapabilitiesCached,
   getDashboardContextSettingsCached,
+  getPhotoModuleStateCached,
   getUnifiedAlertsCached,
 } from "@/lib/dashboard/requestScope";
 import { isUserWallpaperRef, resolveWallpaper } from "@/lib/dashboard/wallpapers";
@@ -39,12 +40,13 @@ export default async function DashboardGroupLayout({
   }
 
   // Chrome-scoped reads (all cache()-shared with the page).
-  const [preferencesResult, capabilities, alerts, contextSettingsResult] =
+  const [preferencesResult, capabilities, alerts, contextSettingsResult, photoModule] =
     await Promise.all([
       getDashboardUserPreferences(),
       getCapabilitiesCached(),
       getUnifiedAlertsCached(),
       getDashboardContextSettingsCached(),
+      getPhotoModuleStateCached(),
     ]);
 
   const prefs = preferencesResult.ok
@@ -68,6 +70,7 @@ export default async function DashboardGroupLayout({
   const { profiles, offeredProfiles, activeProfile } = resolveHomeProfileContext(
     prefs,
     capabilities,
+    photoModule.enabled,
   );
 
   // DASH-4E: sign each profile's user-image wallpaper server-side (short-TTL signed URL,
@@ -97,6 +100,7 @@ export default async function DashboardGroupLayout({
         availableProfiles={offeredProfiles}
         wallpaperUrls={wallpaperUrls}
         alerts={alerts}
+        showPhotoStudio={photoModule.enabled}
       >
         {children}
       </DashboardChrome>
