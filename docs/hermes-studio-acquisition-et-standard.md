@@ -104,6 +104,36 @@ d'envoi.
 Retell. L'application Next.js ne détient que la clé publiable Supabase — c'est
 la même règle que celle documentée dans `lib/voice/README.md`.
 
+### Qui possède quel outil — deux régimes à ne jamais confondre
+
+| | ① Infrastructure Hermès | ② Outils personnels du tenant |
+| :-- | :-- | :-- |
+| Exemples | Retell, STT, TTS, routage LLM | Google Calendar, Gmail, Meta/Instagram |
+| Propriétaire du compte | **Hermès** | **La photographe** |
+| Qui détient les clés | Hermès (côté serveur) | Le fournisseur ; Hermès n'a qu'une autorisation déléguée |
+| Ce que la photographe fait | **rien** — elle ne voit ni ne saisit aucune clé | clique « Connecter » → OAuth → s'authentifie elle-même |
+| Mot de passe connu d'Hermès | — | **jamais** |
+| Si le credential manque | blocage **infrastructure Hermès**, à résoudre par Hermès | le tenant se connecte quand il veut |
+
+`RETELL_PROVIDER = HERMES_MANAGED`. La photographe n'a **pas** à ouvrir un
+compte Retell, et un credential Retell absent n'est **jamais** une information
+à lui réclamer. C'est pourquoi `photo_phone_config` ne porte **aucune** colonne
+de secret — un test le vérifie par mutation.
+
+`GOOGLE_CALENDAR_CONNECTION = TENANT_SELF_SERVICE_OAUTH`.
+
+> ⚠️ **État réel** : cette bascule OAuth self-service **n'existe pas encore**
+> dans Hermès. La page `/integrations` est aujourd'hui une liste statique
+> honnête, sans bouton « Connecter » ni flux OAuth. La règle ci-dessus est la
+> cible ; sa mise en œuvre reste à construire.
+
+**Sans agenda connecté, le standard fonctionne quand même** : il décroche,
+qualifie, crée le lead, propose un rappel et enregistre la demande. Ce qu'il ne
+peut pas faire, c'est annoncer une disponibilité ou confirmer un créneau — et
+ce n'est pas une consigne de prompt : `decideTurn` refuse structurellement toute
+question de disponibilité tant que `agendaConnected` est faux, **même si**
+l'appelant prétend disposer d'une donnée ancrée.
+
 ### `lib/voice/` n'est pas réutilisable ici — et c'est normal
 
 Le module `lib/voice/` est une couche **navigateur** (Web Speech API) pour le
@@ -160,10 +190,10 @@ budget saisi serait un chiffre faux ; `null` se rend « non mesuré ».
 
 ## 8. Ce qui reste bloqué
 
-| Bloqué | Par quoi |
-| :-- | :-- |
-| Appels réels | Credential Retell absent (blocage constaté sur Agent 10) |
-| Consultation d'agenda pendant l'appel | Credential Google Calendar absent (même constat) |
-| Exécution des 10 actions | n8n (aucun consumer), + actions dormantes |
-| Mesure réelle de latence et de coût/minute | Aucun appel réel autorisé |
-| Pilote | Tenant Vanessa inexistant |
+| Bloqué | Par quoi | À résoudre par |
+| :-- | :-- | :-- |
+| Appels réels | Credential Retell absent (constaté sur l'Agent 10) | **Hermès** — infrastructure, jamais le tenant |
+| Agenda pendant l'appel | Surface « Connecter » (OAuth) inexistante, puis connexion du tenant | Hermès construit la surface, **puis** la photographe connecte son agenda |
+| Exécution des 10 actions | n8n (aucun consumer) + actions dormantes | Hermès |
+| Mesure réelle de latence et de coût/minute | Aucun appel réel autorisé | Hermès, au premier appel facturé |
+| Pilote | Tenant Vanessa inexistant | Hermès (ne dépend que du tenant_id et de l'e-mail) |

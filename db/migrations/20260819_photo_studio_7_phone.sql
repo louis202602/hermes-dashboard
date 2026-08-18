@@ -24,6 +24,23 @@
 --   * aucun secret fournisseur : les credentials vivent côté n8n/Retell, jamais
 --     dans Postgres ni dans l'application Next.js.
 --
+-- PROPRIÉTÉ DES OUTILS — deux régimes, à ne jamais confondre :
+--
+--   ① INFRASTRUCTURE FOURNIE PAR HERMÈS (Retell, STT, TTS, routage LLM)
+--      RETELL_PROVIDER = HERMES_MANAGED. Le compte et les clés appartiennent à
+--      HERMÈS. La photographe ne voit jamais de clé API, n'en saisit aucune, et
+--      n'a pas besoin d'ouvrir un compte Retell. C'est pourquoi cette table ne
+--      porte AUCUNE colonne de secret : ce n'est pas un oubli, c'est le contrat.
+--      Un credential Retell manquant est un blocage d'infrastructure HERMÈS —
+--      jamais une information à réclamer au tenant.
+--
+--   ② OUTILS PERSONNELS DU TENANT (Google Calendar, Gmail, Meta…)
+--      Régime TENANT_SELF_SERVICE_OAUTH : la photographe clique « Connecter »,
+--      est redirigée chez le fournisseur, s'authentifie elle-même, et Hermès ne
+--      reçoit qu'une autorisation déléguée. Hermès ne connaît ni ne stocke
+--      JAMAIS son mot de passe. `calendar_connected` ci-dessous n'est donc
+--      qu'un ÉTAT observé, pas un endroit où loger un secret.
+--
 -- Réversible : 20260819_photo_studio_9_rollback_p1.sql
 
 begin;
@@ -45,7 +62,14 @@ create table if not exists hermes_os.photo_phone_config (
   transfer_number           text check (transfer_number is null or length(transfer_number) <= 40),
   -- Plages d'ouverture : [{weekday:1..7, from_minutes:540, to_minutes:1080}, …]
   office_hours              jsonb not null default '[]'::jsonb,
+  -- AUTORISATION donnée par la photographe : l'agent a-t-il le droit de lire
+  -- l'agenda ? Distinct de la connexion effective ci-dessous.
   agenda_lookup_allowed     boolean not null default false,
+  -- ÉTAT de la connexion OAuth de SON agenda (régime ② ci-dessus). Aucun jeton,
+  -- aucun secret ici : uniquement le fait qu'une connexion existe. Tant que ce
+  -- drapeau est faux, l'agent ne peut ni annoncer une disponibilité ni
+  -- confirmer un créneau — il enregistre la demande et propose un rappel.
+  calendar_connected        boolean not null default false,
   confirmation_send_allowed boolean not null default false,
   -- Sujets autorisés. Vide = l'agent ne s'engage sur RIEN de commercial.
   allowed_topics            text[] not null default '{}',

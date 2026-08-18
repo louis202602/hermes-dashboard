@@ -199,6 +199,16 @@ export type TurnInput = {
   hasGroundedAnswer: boolean;
   /** Confiance de compréhension [0..1] remontée par la couche vocale. */
   confidence: number;
+  /**
+   * L'agenda de la photographe est-il RÉELLEMENT connecté (OAuth self-service) ?
+   *
+   * Distinct d'une autorisation : elle peut avoir autorisé la lecture d'agenda
+   * sans avoir encore cliqué « Connecter ». Tant que c'est faux, aucune
+   * disponibilité ne peut être annoncée ni aucun créneau confirmé — quoi que
+   * dise `hasGroundedAnswer`, qui dépend de l'appelant. Ce verrou est ici pour
+   * que l'invariant ne repose pas sur la discipline du code appelant.
+   */
+  agendaConnected: boolean;
 };
 
 /** Sous ce seuil, on ne devine pas : on fait rappeler. */
@@ -237,6 +247,20 @@ export function decideTurn(input: TurnInput): PhotoTurnDecision {
       : intent === "AVAILABILITY_QUESTION"
         ? "DISPONIBILITE"
         : null;
+
+  // Verrou agenda : sans connexion OAuth effective, une question de
+  // disponibilité ne peut JAMAIS aboutir à une réponse ni à une confirmation,
+  // même si l'appelant prétend disposer d'une donnée ancrée. On enregistre la
+  // demande et on fait rappeler — on n'invente pas un créneau.
+  if (topic === "DISPONIBILITE" && !input.agendaConnected) {
+    return {
+      action: "HANDOFF",
+      askFor: null,
+      disposition: dispositionFor("BOOKING_NEEDS_HUMAN", input.transferNumber),
+      handoffReason: "BOOKING_NEEDS_HUMAN",
+      outOfScope: true,
+    };
+  }
 
   if (topic && !canAnswerTopic(topic, input.allowedTopics, input.hasGroundedAnswer)) {
     return {

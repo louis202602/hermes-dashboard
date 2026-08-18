@@ -96,8 +96,17 @@ export type PhotoPhoneConfig = {
   transferNumber: string | null;
   /** Plages horaires où l'agent décroche (hors plage ⇒ message + rappel). */
   officeHours: PhotoOfficeHours[];
-  /** L'agent peut-il lire l'agenda pour proposer des créneaux ? */
+  /** AUTORISATION : l'agent a-t-il le droit de lire l'agenda ? */
   agendaLookupAllowed: boolean;
+  /**
+   * ÉTAT : l'agenda est-il réellement connecté (OAuth self-service du tenant) ?
+   *
+   * Distinct de l'autorisation ci-dessus. Aucun jeton n'est stocké ici — Hermès
+   * ne détient jamais le mot de passe du tenant, seulement une autorisation
+   * déléguée. Tant que c'est faux, aucune disponibilité ne peut être annoncée
+   * ni aucun créneau confirmé.
+   */
+  calendarConnected: boolean;
   /** L'agent peut-il envoyer une confirmation SMS/email lui-même ? */
   confirmationSendAllowed: boolean;
   /** Sujets sur lesquels il a le droit de répondre. Tout le reste ⇒ humain. */

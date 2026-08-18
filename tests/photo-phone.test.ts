@@ -132,6 +132,7 @@ test("une question de prix sans tarif ancré part vers l'humain, sans inventer",
     allowedTopics: ["TARIF"],
     hasGroundedAnswer: false,
     confidence: 0.95,
+    agendaConnected: false,
   });
   assert.equal(d.action, "HANDOFF");
   assert.equal(d.outOfScope, true);
@@ -146,6 +147,7 @@ test("la même question AVEC un tarif réel obtient une réponse", () => {
     allowedTopics: ["TARIF"],
     hasGroundedAnswer: true,
     confidence: 0.95,
+    agendaConnected: false,
   });
   assert.equal(d.action, "ANSWER");
   assert.equal(d.outOfScope, false);
@@ -167,6 +169,7 @@ test("sous le seuil de confiance, on ne devine pas : on passe la main à un huma
     allowedTopics: [],
     hasGroundedAnswer: false,
     confidence: LOW_CONFIDENCE_THRESHOLD - 0.01,
+    agendaConnected: false,
   });
   assert.equal(d.handoffReason, "LOW_CONFIDENCE");
   assert.equal(d.disposition, "HUMAN_REQUIRED");
@@ -181,9 +184,90 @@ test("le seuil de confiance est testé des deux côtés de la frontière", () =>
       allowedTopics: [],
       hasGroundedAnswer: false,
       confidence,
+      agendaConnected: false,
     });
   assert.equal(at(LOW_CONFIDENCE_THRESHOLD - 0.01).handoffReason, "LOW_CONFIDENCE");
   assert.equal(at(LOW_CONFIDENCE_THRESHOLD).handoffReason, "NONE", "au seuil, on continue");
+});
+
+// --- PROPRIÉTÉ DES OUTILS : Hermès fournit Retell, le tenant connecte le sien ---
+test("aucune table métier ne peut héberger un secret fournisseur", () => {
+  const sql = readFileSync(
+    fileURLToPath(new URL("../db/migrations/20260819_photo_studio_7_phone.sql", import.meta.url)),
+    "utf8",
+  );
+  // On isole les DÉFINITIONS DE COLONNES. Deux formes de commentaire doivent
+  // être retirées, sinon le test se déclenche sur sa propre documentation :
+  // les lignes `--` ET les instructions `comment on … is '…'`, dont le texte
+  // dit précisément « aucun secret fournisseur ici ».
+  const columns = sql
+    .replace(/comment on [\s\S]*?;/gi, "")
+    .split("\n")
+    .filter((l) => !l.trim().startsWith("--"))
+    .join("\n");
+  // Recherche par SOUS-CHAÎNE, sans frontière de mot : `\bapi_key\b` ne
+  // matcherait PAS `retell_api_key`, puisque « _ » est un caractère de mot —
+  // une colonne préfixée passerait alors au travers. Vérifié par mutation.
+  for (const forbidden of [
+    "api_key", "apikey", "secret", "token", "credential",
+    "password", "access_key", "private_key", "refresh_token",
+  ]) {
+    assert.ok(
+      !columns.toLowerCase().includes(forbidden),
+      `colonne interdite : ${forbidden} — les clés Retell appartiennent à Hermès`,
+    );
+  }
+  // L'état de connexion de l'agenda est un simple booléen, pas un jeton.
+  assert.ok(columns.includes("calendar_connected        boolean not null default false"));
+});
+
+test("sans agenda connecté, aucune disponibilité n'est annoncée ni confirmée", () => {
+  // Cas le plus piégeur : l'appelant PRÉTEND avoir une donnée ancrée et le
+  // sujet est autorisé — le verrou doit tenir quand même.
+  const d = decideTurn({
+    utterance: "Vous êtes libre le 12 juin ?",
+    slots: empty,
+    transferNumber: "+33499000000",
+    allowedTopics: ["DISPONIBILITE"],
+    hasGroundedAnswer: true,
+    confidence: 0.95,
+    agendaConnected: false,
+  });
+  assert.equal(d.action, "HANDOFF");
+  assert.notEqual(d.action, "ANSWER", "aucune disponibilité inventée");
+  assert.notEqual(d.action, "CONFIRM", "aucun créneau confirmé");
+  assert.equal(d.handoffReason, "BOOKING_NEEDS_HUMAN");
+  assert.equal(d.outOfScope, true);
+});
+
+test("agenda connecté ET autorisé : la disponibilité peut enfin être traitée", () => {
+  const d = decideTurn({
+    utterance: "Vous êtes libre le 12 juin ?",
+    slots: empty,
+    transferNumber: "+33499000000",
+    allowedTopics: ["DISPONIBILITE"],
+    hasGroundedAnswer: true,
+    confidence: 0.95,
+    agendaConnected: true,
+  });
+  assert.equal(d.action, "ANSWER");
+});
+
+test("sans agenda, le standard reste UTILE : il qualifie et fait rappeler", () => {
+  // La règle interdit d'inventer un créneau, pas de travailler. Une demande
+  // ordinaire continue d'être qualifiée normalement, agenda ou non.
+  const d = decideTurn({
+    utterance: "Bonjour, je cherche une photographe pour mon mariage le 12 juin",
+    slots: { ...empty, serviceType: "MARIAGE", requestedDate: "2027-06-12" },
+    transferNumber: "+33499000000",
+    allowedTopics: [],
+    hasGroundedAnswer: false,
+    confidence: 0.9,
+    agendaConnected: false,
+  });
+  assert.equal(d.action, "ASK", "le standard continue de qualifier");
+  assert.equal(d.askFor, "location");
+  assert.equal(d.disposition, "AI_HANDLED");
 });
 
 test("la sécurité humaine passe AVANT le seuil de confiance", () => {
@@ -196,6 +280,7 @@ test("la sécurité humaine passe AVANT le seuil de confiance", () => {
     allowedTopics: [],
     hasGroundedAnswer: false,
     confidence: 0.1,
+    agendaConnected: false,
   });
   assert.equal(d.handoffReason, "COMPLAINT");
   assert.equal(d.disposition, "HUMAN_REQUIRED");
@@ -209,6 +294,7 @@ test("conversation normale : l'agent pose la question suivante et rien de plus",
     allowedTopics: [],
     hasGroundedAnswer: false,
     confidence: 0.9,
+    agendaConnected: false,
   });
   assert.equal(d.action, "ASK");
   assert.equal(d.askFor, "location");
@@ -252,6 +338,7 @@ const auditTurn = (over: Partial<Parameters<typeof decideTurn>[0]>) =>
     allowedTopics: ["TARIF"],
     hasGroundedAnswer: false,
     confidence: 0.95,
+    agendaConnected: false,
     ...over,
   });
 
