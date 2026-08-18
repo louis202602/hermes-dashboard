@@ -1,7 +1,11 @@
 -- PHOTO-P0 / 3 — Façades `public.*` (SECURITY DEFINER).
 -- (project smubxqorirlfldatzmym)
 --
--- ⚠️ NON APPLIQUÉE. GO_LIVE = NO.
+-- ✅ APPLIQUÉE en production le 2026-08-18 (migration `photo_studio_3_facades`,
+--    version 20260818210712). GO_LIVE = NO — la verticale reste DORMANTE.
+--    Vérifié après application : 14 façades, 14/14 SECURITY DEFINER et search_path
+--    verrouillé, 0 EXECUTE `anon`, 0 façade acceptant un tenant_id du client, et
+--    fail-closed prouvé à l'exécution (sans session ⇒ enabled=false).
 --
 -- Contrat identique à toutes les façades Hermès existantes :
 --   * SECURITY DEFINER, `search_path` verrouillé ;

@@ -1,7 +1,11 @@
 -- PHOTO-P0 / 4 — Stockage privé des proxies photo.
 -- (project smubxqorirlfldatzmym)
 --
--- ⚠️ NON APPLIQUÉE. GO_LIVE = NO.
+-- ✅ APPLIQUÉE en production le 2026-08-18 (migration `photo_studio_4_storage_proxies`,
+--    version 20260818210757). GO_LIVE = NO — la verticale reste DORMANTE.
+--    Vérifié après application : bucket privé (public=false), plafond 6 MiB,
+--    MIME {jpeg, webp}, 3 policies bornées au bucket ET au tenant, 0 policy DELETE,
+--    bucket VIDE.
 --
 -- Ce que ce lot provisionne :
 --   1. un bucket PRIVÉ `hermes-photo-proxies` (`public=false`) — lecture uniquement
