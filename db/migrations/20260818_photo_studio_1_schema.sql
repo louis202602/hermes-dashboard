@@ -1,8 +1,10 @@
 -- PHOTO-P0 / 1 — Hermès Studio (verticale photographe) : schéma de données.
 -- (project smubxqorirlfldatzmym)
 --
--- ⚠️ NON APPLIQUÉE. Ce fichier est le diff à examiner avant toute migration réelle.
---    GO_LIVE = NO. Rien ici n'active quoi que ce soit : ce lot ne crée QUE des tables
+-- ✅ APPLIQUÉE en production le 2026-08-18 (migration Supabase `photo_studio_1_schema`,
+--    version 20260818210007). Vérifié après application : 14 tables, RLS activée 14/14,
+--    0 policy, 0 ligne, 0 colonne interdite.
+--    GO_LIVE = NO — la verticale reste DORMANTE : ce lot ne crée QUE des tables
 --    vides, en RLS deny-all, atteignables uniquement par les façades du lot 3.
 --
 -- Invariants (identiques au reste de hermes_os) :

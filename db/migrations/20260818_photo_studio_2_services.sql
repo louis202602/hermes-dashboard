@@ -1,7 +1,10 @@
 -- PHOTO-P0 / 2 — Services métier canoniques (schéma privé `hermes_os`).
 -- (project smubxqorirlfldatzmym)
 --
--- ⚠️ NON APPLIQUÉE. GO_LIVE = NO.
+-- ✅ APPLIQUÉE en production le 2026-08-18 (migration `photo_studio_2_services`,
+--    version 20260818210410). GO_LIVE = NO — la verticale reste DORMANTE.
+--    Vérifié après application : 6 fonctions, owner postgres, 0 EXECUTE pour
+--    `authenticated`/`anon`, trigger marketing en place.
 --
 -- UNE seule implémentation métier par règle, exactement comme
 -- `hermes_os.record_btp_suivi_progress` : les façades du lot 3, et plus tard les

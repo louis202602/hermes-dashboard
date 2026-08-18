@@ -1,7 +1,13 @@
 -- PHOTO-P0 / 5 — Registres de configuration, TOUS DORMANTS.
 -- (project smubxqorirlfldatzmym)
 --
--- ⚠️ NON APPLIQUÉE. GO_LIVE = NO.
+-- ✅ APPLIQUÉE en production le 2026-08-18 (migration `photo_studio_5_dormant_registry`,
+--    version 20260818210855). GO_LIVE = NO.
+--    Vérifié après application : 11 actions / 0 activée / 0 workflow n8n ciblé,
+--    6 runtime config / 0 activée, 11 policies SW15 / 0 ACTIVE, 5 abonnés SW20 /
+--    0 ACTIF, 4 métriques SW19, 0 tenant activé, component_registry inchangé (95).
+--    Le budget SW23 n'a PAS été inséré : le tenant `photo-pilote` n'existe pas,
+--    l'insertion conditionnelle n'a donc rien fait (comportement voulu).
 --
 -- Ce lot n'ACTIVE rien. Preuve, ligne par ligne :
 --
