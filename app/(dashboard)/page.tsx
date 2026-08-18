@@ -10,22 +10,15 @@ import {
   resolveTimezone,
   resolveUnitPreferences,
 } from "@/lib/dashboard/contextBar";
+import { resolveHomeProfileContext } from "@/lib/dashboard/homeProfile";
 import { HERMES_DEFAULT_PREFERENCES } from "@/lib/dashboard/preferences";
-import {
-  availableProfiles,
-  clampProfiles,
-  deriveCapabilityTokens,
-  effectiveProfileLayout,
-  fallbackProfile,
-} from "@/lib/dashboard/profiles";
+import { effectiveProfileLayout } from "@/lib/dashboard/profiles";
 import {
   getCapabilitiesCached,
   getDashboardContextSettingsCached,
   getUnifiedAlertsCached,
 } from "@/lib/dashboard/requestScope";
-import { resolveHomeProfile } from "@/lib/dashboard/shortcuts";
 import {
-  clampLayout,
   contextVisibleSegments,
   needsWeather,
   resolveContextConfig,
@@ -49,8 +42,10 @@ import { getActiveTenantIdentity } from "@/services/hermes/tenantIdentity";
  * by the group layout; this page fetches ONLY the content snapshots and renders the épuré
  * 6-zone cockpit. Compared to the previous Home it drops the projects, conversations,
  * audit, resolver-control and commercial reads (moved to future métier sub-pages) — so it
- * loads strictly LESS. No auth check here: the group layout owns the auth boundary and
- * short-circuits the render before this page is reached.
+ * loads strictly LESS. The group layout redirects unauthenticated requests to /login;
+ * because Next renders layout and page concurrently these reads may still start for a
+ * logged-out request, so the real guarantee is that EVERY service RPC enforces auth +
+ * tenant server-side (SECURITY DEFINER) and returns no data without a session.
  */
 export default async function CommandCenterPage() {
   const [
@@ -101,23 +96,12 @@ export default async function CommandCenterPage() {
     tenantTimezone: tenantSettings.timezone,
   });
 
-  // Resolve the load-time active profile server-side (same rule as the chrome) purely to
-  // read its context-bar segment config — the ContextBar shows the segments configured for
-  // the profile the cockpit opens on.
-  const globalLayout = clampLayout(prefs.layout);
-  const profiles = clampProfiles(prefs.profiles);
-  const capabilityKeys = new Set(
-    capabilities.ok ? capabilities.data.capabilities.map((c) => c.actionKey) : [],
-  );
-  const capabilitiesKnown =
-    capabilities.ok && capabilities.data.resolutionStatus === "OK";
-  const offeredProfiles = availableProfiles(
-    deriveCapabilityTokens(capabilityKeys),
-    capabilitiesKnown,
-  );
-  const activeProfile = fallbackProfile(
-    resolveHomeProfile(prefs.behavior, profiles, globalLayout),
-    offeredProfiles,
+  // Resolve the load-time active profile server-side (SAME rule as the chrome, via the
+  // shared helper) purely to read its context-bar segment config — the ContextBar shows
+  // the segments configured for the profile the cockpit opens on.
+  const { globalLayout, profiles, activeProfile } = resolveHomeProfileContext(
+    prefs,
+    capabilities,
   );
   const layout = effectiveProfileLayout(profiles, activeProfile, globalLayout);
   const contextConfig = resolveContextConfig(layout.context);

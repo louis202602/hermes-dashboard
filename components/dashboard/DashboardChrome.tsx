@@ -6,6 +6,7 @@ import { saveDashboardPreferencesAction } from "@/app/actions/dashboard-preferen
 import AppearanceSync from "@/components/dashboard/AppearanceSync";
 import FavoritesBar from "@/components/dashboard/FavoritesBar";
 import Header from "@/components/dashboard/Header";
+import { NotificationsProvider } from "@/components/dashboard/NotificationsContext";
 import ProfileSwitcher from "@/components/dashboard/ProfileSwitcher";
 import Sidebar from "@/components/dashboard/Sidebar";
 import WallpaperLayer from "@/components/dashboard/WallpaperLayer";
@@ -222,8 +223,14 @@ export default function DashboardChrome({
             visibleWidgetIds={[]}
           />
 
-          {/* The page content (Command Center / future métier pages). */}
-          {children}
+          {/* The page content (Command Center / métier pages). The notification cursor
+              is shared down so the /notifications page uses the SAME feed + read-state
+              + version counter as the header bell (no divergence, no double cursor). */}
+          <NotificationsProvider
+            value={{ notifications, onMarkRead, onMarkAllRead, locale }}
+          >
+            {children}
+          </NotificationsProvider>
         </div>
       </div>
     </main>

@@ -4,13 +4,10 @@ import DashboardChrome from "@/components/dashboard/DashboardChrome";
 import {
   DEFAULT_CONTEXT_SETTINGS,
 } from "@/lib/dashboard/contextBar";
+import { resolveHomeProfileContext } from "@/lib/dashboard/homeProfile";
 import { HERMES_DEFAULT_PREFERENCES } from "@/lib/dashboard/preferences";
 import {
   PROFILE_IDS,
-  availableProfiles,
-  clampProfiles,
-  deriveCapabilityTokens,
-  fallbackProfile,
   profileWallpaperFields,
 } from "@/lib/dashboard/profiles";
 import {
@@ -19,8 +16,6 @@ import {
   getDashboardContextSettingsCached,
   getUnifiedAlertsCached,
 } from "@/lib/dashboard/requestScope";
-import { resolveHomeProfile } from "@/lib/dashboard/shortcuts";
-import { clampLayout } from "@/lib/dashboard/widgets";
 import { isUserWallpaperRef, resolveWallpaper } from "@/lib/dashboard/wallpapers";
 import { getCatalog, getLanguageDef, resolveLanguage } from "@/lib/i18n";
 import { I18nProvider } from "@/lib/i18n/I18nProvider";
@@ -68,22 +63,11 @@ export default async function DashboardGroupLayout({
   // BCP-47 locale for the notification timestamps in the header bell.
   const locale = reg.locale ?? tenantSettings.locale;
 
-  // DASH-4D/4I: profiles state + the profiles OFFERED to this tenant (capability-first).
-  const globalLayout = clampLayout(prefs.layout);
-  const profiles = clampProfiles(prefs.profiles);
-  const capabilityKeys = new Set(
-    capabilities.ok ? capabilities.data.capabilities.map((c) => c.actionKey) : [],
-  );
-  const capabilitiesKnown =
-    capabilities.ok && capabilities.data.resolutionStatus === "OK";
-  const offeredProfiles = availableProfiles(
-    deriveCapabilityTokens(capabilityKeys),
-    capabilitiesKnown,
-  );
-  // DASH-4H/4I opening profile: never open a profile this tenant is not offered.
-  const activeProfile = fallbackProfile(
-    resolveHomeProfile(prefs.behavior, profiles, globalLayout),
-    offeredProfiles,
+  // DASH-4D/4H/4I: profiles state, the profiles OFFERED to this tenant (capability-first),
+  // and the opening profile — resolved by the shared helper (identical to the page).
+  const { profiles, offeredProfiles, activeProfile } = resolveHomeProfileContext(
+    prefs,
+    capabilities,
   );
 
   // DASH-4E: sign each profile's user-image wallpaper server-side (short-TTL signed URL,

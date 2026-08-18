@@ -99,6 +99,30 @@ export default function SystemHealthPanel({
     ? observability.data.incidents.filter((i) => !i.resolvedAt).length
     : null;
 
+  // Single resolver line, reused by both the summary and the full variant.
+  const resolverLine = (
+    <div className="sysh-row">
+      <span className="sysh-row-item">
+        <CircuitBoard size={14} strokeWidth={1.8} />
+        {t("health.resolver")} :{" "}
+        <strong>
+          {res.available
+            ? t("health.resolverSummary", {
+                state: res.enabled ? t("health.enabled") : t("health.disabled"),
+                circuit:
+                  res.circuit === "OPEN"
+                    ? t("health.circuitOpen")
+                    : t("health.circuitClosed"),
+                queue: res.queueDepth ?? "—",
+                running: res.running ?? "—",
+                deadLetter: res.deadLetter ?? "—",
+              })
+            : "—"}
+        </strong>
+      </span>
+    </div>
+  );
+
   return (
     <section className={`dashboard-card sysh-card${summary ? " sysh-card-summary" : ""}`}>
       <div className="dashboard-card-header">
@@ -147,28 +171,7 @@ export default function SystemHealthPanel({
         />
       </div>
 
-      {summary ? (
-        <div className="sysh-row">
-          <span className="sysh-row-item">
-            <CircuitBoard size={14} strokeWidth={1.8} />
-            {t("health.resolver")} :{" "}
-            <strong>
-              {res.available
-                ? t("health.resolverSummary", {
-                    state: res.enabled ? t("health.enabled") : t("health.disabled"),
-                    circuit:
-                      res.circuit === "OPEN"
-                        ? t("health.circuitOpen")
-                        : t("health.circuitClosed"),
-                    queue: res.queueDepth ?? "—",
-                    running: res.running ?? "—",
-                    deadLetter: res.deadLetter ?? "—",
-                  })
-                : "—"}
-            </strong>
-          </span>
-        </div>
-      ) : null}
+      {summary ? resolverLine : null}
 
       {summary ? null : (
       <>
@@ -190,26 +193,7 @@ export default function SystemHealthPanel({
         />
       </div>
 
-      <div className="sysh-row">
-        <span className="sysh-row-item">
-          <CircuitBoard size={14} strokeWidth={1.8} />
-          {t("health.resolver")} :{" "}
-          <strong>
-            {res.available
-              ? t("health.resolverSummary", {
-                  state: res.enabled ? t("health.enabled") : t("health.disabled"),
-                  circuit:
-                    res.circuit === "OPEN"
-                      ? t("health.circuitOpen")
-                      : t("health.circuitClosed"),
-                  queue: res.queueDepth ?? "—",
-                  running: res.running ?? "—",
-                  deadLetter: res.deadLetter ?? "—",
-                })
-              : "—"}
-          </strong>
-        </span>
-      </div>
+      {resolverLine}
 
       <div className="sysh-subtitle">
         <Activity size={14} strokeWidth={1.8} /> <span>{t("health.costTitle")}</span>

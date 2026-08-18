@@ -2739,11 +2739,7 @@ html[data-reduce-motion="1"] .hermes-typing::before {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  /* Command Center — Z2 and Z5 collapse to a single column; KPI stays 2×2. */
-  .cc-overview,
-  .cc-priorities {
-    grid-template-columns: 1fr;
-  }
+  /* (.cc-overview / .cc-priorities already collapse at ≤1024 — see that block.) */
 
   /* Below tablet landscape, the alert pair stacks. */
   .exec-grid-2 {
