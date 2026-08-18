@@ -856,4 +856,13 @@ export const pt: Messages = {
   "settings.row.defaultHome": "Modo de abertura padrão",
   "settings.quickActions.note": "Escolha os atalhos mostrados em «Ações disponíveis». Vazio = todas as ações permitidas.",
   "settings.favorites.note": "Fixe os seus widgets e atalhos favoritos (máx. 8).",
+  "home.hero.title": "Posto de comando",
+  "home.hero.operational": "Operacional",
+  "home.hero.degraded": "Degradado",
+  "home.hero.prompt": "O que deseja fazer?",
+  "home.stat.alerts": "Alertas",
+  "home.stat.todo": "A tratar",
+  "home.stat.approvals": "Aprovações",
+  "home.stat.agents": "Agentes ativos",
+  "home.actions.more": "Ver mais",
 };

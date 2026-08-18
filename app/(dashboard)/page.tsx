@@ -28,35 +28,32 @@ import { getCurrentWeather } from "@/services/hermes/contextBar";
 import { getPublicKpis } from "@/services/hermes/dashboard";
 import {
   getCostGovernanceSnapshot,
-  getObservabilitySnapshot,
   getOperationalPriorities,
   getPlatformHealth,
-  getResolverObservability,
 } from "@/services/hermes/panels";
 import { getDashboardUserPreferences } from "@/services/hermes/preferences";
-import { getAgentActionStats } from "@/services/hermes/systemActivity";
+import { classifyPlatformHealth } from "@/lib/dashboard/systemActivity";
 import { getActiveTenantIdentity } from "@/services/hermes/tenantIdentity";
 
 /**
  * Command Center Home (route `/`, inside the (dashboard) group). The chrome is provided
  * by the group layout; this page fetches ONLY the content snapshots and renders the épuré
- * 6-zone cockpit. Compared to the previous Home it drops the projects, conversations,
- * audit, resolver-control and commercial reads (moved to future métier sub-pages) — so it
- * loads strictly LESS. The group layout redirects unauthenticated requests to /login;
- * because Next renders layout and page concurrently these reads may still start for a
- * logged-out request, so the real guarantee is that EVERY service RPC enforces auth +
- * tenant server-side (SECURITY DEFINER) and returns no data without a session.
+ * PREMIUM cockpit — 4 light zones (context · hero command post · synthesis counters ·
+ * quick chips), no full lists or heavy panels. Compared to the earlier Home it drops the
+ * observability/action-stats/resolver reads (detail now lives in the /agents, /activite, …
+ * sub-pages) and keeps only a light platform-health read for the hero état — so it loads
+ * strictly LESS. The group layout redirects
+ * unauthenticated requests to /login; because Next renders layout and page concurrently
+ * these reads may still start for a logged-out request, so the real guarantee is that
+ * EVERY service RPC enforces auth + tenant server-side (SECURITY DEFINER).
  */
 export default async function CommandCenterPage() {
   const [
     tenant,
     kpis,
     priorities,
-    observability,
     cost,
-    resolver,
     platformHealth,
-    actionStats,
     agenda,
     alerts,
     capabilities,
@@ -66,11 +63,8 @@ export default async function CommandCenterPage() {
     getActiveTenantIdentity(),
     getPublicKpis(),
     getOperationalPriorities(),
-    getObservabilitySnapshot(),
     getCostGovernanceSnapshot(),
-    getResolverObservability(),
     getPlatformHealth(),
-    getAgentActionStats(),
     getDashboardAgenda(),
     getUnifiedAlertsCached(),
     getCapabilitiesCached(),
@@ -131,6 +125,16 @@ export default async function CommandCenterPage() {
 
   const now = new Date();
   const alertCount = alerts.ok ? actionableAlertCount(alerts.data.alerts) : null;
+  // Honest severity for the synthesis tile: red only when a real critical alert exists,
+  // amber for other actionable alerts, neutral when none. (Not "critical for any alert".)
+  const alertTone: "critical" | "warning" | "none" =
+    alerts.ok && alerts.data.summary.critical > 0
+      ? "critical"
+      : alertCount && alertCount > 0
+        ? "warning"
+        : "none";
+  // Real Hermès/platform état for the hero pill — never a fabricated green "operational".
+  const heroStatus = classifyPlatformHealth(platformHealth).status;
   const nextEvent = agenda.ok
     ? nextEventForBar(agenda.data, now, settings.locale)
     : null;
@@ -158,19 +162,13 @@ export default async function CommandCenterPage() {
       initialClock={initialClock}
       contextSegments={contextSegments}
       tenant={tenant}
-      kpis={kpis}
-      observability={observability}
-      platformHealth={platformHealth}
-      actionStats={actionStats}
-      resolver={resolver}
-      cost={cost}
-      alerts={alerts}
+      heroStatus={heroStatus}
+      alertCount={alertCount}
+      alertTone={alertTone}
       priorities={priorities}
+      kpis={kpis}
       capabilities={capabilities}
       quickActions={prefs.behavior.quickActions}
-      locale={settings.locale}
-      timezone={tz.timezone}
-      hour12={units.hourCycle === "12h"}
     />
   );
 }

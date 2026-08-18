@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+import Link from "next/link";
+
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
 import {
   resolveQuickActions,
@@ -31,6 +33,13 @@ type QuickActionsProps = {
   /** DASH-4H — user-selected quick-action ids (nav ids + capability keys). Empty ⇒
    *  the default (all granted capabilities). */
   selected?: string[];
+  /** "grid" = the full card (Paramètres / detail). "chips" = the épuré Home: a compact
+   *  premium chip row, capped to `limit`, plus a "See more" chip → `moreHref`. */
+  variant?: "grid" | "chips";
+  /** chips only — max chips before the "See more" chip. */
+  limit?: number;
+  /** chips only — target of the "See more" chip (the full command post / chat). */
+  moreHref?: string;
 };
 
 function iconFor(actionKey: string): LucideIcon {
@@ -63,10 +72,20 @@ function Frame({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function QuickActions({ capabilities, selected = [] }: QuickActionsProps) {
+export default function QuickActions({
+  capabilities,
+  selected = [],
+  variant = "grid",
+  limit,
+  moreHref,
+}: QuickActionsProps) {
   const { t } = useI18n();
+  const chips = variant === "chips";
 
   if (!capabilities.ok) {
+    // In chips mode a failed capability read simply yields no chips (the Home stays clean);
+    // the full card keeps its explicit UNAVAILABLE state.
+    if (chips) return null;
     return (
       <Frame>
         <p className="quick-actions-empty">{t("qa.cardUnavailable")}</p>
@@ -77,6 +96,7 @@ export default function QuickActions({ capabilities, selected = [] }: QuickActio
   const { resolutionStatus, capabilities: rows } = capabilities.data;
 
   if (resolutionStatus !== "OK") {
+    if (chips) return null;
     return (
       <Frame>
         <p className="quick-actions-empty">
@@ -87,6 +107,7 @@ export default function QuickActions({ capabilities, selected = [] }: QuickActio
   }
 
   if (rows.length === 0) {
+    if (chips) return null;
     return (
       <Frame>
         <p className="quick-actions-empty">{t("qa.emptyNoActions")}</p>
@@ -103,6 +124,56 @@ export default function QuickActions({ capabilities, selected = [] }: QuickActio
   const items: ResolvedQuickAction[] = resolved.length
     ? resolved
     : rows.map((c) => ({ kind: "capability", id: c.actionKey }));
+
+  // Épuré Home — compact premium chips (capability-gated), capped, + a "See more" chip
+  // to the full command post. No card frame, no descriptions.
+  if (chips) {
+    const shown = typeof limit === "number" ? items.slice(0, limit) : items;
+    const truncated = typeof limit === "number" && items.length > limit;
+    return (
+      <div className="cc-chip-row">
+        {shown.map((item) => {
+          if (item.kind === "nav") {
+            const Icon = NAV_ICON[item.id] ?? Sparkles;
+            // A built route → client-side Link; an in-page anchor stays a plain <a>.
+            const isRoute = item.target.startsWith("/");
+            const inner = (
+              <>
+                <Icon size={15} strokeWidth={1.9} aria-hidden />
+                <span>{t(item.labelKey as MessageKey)}</span>
+              </>
+            );
+            return isRoute ? (
+              <Link className="cc-chip" href={item.target} key={`nav:${item.id}`}>
+                {inner}
+              </Link>
+            ) : (
+              <a className="cc-chip" href={item.target} key={`nav:${item.id}`}>
+                {inner}
+              </a>
+            );
+          }
+          const capability = capByKey.get(item.id);
+          if (!capability) return null;
+          const Icon = iconFor(capability.actionKey);
+          // Routes to the in-page command post (secure orchestrator path) — an anchor.
+          return (
+            <a className="cc-chip" href="#hermes-command" key={capability.actionKey}>
+              <Icon size={15} strokeWidth={1.9} aria-hidden />
+              <span>{capability.displayName}</span>
+            </a>
+          );
+        })}
+        {/* "See more" only when actions were actually truncated — never implying hidden
+            actions exist when they don't. Client-side Link to the full command post. */}
+        {moreHref && truncated ? (
+          <Link className="cc-chip cc-chip-more" href={moreHref}>
+            <span>{t("home.actions.more")}</span>
+          </Link>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <Frame>

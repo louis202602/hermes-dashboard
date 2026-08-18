@@ -856,4 +856,13 @@ export const de: Messages = {
   "settings.row.defaultHome": "Standard-Startmodus",
   "settings.quickActions.note": "Wählen Sie die in „Verfügbare Aktionen“ angezeigten Verknüpfungen. Leer = alle erlaubten Aktionen.",
   "settings.favorites.note": "Pinnen Sie Ihre bevorzugten Widgets und Verknüpfungen (max. 8).",
+  "home.hero.title": "Kommandozentrale",
+  "home.hero.operational": "Betriebsbereit",
+  "home.hero.degraded": "Beeinträchtigt",
+  "home.hero.prompt": "Was möchten Sie tun?",
+  "home.stat.alerts": "Warnungen",
+  "home.stat.todo": "Zu erledigen",
+  "home.stat.approvals": "Freigaben",
+  "home.stat.agents": "Aktive Agenten",
+  "home.actions.more": "Mehr anzeigen",
 };

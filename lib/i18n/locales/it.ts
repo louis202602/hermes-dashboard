@@ -856,4 +856,13 @@ export const it: Messages = {
   "settings.row.defaultHome": "Modalità di apertura predefinita",
   "settings.quickActions.note": "Scegli le scorciatoie mostrate in «Azioni disponibili». Vuoto = tutte le azioni consentite.",
   "settings.favorites.note": "Fissa i tuoi widget e scorciatoie preferiti (max 8).",
+  "home.hero.title": "Postazione di comando",
+  "home.hero.operational": "Operativo",
+  "home.hero.degraded": "Degradato",
+  "home.hero.prompt": "Cosa vuoi fare?",
+  "home.stat.alerts": "Avvisi",
+  "home.stat.todo": "Da gestire",
+  "home.stat.approvals": "Approvazioni",
+  "home.stat.agents": "Agenti attivi",
+  "home.actions.more": "Vedi altro",
 };
