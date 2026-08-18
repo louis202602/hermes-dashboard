@@ -3,6 +3,7 @@ import type { NextRequest, NextResponse } from "next/server";
 
 import { logEvent } from "@/lib/observability/log";
 
+import { classifyAuthError } from "./authError";
 import { getSupabaseEnv } from "./env";
 
 /**
@@ -35,9 +36,9 @@ export async function refreshSupabaseSession(
 
   const { error } = await supabase.auth.getUser();
   if (error) {
-    const expired = error.code === "refresh_token_not_found";
-    logEvent(expired ? "warn" : "error", "session.proxy_refresh_failed", {
-      reason: expired ? "SESSION_EXPIRED_OR_INVALID" : "AUTH_CHECK_ERROR",
+    const { reason, level } = classifyAuthError(error);
+    logEvent(level, "session.proxy_refresh_failed", {
+      reason,
       code: error.code ?? null,
       status: error.status ?? null,
     });

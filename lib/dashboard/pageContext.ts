@@ -9,6 +9,7 @@ import {
   getCapabilitiesCached,
   getDashboardContextSettingsCached,
   getPhotoModuleStateCached,
+  requireAuthedUser,
 } from "@/lib/dashboard/requestScope";
 import { availableWidgetIds } from "@/lib/dashboard/widgets";
 import { getDashboardUserPreferences } from "@/services/hermes/preferences";
@@ -33,6 +34,11 @@ export async function resolvePageContext(): Promise<{
   /** PHOTO-P0 — la verticale Studio est-elle activée pour ce tenant ? */
   photoEnabled: boolean;
 }> {
+  // Auth boundary FIRST — the group layout's redirect runs concurrently with the
+  // page, so it cannot be relied on to stop these reads. No session ⇒ redirect to
+  // /login before a single business RPC leaves the server.
+  await requireAuthedUser();
+
   const [prefsResult, contextSettingsResult, capabilities, photoModule] = await Promise.all([
     getDashboardUserPreferences(),
     getDashboardContextSettingsCached(),

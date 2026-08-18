@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
-
 import DashboardChrome from "@/components/dashboard/DashboardChrome";
 import {
   DEFAULT_CONTEXT_SETTINGS,
@@ -11,11 +9,11 @@ import {
   profileWallpaperFields,
 } from "@/lib/dashboard/profiles";
 import {
-  getAuthedUser,
   getCapabilitiesCached,
   getDashboardContextSettingsCached,
   getPhotoModuleStateCached,
   getUnifiedAlertsCached,
+  requireAuthedUser,
 } from "@/lib/dashboard/requestScope";
 import { isUserWallpaperRef, resolveWallpaper } from "@/lib/dashboard/wallpapers";
 import { getCatalog, getLanguageDef, resolveLanguage } from "@/lib/i18n";
@@ -34,10 +32,10 @@ import { signUserWallpapers } from "@/services/hermes/wallpapers";
 export default async function DashboardGroupLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const user = await getAuthedUser();
-  if (!user) {
-    redirect("/login");
-  }
+  // Auth boundary. NOTE: Next renders this layout and the page CONCURRENTLY, so this
+  // redirect does not by itself stop a page's reads — every page that fans out data
+  // resolves the same guard itself (directly or via `resolvePageContext`).
+  const user = await requireAuthedUser();
 
   // Chrome-scoped reads (all cache()-shared with the page).
   const [preferencesResult, capabilities, alerts, contextSettingsResult, photoModule] =
