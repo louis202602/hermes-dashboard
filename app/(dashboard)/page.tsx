@@ -18,6 +18,7 @@ import {
   getDashboardContextSettingsCached,
   getPhotoModuleStateCached,
   getUnifiedAlertsCached,
+  requireAuthedUser,
 } from "@/lib/dashboard/requestScope";
 import {
   contextVisibleSegments,
@@ -43,12 +44,16 @@ import { getActiveTenantIdentity } from "@/services/hermes/tenantIdentity";
  * quick chips), no full lists or heavy panels. Compared to the earlier Home it drops the
  * observability/action-stats/resolver reads (detail now lives in the /agents, /activite, …
  * sub-pages) and keeps only a light platform-health read for the hero état — so it loads
- * strictly LESS. The group layout redirects
- * unauthenticated requests to /login; because Next renders layout and page concurrently
- * these reads may still start for a logged-out request, so the real guarantee is that
- * EVERY service RPC enforces auth + tenant server-side (SECURITY DEFINER).
+ * strictly LESS.
+ *
+ * AUTH: Next renders the group layout and this page CONCURRENTLY, so the layout's
+ * redirect cannot stop the fan-out below — this page resolves the boundary itself,
+ * first. Server-side enforcement in every RPC (SECURITY DEFINER) remains the security
+ * guarantee; the guard here is what keeps a logged-out request from issuing them at all.
  */
 export default async function CommandCenterPage() {
+  await requireAuthedUser();
+
   const [
     tenant,
     kpis,

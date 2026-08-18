@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
+import { classifyAuthError } from "../lib/supabase/authError.ts";
+
 /**
  * SESSION-GUARD — Correctif de la rafale 42501/401.
  *
@@ -49,8 +51,14 @@ test("les 3 points d'entrée gardés redirigent vers /login avant tout Promise.a
     "../app/parametres/dashboard/page.tsx",
   ]) {
     const src = read(page);
-    const guardIdx = src.indexOf('redirect("/login")');
-    assert.notEqual(guardIdx, -1, `${page} : garde /login absente`);
+    // Le layout du groupe passe désormais par le helper partagé `requireAuthedUser`
+    // (qui redirige) ; les deux pages hors groupe gardent leur redirect en clair.
+    const guardIdx = Math.min(
+      ...[src.indexOf('redirect("/login")'), src.indexOf("requireAuthedUser()")].filter(
+        (i) => i !== -1,
+      ),
+    );
+    assert.notEqual(guardIdx, Infinity, `${page} : garde /login absente`);
     const fanOutIdx = src.indexOf("Promise.all(");
     if (fanOutIdx !== -1) {
       assert.ok(
@@ -64,8 +72,14 @@ test("les 3 points d'entrée gardés redirigent vers /login avant tout Promise.a
 // --- 3 & 4. getAuthedUser distingue explicitement l'échec de rafraîchissement ---
 test("getAuthedUser journalise SESSION_EXPIRED_OR_INVALID sans jamais fabriquer un utilisateur", () => {
   const src = read("../lib/dashboard/requestScope.ts");
-  assert.ok(src.includes('error.code === "refresh_token_not_found"'));
-  assert.ok(src.includes("SESSION_EXPIRED_OR_INVALID"));
+  // La classification vit désormais dans le classifieur partagé, testé en direct
+  // (valeurs comprises) par tests/anon-rpc-guard.test.ts.
+  assert.ok(src.includes("classifyAuthError(error)"), "classification déléguée absente");
+  assert.equal(
+    classifyAuthError({ name: "AuthApiError", code: "refresh_token_not_found", status: 400 })
+      .reason,
+    "SESSION_EXPIRED_OR_INVALID",
+  );
   // Le retour reste `user` (null en cas d'erreur) — jamais une valeur de repli.
   const fnIdx = src.indexOf("export const getAuthedUser = cache(");
   assert.notEqual(fnIdx, -1);
@@ -75,8 +89,8 @@ test("getAuthedUser journalise SESSION_EXPIRED_OR_INVALID sans jamais fabriquer 
 
 test("le rafraîchissement au niveau proxy distingue aussi l'expiration attendue", () => {
   const src = read("../lib/supabase/session.ts");
-  assert.ok(src.includes('error.code === "refresh_token_not_found"'));
-  assert.ok(src.includes("SESSION_EXPIRED_OR_INVALID"));
+  assert.ok(src.includes("classifyAuthError(error)"), "classification déléguée absente");
+  assert.ok(src.includes("session.proxy_refresh_failed"));
 });
 
 // --- 7. Aucun droit anon ajouté ------------------------------------------------

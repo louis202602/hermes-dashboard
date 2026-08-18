@@ -1,6 +1,8 @@
+import { redirect } from "next/navigation";
 import { cache } from "react";
 
 import { logEvent } from "@/lib/observability/log";
+import { classifyAuthError } from "@/lib/supabase/authError";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getUnifiedAlerts } from "@/services/hermes/agenda";
 import { getDashboardContextSettings } from "@/services/hermes/contextBar";
@@ -21,10 +23,9 @@ import { getPhotoModuleState } from "@/services/hermes/photo";
 /** The authenticated user (or null). Read by the chrome (email, redirect guard) and by
  *  the page (auth boundary) — memoized so GoTrue is hit once.
  *
- *  A failed refresh (e.g. `refresh_token_not_found`, expected when a rotating
- *  refresh token was already redeemed) is logged as SESSION_EXPIRED_OR_INVALID,
- *  not as an RPC failure — `user` is simply null and every caller's existing
- *  `if (!user) redirect("/login")` fail-closes before any business RPC runs. */
+ *  An auth failure is CLASSIFIED rather than blanket-logged as an error: a visitor
+ *  with no cookie at all (NO_SESSION) is the normal logged-out state, not a fault.
+ *  See `lib/supabase/authError.ts`. `user` is simply null in every failure case. */
 export const getAuthedUser = cache(async () => {
   const supabase = await createSupabaseServerClient();
   const {
@@ -32,15 +33,35 @@ export const getAuthedUser = cache(async () => {
     error,
   } = await supabase.auth.getUser();
   if (error) {
-    const expired = error.code === "refresh_token_not_found";
-    logEvent(expired ? "warn" : "error", "session.auth_check_failed", {
-      reason: expired ? "SESSION_EXPIRED_OR_INVALID" : "AUTH_CHECK_ERROR",
+    const { reason, level } = classifyAuthError(error);
+    logEvent(level, "session.auth_check_failed", {
+      reason,
       code: error.code ?? null,
       status: error.status ?? null,
     });
   }
   return user;
 });
+
+/**
+ * THE auth boundary for server-rendered dashboard work.
+ *
+ * Next.js renders a layout and its page CONCURRENTLY: the group layout's
+ * `redirect("/login")` does NOT stop the page underneath from rendering, so a
+ * page that fans out its own reads would still fire them for a logged-out
+ * visitor (that is exactly how an anonymous request produced a burst of
+ * 401/42501 RPC calls before this guard existed). Every server module that is
+ * about to read business data must therefore resolve this ITSELF, first.
+ *
+ * `redirect()` throws, which unwinds the caller before any read starts. Cost is
+ * nil: `getAuthedUser` is `cache()`-shared, so the whole request still performs
+ * at most one GoTrue round-trip no matter how many callers gate on it.
+ */
+export async function requireAuthedUser() {
+  const user = await getAuthedUser();
+  if (!user) redirect("/login");
+  return user;
+}
 
 /** Granted capabilities. Chrome uses them for the offered profiles; the page uses them
  *  for Quick Actions + widget availability. One RPC per request. */
