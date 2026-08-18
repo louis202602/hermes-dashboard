@@ -1,5 +1,6 @@
 import { cache } from "react";
 
+import { logEvent } from "@/lib/observability/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getUnifiedAlerts } from "@/services/hermes/agenda";
 import { getDashboardContextSettings } from "@/services/hermes/contextBar";
@@ -18,12 +19,26 @@ import { getPhotoModuleState } from "@/services/hermes/photo";
 // cost, …) are called directly there and need no memo.
 
 /** The authenticated user (or null). Read by the chrome (email, redirect guard) and by
- *  the page (auth boundary) — memoized so GoTrue is hit once. */
+ *  the page (auth boundary) — memoized so GoTrue is hit once.
+ *
+ *  A failed refresh (e.g. `refresh_token_not_found`, expected when a rotating
+ *  refresh token was already redeemed) is logged as SESSION_EXPIRED_OR_INVALID,
+ *  not as an RPC failure — `user` is simply null and every caller's existing
+ *  `if (!user) redirect("/login")` fail-closes before any business RPC runs. */
 export const getAuthedUser = cache(async () => {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser();
+  if (error) {
+    const expired = error.code === "refresh_token_not_found";
+    logEvent(expired ? "warn" : "error", "session.auth_check_failed", {
+      reason: expired ? "SESSION_EXPIRED_OR_INVALID" : "AUTH_CHECK_ERROR",
+      code: error.code ?? null,
+      status: error.status ?? null,
+    });
+  }
   return user;
 });
 
