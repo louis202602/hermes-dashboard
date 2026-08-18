@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import type { NextRequest, NextResponse } from "next/server";
 
+import { logEvent } from "@/lib/observability/log";
+
 import { getSupabaseEnv } from "./env";
 
 /**
@@ -31,5 +33,13 @@ export async function refreshSupabaseSession(
     },
   });
 
-  await supabase.auth.getUser();
+  const { error } = await supabase.auth.getUser();
+  if (error) {
+    const expired = error.code === "refresh_token_not_found";
+    logEvent(expired ? "warn" : "error", "session.proxy_refresh_failed", {
+      reason: expired ? "SESSION_EXPIRED_OR_INVALID" : "AUTH_CHECK_ERROR",
+      code: error.code ?? null,
+      status: error.status ?? null,
+    });
+  }
 }

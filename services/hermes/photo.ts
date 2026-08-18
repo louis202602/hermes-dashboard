@@ -86,7 +86,12 @@ async function callRpc(
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc(fn, args);
   if (error) {
-    logEvent("error", "photo.rpc_error", { fn, code: error.code });
+    // Expected dormancy, not a failure: while the Studio migration is unapplied,
+    // `get_photo_module_state` genuinely doesn't exist yet, so PostgREST reports
+    // PGRST202. Only THIS exact (function, code) pair is downgraded — any other
+    // code on this function, or any code on any other photo RPC, stays an error.
+    const dormant = fn === "get_photo_module_state" && error.code === "PGRST202";
+    logEvent(dormant ? "warn" : "error", "photo.rpc_error", { fn, code: error.code });
     return null;
   }
   return asRecord(data);
