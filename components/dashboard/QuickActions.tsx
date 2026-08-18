@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+import Link from "next/link";
+
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
 import {
   resolveQuickActions,
@@ -127,21 +129,34 @@ export default function QuickActions({
   // to the full command post. No card frame, no descriptions.
   if (chips) {
     const shown = typeof limit === "number" ? items.slice(0, limit) : items;
+    const truncated = typeof limit === "number" && items.length > limit;
     return (
       <div className="cc-chip-row">
         {shown.map((item) => {
           if (item.kind === "nav") {
             const Icon = NAV_ICON[item.id] ?? Sparkles;
-            return (
-              <a className="cc-chip" href={item.target} key={`nav:${item.id}`}>
+            // A built route → client-side Link; an in-page anchor stays a plain <a>.
+            const isRoute = item.target.startsWith("/");
+            const inner = (
+              <>
                 <Icon size={15} strokeWidth={1.9} aria-hidden />
                 <span>{t(item.labelKey as MessageKey)}</span>
+              </>
+            );
+            return isRoute ? (
+              <Link className="cc-chip" href={item.target} key={`nav:${item.id}`}>
+                {inner}
+              </Link>
+            ) : (
+              <a className="cc-chip" href={item.target} key={`nav:${item.id}`}>
+                {inner}
               </a>
             );
           }
           const capability = capByKey.get(item.id);
           if (!capability) return null;
           const Icon = iconFor(capability.actionKey);
+          // Routes to the in-page command post (secure orchestrator path) — an anchor.
           return (
             <a className="cc-chip" href="#hermes-command" key={capability.actionKey}>
               <Icon size={15} strokeWidth={1.9} aria-hidden />
@@ -149,10 +164,12 @@ export default function QuickActions({
             </a>
           );
         })}
-        {moreHref ? (
-          <a className="cc-chip cc-chip-more" href={moreHref}>
+        {/* "See more" only when actions were actually truncated — never implying hidden
+            actions exist when they don't. Client-side Link to the full command post. */}
+        {moreHref && truncated ? (
+          <Link className="cc-chip cc-chip-more" href={moreHref}>
             <span>{t("home.actions.more")}</span>
-          </a>
+          </Link>
         ) : null}
       </div>
     );

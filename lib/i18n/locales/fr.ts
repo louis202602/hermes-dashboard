@@ -875,6 +875,7 @@ export const fr = {
   "settings.favorites.note": "Épinglez vos widgets et raccourcis favoris (max 8).",
   "home.hero.title": "Poste de commande",
   "home.hero.operational": "Opérationnel",
+  "home.hero.degraded": "Dégradé",
   "home.hero.prompt": "Que voulez-vous faire ?",
   "home.stat.alerts": "Alertes",
   "home.stat.todo": "À traiter",

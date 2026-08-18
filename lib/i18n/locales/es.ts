@@ -858,6 +858,7 @@ export const es: Messages = {
   "settings.favorites.note": "Fija tus widgets y accesos favoritos (máx. 8).",
   "home.hero.title": "Puesto de mando",
   "home.hero.operational": "Operativo",
+  "home.hero.degraded": "Degradado",
   "home.hero.prompt": "¿Qué desea hacer?",
   "home.stat.alerts": "Alertas",
   "home.stat.todo": "Por tratar",

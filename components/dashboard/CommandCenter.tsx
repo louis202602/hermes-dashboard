@@ -20,10 +20,12 @@ type CommandCenterProps = {
   contextBar: ContextBarModel;
   initialClock: { time: string; date: string; offset: string };
   contextSegments: string[];
-  // Z2 — hero identity
+  // Z2 — hero identity + real platform état
   tenant: ServiceResult<TenantIdentity>;
+  heroStatus: "OPERATIONAL" | "DEGRADED" | "UNAVAILABLE";
   // Z3 — synthesis (compact counters, from already-loaded snapshots)
   alertCount: number | null;
+  alertTone: "critical" | "warning" | "none";
   priorities: ServiceResult<OperationalPriorities>;
   kpis: ServiceResult<PublicKpis>;
   // Z4 — quick action chips (capability-gated)
@@ -45,13 +47,25 @@ export default function CommandCenter({
   initialClock,
   contextSegments,
   tenant,
+  heroStatus,
   alertCount,
+  alertTone,
   priorities,
   kpis,
   capabilities,
   quickActions,
 }: CommandCenterProps) {
   const { t } = useI18n();
+
+  // Real Hermès/platform état (never a fabricated green "operational").
+  const heroTone =
+    heroStatus === "OPERATIONAL" ? "ok" : heroStatus === "DEGRADED" ? "warn" : "muted";
+  const heroLabel =
+    heroStatus === "OPERATIONAL"
+      ? t("home.hero.operational")
+      : heroStatus === "DEGRADED"
+        ? t("home.hero.degraded")
+        : t("common.unavailable");
 
   // Z3 synthesis — three counters + one headline KPI, all from loaded snapshots.
   const summary = priorities.ok ? priorities.data.summary : null;
@@ -78,12 +92,13 @@ export default function CommandCenter({
           <div className="cc-hero-copy">
             <TenantBadge identity={tenant} />
             <h1 className="cc-hero-title">{t("home.hero.title")}</h1>
-            <span className="cc-hero-state">
+            <span className={`cc-hero-state is-${heroTone}`}>
               <span className="status-pulse" />
-              Hermès · {t("home.hero.operational")}
+              Hermès · {heroLabel}
             </span>
           </div>
         </div>
+        <p className="cc-hero-prompt">{t("home.hero.prompt")}</p>
         <div id="hermes-command" className="cc-hero-ask">
           <HermesPanel variant="hero" />
         </div>
@@ -91,7 +106,15 @@ export default function CommandCenter({
 
       {/* Z3 — synthèse à traiter : compteurs compacts (pas de listes). */}
       <section className="cc-synthese" aria-label={t("intro.title")}>
-        <div className={`cc-stat${alertCount && alertCount > 0 ? " is-critical" : ""}`}>
+        <div
+          className={`cc-stat${
+            alertTone === "critical"
+              ? " is-critical"
+              : alertTone === "warning"
+                ? " is-warning"
+                : ""
+          }`}
+        >
           <strong>{fmt(alertCount)}</strong>
           <span>{t("home.stat.alerts")}</span>
         </div>

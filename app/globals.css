@@ -694,6 +694,23 @@ html[data-theme="light"] .dashboard-sidebar {
   border-radius: 50%;
   background: var(--success);
 }
+.cc-hero-state.is-warn .status-pulse {
+  background: var(--warning);
+}
+.cc-hero-state.is-muted .status-pulse {
+  background: var(--text-muted);
+}
+.cc-hero-state.is-warn {
+  color: var(--warning);
+}
+
+/* Reduced hero microcopy — the single premium prompt above the composer. */
+.cc-hero-prompt {
+  margin: -2px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
 
 /* Hero ask — the HermesPanel hero variant sits INSIDE the hero glass, so the panel
    itself is transparent (no nested card) and shows only the composer. */

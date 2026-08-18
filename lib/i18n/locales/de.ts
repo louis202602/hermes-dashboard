@@ -858,6 +858,7 @@ export const de: Messages = {
   "settings.favorites.note": "Pinnen Sie Ihre bevorzugten Widgets und Verknüpfungen (max. 8).",
   "home.hero.title": "Kommandozentrale",
   "home.hero.operational": "Betriebsbereit",
+  "home.hero.degraded": "Beeinträchtigt",
   "home.hero.prompt": "Was möchten Sie tun?",
   "home.stat.alerts": "Warnungen",
   "home.stat.todo": "Zu erledigen",

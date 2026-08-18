@@ -858,6 +858,7 @@ export const en: Messages = {
   "settings.favorites.note": "Pin your favorite widgets and shortcuts (max 8).",
   "home.hero.title": "Command post",
   "home.hero.operational": "Operational",
+  "home.hero.degraded": "Degraded",
   "home.hero.prompt": "What would you like to do?",
   "home.stat.alerts": "Alerts",
   "home.stat.todo": "To handle",
