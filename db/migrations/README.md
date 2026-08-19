@@ -1061,3 +1061,65 @@ que le constat. Les deux invariants vérifiables sont donc verrouillés par test
 `db/tests/phase2_hygiene.test.sql` — 16 assertions, transaction annulée,
 **16 PASS**, dont `DATA1`/`DATA2` (aucune donnée réelle perdue) et
 `P1a`/`P1b`/`P1c` (les protections de la Phase 1 restent intactes).
+
+---
+
+## 2026-08-19 — PACK PHOTOVOLTAÏQUE, LOT PV-1 : modèle de données métier
+
+Lots `20260819_pv1_1_schema` + `_2_functions` + `_9_rollback`. Appliqués au projet
+`smubxqorirlfldatzmym`. **0 ligne métier écrite en production.**
+
+### Ce que le lot ferme
+
+L'audit du 2026-08-19 avait établi que le schéma ne contenait **aucune** colonne
+photovoltaïque, et que les Agents 4 (Facture EDF) et 5 (Bureau d'Études PV), pourtant
+actifs dans n8n, étaient **orphelins** — aucune table ne pouvait recevoir leur sortie.
+
+**9 tables** : `pv_prospects` · `pv_prospect_transitions` · `pv_sites` ·
+`pv_consumption_profiles` · `pv_energy_bills` · `pv_energy_bill_extractions` ·
+`pv_studies` · `pv_study_assumptions` · `pv_economics`.
+
+### L'invariant central — l'IA ne s'auto-valide jamais
+
+Déclencheur `pv_human_validation_guard`, opposable à tout écrivain :
+
+* `auth.uid()` NULL ⇒ **refus** — un runner en `service_role` n'a pas d'identité
+  authentifiée, il ne peut donc structurellement pas valider ;
+* `verified_by` / `validated_by` doit être **l'appelant authentifié lui-même** — on ne
+  valide pas au nom d'autrui ;
+* `CHECK` complémentaire (acteur **et** horodatage) + FK vers `auth.users(id)`.
+
+Conséquence : une étude `prepared_by = 'AGENT_5'` en `CALCULATED` ne peut pas atteindre
+`VALIDATED`, et une extraction ne peut pas rendre une facture `VERIFIED`.
+`pv_promote_bill_extraction()` — seul chemin sanctionné — aboutit à **`NEEDS_REVIEW`**,
+jamais `VERIFIED` : promouvoir et certifier sont deux gestes distincts.
+
+### Isolation — la FK composite
+
+Une FK enfant sur `id` seul aurait laissé un site pointer le prospect d'un **autre
+tenant**. Les 7 FK du lot sont donc **composites** `(tenant_id, parent_id)`, adossées à
+une clé candidate `unique (tenant_id, id)` sur chaque parent. Plus `tenant_id` immuable
+par déclencheur, RLS deny-all sur les 9 tables, et `REVOKE ALL FROM anon, authenticated`.
+
+### Décisions de modélisation
+
+* **Azimut et inclinaison numériques** (`numeric`), pas des chaînes : « plein sud » n'est
+  pas calculable par PVGIS.
+* **Hypothèses d'étude en colonnes typées** (prix énergie, inflation, horizon,
+  actualisation, dégradation, pertes, rachat surplus, aides, TVA). `extra_assumptions`
+  (jsonb) est un **complément**, jamais la source d'un chiffre montré au client.
+* **Documents = (bucket privé, chemin)**, jamais une URL — un `CHECK` refuse `http(s)://`.
+  Le bucket `hermes-pv-documents` et sa RLS `storage` sont au lot PV-2 : PV-1 ne pose que
+  le contrat de colonnes.
+* **Audit : brique EXISTANTE réutilisée** (`entity_audit_log`). Aucun second système.
+* **`ON DELETE RESTRICT`** sur les chaînes porteuses de données ; `CASCADE` uniquement
+  là où l'enfant n'a aucun sens seul et ne porte rien de validé (extractions, hypothèses).
+
+### Preuves
+
+`db/tests/pv1_schema.test.sql` — **30 assertions, 30 PASS**, transaction annulée,
+couvrant les 12 tests exigés + audit + promotion + RLS, dont le rollback réel du lot
+(9 tables retirées, et **seulement** elles) et la non-régression des Phases 1 et 2.
+
+`tests/pv1-schema-migrations.test.ts` — 22 assertions de contrat sur le diff SQL.
+Vérifié par mutation : remplacer une FK composite par une FK simple fait échouer un test.
