@@ -53,10 +53,15 @@ test("les 3 points d'entrée gardés redirigent vers /login avant tout Promise.a
     const src = read(page);
     // Le layout du groupe passe désormais par le helper partagé `requireAuthedUser`
     // (qui redirige) ; les deux pages hors groupe gardent leur redirect en clair.
+    // `requireRoute` délègue à `resolvePageContext`, qui résout
+    // `requireAuthedUser` (donc le redirect) avant toute lecture — et y ajoute
+    // le contrôle de module. La garde n'est pas perdue : elle est renforcée.
     const guardIdx = Math.min(
-      ...[src.indexOf('redirect("/login")'), src.indexOf("requireAuthedUser()")].filter(
-        (i) => i !== -1,
-      ),
+      ...[
+        src.indexOf('redirect("/login")'),
+        src.indexOf("requireAuthedUser()"),
+        src.indexOf("requireRoute("),
+      ].filter((i) => i !== -1),
     );
     assert.notEqual(guardIdx, Infinity, `${page} : garde /login absente`);
     const fanOutIdx = src.indexOf("Promise.all(");

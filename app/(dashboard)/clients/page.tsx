@@ -1,8 +1,6 @@
-import { notFound } from "next/navigation";
-
 import PhotoConsentForm from "@/components/dashboard/PhotoConsentForm";
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
-import { resolvePageContext } from "@/lib/dashboard/pageContext";
+import { requireRoute } from "@/lib/dashboard/routeGuard";
 import { getPhotoClients, getPhotoValueSnapshot } from "@/services/hermes/photo";
 
 export const metadata = { title: "Clients — Hermès Studio" };
@@ -15,8 +13,8 @@ export const metadata = { title: "Clients — Hermès Studio" };
  * sera possible plus tard (gate fail-closed en base).
  */
 export default async function PhotoClientsPage() {
-  const ctx = await resolvePageContext();
-  if (!ctx.photoEnabled) notFound();
+  // Même garde que le menu et que /chantiers/carte : une seule liste de modules.
+  const ctx = await requireRoute("/clients");
 
   const [clients, value] = await Promise.all([getPhotoClients(200), getPhotoValueSnapshot()]);
 

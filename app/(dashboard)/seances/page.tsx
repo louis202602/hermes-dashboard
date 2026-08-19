@@ -1,9 +1,7 @@
-import { notFound } from "next/navigation";
-
 import PhotoNewSessionForm from "@/components/dashboard/PhotoNewSessionForm";
 import PhotoSessionsPanel from "@/components/dashboard/PhotoSessionsPanel";
 import PhotoTodayPanel from "@/components/dashboard/PhotoTodayPanel";
-import { resolvePageContext } from "@/lib/dashboard/pageContext";
+import { requireRoute } from "@/lib/dashboard/routeGuard";
 import { getPhotoSessions, getPhotoToday } from "@/services/hermes/photo";
 
 export const metadata = { title: "Séances — Hermès Studio" };
@@ -17,8 +15,8 @@ export const metadata = { title: "Séances — Hermès Studio" };
  * un accès direct à l'URL ne révèle rien.
  */
 export default async function PhotoSessionsPage() {
-  const ctx = await resolvePageContext();
-  if (!ctx.photoEnabled) notFound();
+  // Même garde que le menu et que /chantiers/carte : une seule liste de modules.
+  await requireRoute("/seances");
 
   const [today, sessions] = await Promise.all([getPhotoToday(), getPhotoSessions(50)]);
 

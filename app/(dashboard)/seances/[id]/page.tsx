@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import PhotoSessionActions from "@/components/dashboard/PhotoSessionActions";
-import { resolvePageContext } from "@/lib/dashboard/pageContext";
+import { requireRoute } from "@/lib/dashboard/routeGuard";
 import {
   PHOTO_BLOCKED_LABEL,
   PHOTO_NEXT_ACTION_LABEL,
@@ -25,8 +25,8 @@ export default async function PhotoSessionDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const ctx = await resolvePageContext();
-  if (!ctx.photoEnabled) notFound();
+  // Même garde que le menu et que /chantiers/carte : une seule liste de modules.
+  const ctx = await requireRoute("/seances");
 
   const { id } = await params;
   const detail = await getPhotoSessionDetail(id);

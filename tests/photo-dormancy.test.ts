@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { resolveTenantComposition } from "../lib/verticals/composition.ts";
 
 import { photoGateKeys } from "../lib/dashboard/photoAccess.ts";
 import { availableProfiles, deriveCapabilityTokens } from "../lib/dashboard/profiles.ts";
@@ -75,11 +76,21 @@ test("PHOTO_ACTION_EXECUTABLE=NO : aucune action photo n'est appelable", () => {
 
 // --- PHOTO_MENU_VISIBLE = NO --------------------------------------------------
 test("PHOTO_MENU_VISIBLE=NO : les entrées de menu ne sont pas rendues par défaut", () => {
+  // Le menu n'est plus une liste écrite : il se CALCULE. On vérifie donc le
+  // calcul lui-même — preuve plus forte qu'une correspondance de chaîne.
+  for (const keys of [[...TENANT_BTP], []]) {
+    const nav = resolveTenantComposition({ capabilityKeys: keys }).navigation;
+    for (const photoModule of ["photo.sessions", "photo.gallery"]) {
+      assert.ok(
+        !nav.some((n) => n.moduleId === photoModule),
+        `entrée ${photoModule} rendue sans activation de la verticale`,
+      );
+    }
+  }
+  // Et la sidebar ne décide plus rien d'elle-même : elle rend ce qu'on lui donne.
   const sidebar = read("../components/dashboard/Sidebar.tsx");
-  assert.ok(sidebar.includes("showPhotoStudio = false"), "défaut non activé");
-  assert.ok(sidebar.includes("!item.photoOnly || showPhotoStudio"), "filtre appliqué");
-  const chrome = read("../components/dashboard/DashboardChrome.tsx");
-  assert.ok(chrome.includes("showPhotoStudio = false"), "défaut non activé dans le chrome");
+  assert.ok(!sidebar.includes("photoOnly"), "un filtre photo local subsiste dans la sidebar");
+  assert.ok(sidebar.includes("navigation: NavEntry[]"), "la sidebar doit rendre le menu composé");
 });
 
 // --- PHOTO_WIDGET_VISIBLE = NO -------------------------------------------------
@@ -101,7 +112,8 @@ test("PHOTO_ROUTE_DATA_ACCESSIBLE=NO : double barrière page + façade", () => {
     "../app/(dashboard)/seances/[id]/tri/page.tsx",
     "../app/(dashboard)/clients/page.tsx",
   ]) {
-    assert.ok(read(page).includes("if (!ctx.photoEnabled) notFound();"), `${page} sans barrière`);
+    // Barrière unifiée : `requireRoute` refuse quand le module n'est pas accordé.
+    assert.ok(read(page).includes("requireRoute("), `${page} sans barrière`);
   }
   // Barrière 2 — chaque façade de données passe par la garde d'activation,
   // façades de STOCKAGE comprises (lot 4), pas seulement celles du lot 3.
