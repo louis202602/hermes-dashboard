@@ -200,7 +200,12 @@ test("CSS: les classes de la verticale existent et n'écrasent aucune classe exi
   }
   // Toutes les nouvelles règles sont préfixées `photo-` : aucun sélecteur existant
   // n'est redéfini, donc aucune régression visuelle possible ailleurs.
-  const block = css.slice(css.indexOf("PHOTO-P0 — Verticale Hermès Studio"));
+  // La découpe s'arrête au bloc suivant (PV-2). Sans cette borne, le test
+  // reprocherait au lot photovoltaïque de ne pas être préfixé `photo-` — ce qui
+  // n'est pas ce qu'il vérifie : il garde LE BLOC PHOTO.
+  const start = css.indexOf("PHOTO-P0 — Verticale Hermès Studio");
+  const next = css.indexOf("PACK PHOTOVOLTAÏQUE — LOT PV-2.");
+  const block = css.slice(start, next > start ? next : undefined);
   const selectors = [...block.matchAll(/^\.([a-z0-9-]+)/gm)].map((m) => m[1]);
   assert.ok(selectors.length > 5);
   for (const selector of selectors) {
