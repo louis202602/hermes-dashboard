@@ -27,6 +27,7 @@ import {
 import { WIDGET_REGISTRY } from "@/lib/dashboard/widgets";
 import { DEFAULT_WALLPAPER_REF, resolveWallpaper } from "@/lib/dashboard/wallpapers";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { NavEntry } from "@/lib/verticals/navigation";
 import type { ServiceResult } from "@/types/hermes";
 
 type DashboardChromeProps = {
@@ -47,8 +48,8 @@ type DashboardChromeProps = {
   // DASH-4F: the notification feed is DERIVED client-side from this already-loaded
   // alerts snapshot (0 extra DB read, 0 polling, 0 LLM).
   alerts: ServiceResult<UnifiedAlerts>;
-  /** PHOTO-P0 — verticale Studio activée pour ce tenant (capability-first). */
-  showPhotoStudio?: boolean;
+  /** LE MENU, composé côté serveur par le moteur de verticales. */
+  navigation: NavEntry[];
   children: React.ReactNode;
 };
 
@@ -70,7 +71,7 @@ export default function DashboardChrome({
   availableProfiles,
   wallpaperUrls,
   alerts,
-  showPhotoStudio = false,
+  navigation,
   children,
 }: DashboardChromeProps) {
   const { t, dir } = useI18n();
@@ -184,7 +185,7 @@ export default function DashboardChrome({
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed((value) => !value)}
           onNavigate={() => setMobileMenuOpen(false)}
-          showPhotoStudio={showPhotoStudio}
+          navigation={navigation}
         />
       </div>
 

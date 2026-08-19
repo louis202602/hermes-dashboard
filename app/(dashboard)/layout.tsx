@@ -16,6 +16,8 @@ import {
   requireAuthedUser,
 } from "@/lib/dashboard/requestScope";
 import { isUserWallpaperRef, resolveWallpaper } from "@/lib/dashboard/wallpapers";
+import { photoGateKeys } from "@/lib/dashboard/photoAccess";
+import { resolveTenantComposition } from "@/lib/verticals/composition";
 import { getCatalog, getLanguageDef, resolveLanguage } from "@/lib/i18n";
 import { I18nProvider } from "@/lib/i18n/I18nProvider";
 import { getDashboardUserPreferences } from "@/services/hermes/preferences";
@@ -71,6 +73,18 @@ export default async function DashboardGroupLayout({
     photoModule.enabled,
   );
 
+  // LE MENU. Composé à partir des MÊMES clés de capacité que les widgets et la
+  // garde de route — aucune lecture supplémentaire n'est faite ici. La sidebar
+  // ne décide plus de rien : elle rend cette liste.
+  const composition = resolveTenantComposition({
+    capabilityKeys: photoGateKeys(
+      capabilities.ok ? capabilities.data.capabilities.map((c) => c.actionKey) : [],
+      photoModule.enabled,
+    ),
+    permissions:
+      capabilities.ok && capabilities.data.resolutionStatus === "OK" ? ["tenant.member"] : [],
+  });
+
   // DASH-4E: sign each profile's user-image wallpaper server-side (short-TTL signed URL,
   // ownership re-checked) so switching profiles paints the right fond instantly. Built-in
   // (CSS) wallpapers need no URL; one batched signer resolves the owner once (usually 0
@@ -98,7 +112,7 @@ export default async function DashboardGroupLayout({
         availableProfiles={offeredProfiles}
         wallpaperUrls={wallpaperUrls}
         alerts={alerts}
-        showPhotoStudio={photoModule.enabled}
+        navigation={composition.navigation}
       >
         {children}
       </DashboardChrome>

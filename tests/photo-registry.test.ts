@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { resolveTenantComposition } from "../lib/verticals/composition.ts";
 
 import {
   PHOTO_CAPABILITY_PREFIX,
@@ -157,19 +158,14 @@ test("les clés i18n de la verticale existent dans les 6 catalogues", () => {
 
 // --- NAVIGATION ---------------------------------------------------------------
 test("les entrées de menu photo sont conditionnées, jamais rendues par défaut", () => {
-  const sidebar = readFileSync(
-    fileURLToPath(new URL("../components/dashboard/Sidebar.tsx", import.meta.url)),
-    "utf8",
-  );
-  assert.ok(sidebar.includes("photoOnly: true"), "les entrées photo doivent être marquées");
-  assert.ok(
-    sidebar.includes("showPhotoStudio = false"),
-    "le défaut doit être « non activé »",
-  );
-  assert.ok(
-    sidebar.includes("NAV.filter((item) => !item.photoOnly || showPhotoStudio)"),
-    "le filtre de navigation doit être appliqué",
-  );
+  // Le conditionnement ne se lit plus dans la sidebar : il se PROUVE par le
+  // calcul du menu. Sans la clé d'activation, aucune entrée photo n'existe.
+  const withoutStudio = resolveTenantComposition({ capabilityKeys: [] }).navigation;
+  const withStudio = resolveTenantComposition({
+    capabilityKeys: ["photo.studio"],
+  }).navigation;
+  assert.ok(!withoutStudio.some((n) => n.moduleId === "photo.sessions"));
+  assert.ok(withStudio.some((n) => n.moduleId === "photo.sessions"));
 });
 
 test("chaque page de la verticale refuse l'accès quand elle n'est pas activée", () => {
@@ -182,7 +178,7 @@ test("chaque page de la verticale refuse l'accès quand elle n'est pas activée"
   for (const page of pages) {
     const source = readFileSync(fileURLToPath(new URL(page, import.meta.url)), "utf8");
     assert.ok(
-      source.includes("if (!ctx.photoEnabled) notFound();"),
+      source.includes("requireRoute("),
       `${page} doit refuser l'accès sans activation`,
     );
   }

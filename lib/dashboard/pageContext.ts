@@ -12,6 +12,10 @@ import {
   requireAuthedUser,
 } from "@/lib/dashboard/requestScope";
 import { availableWidgetIds } from "@/lib/dashboard/widgets";
+import {
+  resolveTenantComposition,
+  type TenantComposition,
+} from "@/lib/verticals/composition";
 import { getDashboardUserPreferences } from "@/services/hermes/preferences";
 import type { AvailableCapabilities, ServiceResult } from "@/types/hermes";
 
@@ -33,6 +37,12 @@ export async function resolvePageContext(): Promise<{
   available: Set<string>;
   /** PHOTO-P0 — la verticale Studio est-elle activée pour ce tenant ? */
   photoEnabled: boolean;
+  /**
+   * LA SOURCE UNIQUE : verticale, modules, menu, widgets, actions, intégrations.
+   * Calculée à partir des MÊMES clés de capacité que le reste — aucune lecture
+   * supplémentaire, aucun round-trip ajouté.
+   */
+  composition: TenantComposition;
 }> {
   // Auth boundary FIRST — the group layout's redirect runs concurrently with the
   // page, so it cannot be relied on to stop these reads. No session ⇒ redirect to
@@ -67,6 +77,13 @@ export async function resolvePageContext(): Promise<{
     photoModule.enabled,
   );
 
+  // Permissions RÉELLEMENT établies : `resolve_active_tenant` n'accorde un
+  // tenant qu'à un `tenant.member`, donc une résolution OK PROUVE ce niveau.
+  // `tenant.admin` demanderait une lecture dédiée (façade préparée, non
+  // appliquée) : tant qu'elle n'existe pas, on ne le suppose pas.
+  const permissions =
+    capabilities.ok && capabilities.data.resolutionStatus === "OK" ? ["tenant.member"] : [];
+
   return {
     prefs,
     locale,
@@ -77,5 +94,6 @@ export async function resolvePageContext(): Promise<{
     capabilityKeys,
     available: availableWidgetIds(capabilityKeys),
     photoEnabled: hasPhotoStudio(capabilityKeys),
+    composition: resolveTenantComposition({ capabilityKeys, permissions }),
   };
 }

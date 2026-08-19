@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 
 import PhotoCullingReview from "@/components/dashboard/PhotoCullingReview";
 import PhotoImportPanel from "@/components/dashboard/PhotoImportPanel";
-import { resolvePageContext } from "@/lib/dashboard/pageContext";
+import { requireRoute } from "@/lib/dashboard/routeGuard";
 import { getPhotoCullingReview } from "@/services/hermes/photo";
 
 export const metadata = { title: "Tri — Hermès Studio" };
@@ -19,8 +19,8 @@ export default async function PhotoCullingPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const ctx = await resolvePageContext();
-  if (!ctx.photoEnabled) notFound();
+  // Même garde que le menu et que /chantiers/carte : une seule liste de modules.
+  await requireRoute("/seances");
 
   const { id } = await params;
   const review = await getPhotoCullingReview(id, 300);

@@ -57,7 +57,12 @@ function guardIndex(src: string): number {
   const body = src.slice(src.search(/^export default/m));
   const direct = body.indexOf("requireAuthedUser()");
   const viaContext = body.indexOf("resolvePageContext()");
-  const found = [direct, viaContext].filter((i) => i !== -1);
+  // `requireRoute` / `requireModule` appellent `resolvePageContext`, qui résout
+  // `requireAuthedUser` AVANT tout fan-out : la garde d'authentification est
+  // déléguée, pas perdue. Elle s'y ajoute un contrôle de module.
+  const viaRoute = body.indexOf("requireRoute(");
+  const viaModule = body.indexOf("requireModule(");
+  const found = [direct, viaContext, viaRoute, viaModule].filter((i) => i !== -1);
   return found.length === 0 ? -1 : Math.min(...found);
 }
 
@@ -66,7 +71,17 @@ function firstReadIndex(src: string): number {
   const body = src.slice(src.search(/^export default/m));
   for (const m of body.matchAll(/await (Promise\.all|[a-z]\w*\()/g)) {
     const call = m[0];
-    if (call.includes("requireAuthedUser(") || call.includes("resolvePageContext(")) continue;
+    // Les points d'entrée GARDÉS ne sont pas des lectures métier : ils sont la
+    // garde elle-même. `requireRoute`/`requireModule` en font partie — ils
+    // résolvent `requireAuthedUser` avant tout fan-out.
+    if (
+      call.includes("requireAuthedUser(") ||
+      call.includes("resolvePageContext(") ||
+      call.includes("requireRoute(") ||
+      call.includes("requireModule(")
+    ) {
+      continue;
+    }
     return m.index;
   }
   return -1;
@@ -190,7 +205,10 @@ test("Studio reste dormant : garde photo intacte et PGRST202 toujours ciblé", (
     "../app/(dashboard)/seances/[id]/tri/page.tsx",
     "../app/(dashboard)/clients/page.tsx",
   ]) {
-    assert.ok(read(page).includes("if (!ctx.photoEnabled) notFound();"), `${page} : garde perdue`);
+    // La garde ad hoc `!ctx.photoEnabled` est devenue la garde UNIFIÉE
+    // `requireRoute`, qui interroge la même liste de modules que le menu.
+    // L'invariant est inchangé : sans la verticale, la page n'existe pas.
+    assert.ok(read(page).includes("requireRoute("), `${page} : garde perdue`);
   }
   const photo = read("../services/hermes/photo.ts");
   assert.ok(

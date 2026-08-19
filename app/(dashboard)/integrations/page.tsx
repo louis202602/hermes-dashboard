@@ -1,5 +1,5 @@
 import PageHeading from "@/components/dashboard/PageHeading";
-import { requireAuthedUser } from "@/lib/dashboard/requestScope";
+import { requireRoute } from "@/lib/dashboard/routeGuard";
 import { isProviderImplemented } from "@/lib/integrations/connectionState";
 import { getTenantIntegrations } from "@/services/hermes/integrations";
 import type { IntegrationStatus } from "@/types/integrations";
@@ -92,8 +92,19 @@ const STATUS_LABEL: Record<CoreStatus, string> = {
  * pas, et les types n'en portent pas.
  */
 export default async function IntegrationsPage() {
-  await requireAuthedUser();
-  const { integrations, resolutionStatus } = await getTenantIntegrations();
+  const ctx = await requireRoute("/integrations");
+  const { integrations: allIntegrations, resolutionStatus } = await getTenantIntegrations();
+
+  // FILTRE PAR VERTICALE. Un fournisseur activé globalement n'est pas pour
+  // autant pertinent : Instagram n'a rien à faire chez un installateur solaire.
+  // L'offre est l'INTERSECTION du catalogue global et de ce que la verticale
+  // justifie. Fail-closed : verticale sans fournisseur ⇒ aucune proposition.
+  //
+  // ⚠️ Ce filtre est ici une COMMODITÉ D'AFFICHAGE, pas une barrière : la RPC
+  // renvoie encore tout le catalogue global. La barrière réelle est posée en
+  // base (cf. PR #59) — sans elle, un appel direct à la RPC contournerait ceci.
+  const allowedProviders = new Set(ctx.composition.integrationProviders);
+  const integrations = allIntegrations.filter((it) => allowedProviders.has(it.provider));
 
   return (
     <div className="page-stack">

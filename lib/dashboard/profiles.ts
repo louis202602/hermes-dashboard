@@ -351,6 +351,12 @@ export const CAPABILITY_TOKEN_RULES: { prefix: string; tokens: CapabilityToken[]
   // (cf. lib/dashboard/photoAccess.ts) ; les autres `photo.*` sont les vraies
   // actions du catalogue, dormantes tant qu'un opérateur ne les active pas.
   { prefix: "photo.", tokens: ["photo_studio", "projects", "planning", "appointments", "documents"] },
+  // Les deux domaines photo qui portent des capacités TRANSVERSALES : sans elles, un
+  // studio n'obtiendrait ni « Prospects » ni « Campagnes » alors que ce sont
+  // précisément les modules de son acquisition (P1). Règles PLUS SPÉCIFIQUES que
+  // `photo.` — elles s'unionnent, elles ne remplacent rien.
+  { prefix: "photo.lead", tokens: ["leads", "crm"] },
+  { prefix: "photo.marketing", tokens: ["marketing", "campaigns", "social"] },
 ];
 
 const CAPABILITY_TOKEN_SET = new Set<string>(CAPABILITY_TOKENS);
