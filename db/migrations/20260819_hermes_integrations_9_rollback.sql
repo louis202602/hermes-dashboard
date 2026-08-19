@@ -21,6 +21,10 @@ drop function if exists hermes_os.phone_is_operational(text);
 drop table if exists hermes_os.phone_provisioning;
 
 -- --- integrations_1 : connexions OAuth --------------------------------------
+drop function if exists public.fail_integration_connection(text, text);
+drop function if exists public.complete_integration_connection_self(
+  text, text, text, timestamptz, text, text[]);
+drop function if exists hermes_os.tenant_allows_provider(text, text);
 drop function if exists hermes_os.integration_is_usable(text, text);
 drop function if exists hermes_os.complete_integration_connection(text, uuid, text, text[], timestamptz);
 drop function if exists public.revoke_integration_connection(text);
@@ -31,5 +35,9 @@ drop function if exists hermes_os.integration_guard();
 drop table if exists hermes_os.tenant_integration_oauth_states;
 drop table if exists hermes_os.tenant_integration_connections;
 drop table if exists hermes_os.integration_providers;
+
+-- Colonne ajoutée à une table PRÉEXISTANTE (`tenants`) : on retire la colonne,
+-- jamais la table. Aucun tenant n'est supprimé.
+alter table hermes_os.tenants drop column if exists vertical;
 
 commit;

@@ -135,18 +135,38 @@ test("tenant A ne peut jamais voir la connexion de tenant B", () => {
   );
 });
 
-test("la finalisation OAuth n'est PAS accessible au navigateur", () => {
-  // C'est le seul point où un pointeur Vault entre : il doit être réservé à n8n.
+test("les DEUX voies de finalisation ont chacune la bonne portée", () => {
+  // La voie n8n reste réservée à `service_role` : elle reçoit un `vault_secret_id`
+  // DÉJÀ écrit, donc quiconque l'appelle a forcément accès à Vault.
   assert.ok(
     CONNECTIONS.includes(
       "grant execute on function hermes_os.complete_integration_connection(text, uuid, text, text[], timestamptz) to service_role",
     ),
   );
   assert.ok(
-    !CONNECTIONS.includes("complete_integration_connection") ||
-      !/complete_integration_connection[\s\S]{0,400}to authenticated/.test(CONNECTIONS),
-    "complete_integration_connection ne doit jamais être accordée à authenticated",
+    !/hermes_os\.complete_integration_connection\(text, uuid, text, text\[\], timestamptz\) to authenticated/.test(
+      CONNECTIONS,
+    ),
+    "la variante service_role ne doit jamais être accordée à authenticated",
   );
+
+  // La voie ROUTE SERVEUR est accordée à `authenticated` — c'est délibéré, et
+  // c'est ce qui permet au callback Next.js de boucler SANS clé service_role.
+  // Elle ne reçoit jamais de pointeur Vault : elle l'écrit elle-même, en
+  // SECURITY DEFINER. Son audit détaillé vit dans tests/oauth-server-route.
+  assert.ok(
+    CONNECTIONS.includes(`grant execute on function public.complete_integration_connection_self(
+  text, text, text, timestamptz, text, text[]) to authenticated;`),
+  );
+  const self = CONNECTIONS.slice(
+    CONNECTIONS.indexOf("function public.complete_integration_connection_self"),
+    CONNECTIONS.indexOf("revoke all on function public.complete_integration_connection_self"),
+  );
+  // Aucun pointeur Vault ne peut ENTRER par cette voie…
+  assert.ok(!/p_vault_secret_id|p_secret_id/i.test(self), "un pointeur Vault entre en paramètre");
+  // …ni en SORTIR.
+  const ret = self.slice(self.lastIndexOf("return jsonb_build_object"));
+  assert.ok(!ret.includes("vault_secret_id"), "un pointeur Vault sort vers le navigateur");
 });
 
 test("le `state` est à usage unique : un rejeu du callback échoue", () => {

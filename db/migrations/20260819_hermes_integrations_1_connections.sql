@@ -61,6 +61,11 @@ create table if not exists hermes_os.integration_providers (
   token_url         text not null check (left(token_url, 8) = 'https://'),
   client_id         text,
   default_scopes    text[] not null default '{}',
+  -- VERTICALES autorisées à connecter ce fournisseur. Miroir en base de
+  -- VERTICAL_MANIFEST.integrationProviders : l'interface et la base appliquent
+  -- désormais LA MÊME règle, au lieu que la base laisse tout passer.
+  -- Vide = personne. Un fournisseur ne devient joignable que délibérément.
+  verticals         text[] not null default '{}',
   -- Un fournisseur non activé n'apparaît pas dans la page « Connecter ».
   enabled           boolean not null default false,
   sort_order        integer not null default 100,
@@ -142,6 +147,52 @@ create index if not exists oauth_states_expiry
   on hermes_os.tenant_integration_oauth_states (expires_at) where consumed_at is null;
 
 -- ---------------------------------------------------------------------------
+-- 3 bis. VERTICALE DU TENANT + autorisation de fournisseur.
+--
+--    Défaut corrigé ici : `get_tenant_integrations` filtrait sur `p.enabled`
+--    SEUL. Tout tenant voyait donc tout fournisseur activé, et un installateur
+--    solaire pouvait obtenir Instagram en appelant la RPC directement — le
+--    filtre par verticale n'existait que dans l'interface, donc nulle part.
+--
+--    ⚠️ À L'APPLICATION : renseigner `tenants.vertical` pour chaque tenant AVANT
+--    d'activer un fournisseur. Une verticale NULL n'autorise RIEN (fail-closed),
+--    et le code d'erreur le dit (`TENANT_VERTICAL_UNKNOWN`) plutôt que de
+--    renvoyer une liste vide qu'on lirait comme « aucun outil disponible ».
+-- ---------------------------------------------------------------------------
+alter table hermes_os.tenants
+  add column if not exists vertical text
+    check (vertical is null
+           or vertical in ('photography','real_estate','solar','construction','generic'));
+
+comment on column hermes_os.tenants.vertical is
+  'Verticale déclarée. NULL = non déterminée : aucun fournisseur n''est '
+  'autorisé tant qu''elle ne l''est pas.';
+
+create or replace function hermes_os.tenant_allows_provider(p_tenant text, p_provider text)
+returns boolean
+language sql
+stable
+security definer
+set search_path to 'hermes_os', 'pg_catalog', 'pg_temp'
+as $function$
+  select exists (
+    select 1
+      from hermes_os.integration_providers p
+      join hermes_os.tenants t on t.tenant_id = p_tenant
+     where p.provider = p_provider
+       and p.enabled
+       and t.vertical is not null
+       and t.vertical = any (p.verticals)
+  );
+$function$;
+
+revoke all on function hermes_os.tenant_allows_provider(text, text) from public;
+
+comment on function hermes_os.tenant_allows_provider(text, text) is
+  'Fail-closed : verticale inconnue, fournisseur désactivé ou hors verticale '
+  '⇒ faux. Un appel direct à la RPC ne contourne donc plus le filtre.';
+
+-- ---------------------------------------------------------------------------
 -- 4. Garde commune — authentification + tenant. Même patron que `photo_guard`.
 -- ---------------------------------------------------------------------------
 create or replace function hermes_os.integration_guard()
@@ -205,7 +256,10 @@ begin
     from hermes_os.integration_providers p
     left join hermes_os.tenant_integration_connections c
       on c.provider = p.provider and c.tenant_id = v_t
-   where p.enabled;
+   -- MÊME règle que l'interface, appliquée ici : un fournisseur hors verticale
+   -- n'est pas masqué à l'affichage, il n'est pas renvoyé.
+   where p.enabled
+     and hermes_os.tenant_allows_provider(v_t, p.provider);
 
   return jsonb_build_object('resolution_status', 'OK', 'tenant_id', v_t,
     'integrations', v_rows, 'provenance', 'REAL');
@@ -244,6 +298,11 @@ begin
    where provider = p_provider and enabled;
   if not found then
     return jsonb_build_object('ok', false, 'code', 'PROVIDER_UNAVAILABLE');
+  end if;
+  -- Le démarrage est refusé, pas seulement masqué : sans cela, un appel direct
+  -- à cette RPC lancerait un flux OAuth pour un fournisseur hors verticale.
+  if not hermes_os.tenant_allows_provider(v_t, p_provider) then
+    return jsonb_build_object('ok', false, 'code', 'PROVIDER_NOT_ALLOWED_FOR_VERTICAL');
   end if;
   if v_p.client_id is null then
     -- Fournisseur déclaré mais pas encore provisionné côté Hermès : on le dit,
@@ -431,5 +490,195 @@ values
    'https://graph.facebook.com/v21.0/oauth/access_token',
    array['instagram_content_publish'], false, 40)
 on conflict (provider) do nothing;
+
+-- ---------------------------------------------------------------------------
+-- 9. COMPLÉTER LE FLUX DEPUIS L'APPLICATION — sans clé `service_role`.
+--
+--    Pourquoi cette fonction existe. La version `service_role` (§8) suppose que
+--    n8n boucle le flux. Faire boucler l'application à la place exigerait
+--    qu'elle porte la clé `service_role` — laquelle contourne TOUT le RLS et
+--    serait bien pire qu'un `client_secret` Google. Cette variante supprime ce
+--    dilemme : la route serveur Next.js n'a besoin d'AUCUNE clé Supabase
+--    privilégiée, seulement de la session de l'utilisatrice, déjà présente.
+--
+--    CE QUI LA REND SÛRE, point par point — chacun est vérifié par un test :
+--
+--     1. `auth.uid()` obligatoire. Aucun appel anonyme.
+--     2. Le `state` est consommé ATOMIQUEMENT (`consumed_at is null` DANS le
+--        `where` de l'UPDATE). Un rejeu du callback ne trouve plus rien, même
+--        sous concurrence : c'est le `UPDATE ... RETURNING` qui arbitre, pas une
+--        lecture suivie d'une écriture.
+--     3. L'appelant doit être CELUI qui a démarré le flux (`requested_by`).
+--        Sans cela, un utilisateur pourrait terminer la connexion d'un autre.
+--     4. Le `tenant_id` vient de la ligne de `state`, écrite côté serveur au
+--        démarrage. Il n'est JAMAIS pris dans un paramètre : la signature ne
+--        comporte aucun `p_tenant_id`, donc l'oubli est impossible.
+--     5. Le fournisseur est revérifié : activé ET autorisé pour la verticale.
+--        Une verticale changée entre le début et la fin du flux referme.
+--     6. Le jeton part directement dans Vault (`vault.create_secret`), que
+--        SECURITY DEFINER rend accessible sans donner l'accès à `authenticated`.
+--     7. Le retour ne contient NI jeton NI `vault_secret_id`.
+--
+--    Ce qu'elle ne fait PAS : l'échange `code → token`. Il a lieu dans la route
+--    serveur, qui seule détient `GOOGLE_CLIENT_SECRET` (variable serveur, jamais
+--    préfixée NEXT_PUBLIC_, donc jamais dans le bundle navigateur).
+-- ---------------------------------------------------------------------------
+create or replace function public.complete_integration_connection_self(
+  p_state         text,
+  p_access_token  text,
+  p_refresh_token text default null,
+  p_expires_at    timestamptz default null,
+  p_account_label text default null,
+  p_scopes        text[] default '{}'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path to 'hermes_os', 'pg_catalog', 'pg_temp'
+as $function$
+declare
+  v_uid uuid := auth.uid();
+  v_hash text;
+  v_state hermes_os.tenant_integration_oauth_states%rowtype;
+  v_secret_id uuid;
+  v_payload text;
+begin
+  -- (1) Authentification.
+  if v_uid is null then
+    return jsonb_build_object('ok', false, 'code', 'UNAUTHENTICATED');
+  end if;
+  if p_state is null or p_access_token is null or length(btrim(p_access_token)) = 0 then
+    return jsonb_build_object('ok', false, 'code', 'BAD_ARGUMENTS');
+  end if;
+
+  v_hash := encode(sha256(convert_to(p_state, 'UTF8')), 'hex');
+
+  -- (2) Consommation ATOMIQUE du state. Un rejeu ne trouve rien : la condition
+  --     `consumed_at is null` fait partie de l'UPDATE, pas d'un SELECT préalable.
+  update hermes_os.tenant_integration_oauth_states
+     set consumed_at = now()
+   where state_hash = v_hash
+     and consumed_at is null
+     and expires_at > now()
+  returning * into v_state;
+
+  if not found then
+    -- Volontairement indistinct : rejeu, expiration et state inconnu renvoient
+    -- le même code. Distinguer aiderait surtout un attaquant à sonder.
+    return jsonb_build_object('ok', false, 'code', 'STATE_INVALID');
+  end if;
+
+  -- (3) Le flux appartient à celui qui l'a démarré.
+  if v_state.requested_by is distinct from v_uid then
+    return jsonb_build_object('ok', false, 'code', 'STATE_NOT_YOURS');
+  end if;
+
+  -- (4) Le tenant vient du state, jamais du client. (5) Fournisseur revérifié.
+  if not hermes_os.tenant_allows_provider(v_state.tenant_id, v_state.provider) then
+    return jsonb_build_object('ok', false, 'code', 'PROVIDER_NOT_ALLOWED_FOR_VERTICAL');
+  end if;
+
+  -- (6) Le secret va dans Vault. `authenticated` n'a aucun droit sur le schéma
+  --     `vault` ; c'est SECURITY DEFINER qui autorise cette écriture ici, et
+  --     nulle part ailleurs.
+  v_payload := jsonb_build_object(
+                 'access_token', p_access_token,
+                 'refresh_token', p_refresh_token)::text;
+
+  select vault.create_secret(
+           v_payload,
+           format('integration/%s/%s/%s', v_state.tenant_id, v_state.provider,
+                  encode(gen_random_bytes(8), 'hex')),
+           format('OAuth %s — tenant %s', v_state.provider, v_state.tenant_id))
+    into v_secret_id;
+
+  update hermes_os.tenant_integration_connections
+     set status          = 'CONNECTED',
+         vault_secret_id = v_secret_id,
+         account_label   = p_account_label,
+         scopes_granted  = coalesce(p_scopes, '{}'),
+         connected_at    = now(),
+         expires_at      = p_expires_at,
+         last_refresh_at = now(),
+         last_error_code = null,
+         revoked_at      = null,
+         updated_at      = now()
+   where tenant_id = v_state.tenant_id
+     and provider  = v_state.provider;
+
+  if not found then
+    -- Le démarrage crée toujours la ligne ; son absence signale une incohérence
+    -- réelle. On refuse plutôt que d'inventer une connexion.
+    return jsonb_build_object('ok', false, 'code', 'CONNECTION_MISSING');
+  end if;
+
+  -- (7) Rien de secret ne sort. Pas de jeton, pas de vault_secret_id.
+  return jsonb_build_object(
+    'ok', true, 'code', 'OK',
+    'provider', v_state.provider,
+    'redirect_after', coalesce(v_state.redirect_after, '/integrations'));
+end;
+$function$;
+
+revoke all on function public.complete_integration_connection_self(
+  text, text, text, timestamptz, text, text[]) from public;
+grant execute on function public.complete_integration_connection_self(
+  text, text, text, timestamptz, text, text[]) to authenticated;
+
+comment on function public.complete_integration_connection_self(
+  text, text, text, timestamptz, text, text[]) is
+  'Boucle le flux OAuth depuis la route serveur Next.js, SANS clé service_role. '
+  'Le tenant vient du state (écrit côté serveur), jamais d''un paramètre.';
+
+-- ---------------------------------------------------------------------------
+-- 10. MARQUER UN ÉCHEC — pour que l'interface dise « réessayez » au lieu de
+--     laisser une connexion éternellement « en cours ».
+-- ---------------------------------------------------------------------------
+create or replace function public.fail_integration_connection(
+  p_state text,
+  p_error_code text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path to 'hermes_os', 'pg_catalog', 'pg_temp'
+as $function$
+declare
+  v_uid uuid := auth.uid(); v_hash text;
+  v_state hermes_os.tenant_integration_oauth_states%rowtype;
+begin
+  if v_uid is null then
+    return jsonb_build_object('ok', false, 'code', 'UNAUTHENTICATED');
+  end if;
+  v_hash := encode(sha256(convert_to(coalesce(p_state, ''), 'UTF8')), 'hex');
+
+  update hermes_os.tenant_integration_oauth_states
+     set consumed_at = now()
+   where state_hash = v_hash and consumed_at is null
+  returning * into v_state;
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'STATE_INVALID');
+  end if;
+  if v_state.requested_by is distinct from v_uid then
+    return jsonb_build_object('ok', false, 'code', 'STATE_NOT_YOURS');
+  end if;
+
+  update hermes_os.tenant_integration_connections
+     set status = 'ERROR',
+         -- Code BORNÉ : le message du fournisseur n'entre pas tel quel en base.
+         last_error_code = left(coalesce(p_error_code, 'UNKNOWN'), 60),
+         last_checked_at = now(),
+         updated_at = now()
+   where tenant_id = v_state.tenant_id
+     and provider = v_state.provider
+     and status <> 'CONNECTED';
+
+  return jsonb_build_object('ok', true, 'code', 'OK',
+    'redirect_after', coalesce(v_state.redirect_after, '/integrations'));
+end;
+$function$;
+
+revoke all on function public.fail_integration_connection(text, text) from public;
+grant execute on function public.fail_integration_connection(text, text) to authenticated;
 
 commit;
