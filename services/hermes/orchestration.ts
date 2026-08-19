@@ -1,5 +1,7 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
+
 import { logEvent } from "@/lib/observability/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { OrchestrationResult } from "@/types/hermes-orchestration";
@@ -24,14 +26,17 @@ function asStringArray(value: unknown): string[] | null {
 export async function orchestrateHermesMessage(
   message: string,
   conversationId: string | null,
-  requestId: string | null,
+  // PHASE 2 — la clé d'idempotence n'est plus fournie EXCLUSIVEMENT par le client :
+  // faute de clé, le serveur en génère une. Même patron que
+  // `services/hermes/agentActions.ts`, qui le faisait déjà (`= randomUUID()`).
+  requestId: string | null = null,
 ): Promise<OrchestrationResult> {
   try {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.rpc("orchestrate_hermes_message", {
       p_message: message,
       p_conversation_id: conversationId,
-      p_request_id: requestId,
+      p_request_id: requestId ?? randomUUID(),
     });
 
     if (error) {
@@ -90,14 +95,17 @@ function mapOrchestration(d: Record<string, unknown>): OrchestrationResult {
 export async function applyHermesResolution(
   conversationId: string,
   resolveRequestId: string,
-  requestId: string | null,
+  // PHASE 2 — la clé d'idempotence n'est plus fournie EXCLUSIVEMENT par le client :
+  // faute de clé, le serveur en génère une. Même patron que
+  // `services/hermes/agentActions.ts`, qui le faisait déjà (`= randomUUID()`).
+  requestId: string | null = null,
 ): Promise<OrchestrationResult> {
   try {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.rpc("apply_hermes_resolution", {
       p_conversation_id: conversationId,
       p_resolve_request_id: resolveRequestId,
-      p_request_id: requestId,
+      p_request_id: requestId ?? randomUUID(),
     });
     if (error) {
       logEvent("error", "hermes.apply_rpc_error", { code: error.code });

@@ -11,6 +11,11 @@ import ProvenanceBadge from "@/components/common/ProvenanceBadge";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { MessageKey } from "@/lib/i18n/locales/fr";
 import {
+  POLL_BUDGET_MS,
+  attemptsWithinBudget,
+  pollDelayMs,
+} from "@/lib/dashboard/pollSchedule";
+import {
   TERMINAL_RESULT_STATUSES,
   type ResultOutcome,
 } from "@/types/agent-actions";
@@ -68,18 +73,29 @@ export default function AgentActionPanel() {
     setPolling(true);
 
     let attempts = 0;
-    const maxAttempts = 40; // ~60s at 1.5s
-    const timer = setInterval(async () => {
-      attempts += 1;
+    // PHASE 2 — fenêtre inchangée (~60 s), recul exponentiel : ~7 requêtes au
+    // lieu de 40. Voir lib/dashboard/pollSchedule.ts.
+    const maxAttempts = attemptsWithinBudget(POLL_BUDGET_MS.form);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let stopped = false;
+    const tick = async () => {
+      if (stopped) return;
       const r = await pollAgentActionResultAction(requestId);
+      if (stopped) return;
       setResult(r);
+      attempts += 1;
       if (TERMINAL_RESULT_STATUSES.has(r.status) || attempts >= maxAttempts) {
-        clearInterval(timer);
         setPolling(false);
+        return;
       }
-    }, 1500);
+      timer = setTimeout(tick, pollDelayMs(attempts));
+    };
+    timer = setTimeout(tick, pollDelayMs(0));
 
-    return () => clearInterval(timer);
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [requestId]);
 
   const liveStatus = result?.status ?? submitState.status;

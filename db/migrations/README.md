@@ -987,3 +987,77 @@ Vérifiées par mutation : remettre le défaut fail-open fait échouer 2 tests.
 
 Les 11 requêtes réelles en file (`10 × hermes.intent.resolve`,
 `1 × btp.qualification.create`) n'ont été ni lues en écriture, ni claim ées, ni mutées.
+
+---
+
+## 2026-08-19 — PHASE 2 : hygiène du socle
+
+Lots `20260819_phase2_hygiene_1..2` + `_9_rollback`. Appliqués au projet
+`smubxqorirlfldatzmym`. **Aucune ligne métier réelle modifiée.**
+
+### Lot 1 — expiration des requêtes gateway orphelines
+
+11 requêtes `QUEUED` depuis le 10 août (10 × `hermes.intent.resolve`,
+1 × `btp.qualification.create`), toutes `attempts = 0`, sans décision de
+politique ni demande d'approbation : aucun consumer n8n n'est actif et
+`resolver_runtime_config.enabled = false` sur les 7 clés.
+
+La cause racine est **externe** (quota n8n Cloud bloqué) et hors périmètre. Ce
+lot fournit ce qui manquait : une **porte de sortie** pour une file sans
+consumer. `expire_stale_queued_agent_actions(p_older_than, p_action_key,
+p_limit)` marque `FAILED` / `STALE_NO_CONSUMER` les seules requêtes **jamais
+réclamées** et plus vieilles que la limite d'âge. Ligne, `payload`,
+`payload_hash`, `created_at`, `correlation_id` et piste d'audit **conservés** :
+aucune suppression. `service_role` uniquement.
+
+> **La migration n'exécute pas la fonction.** Les 11 requêtes réelles ne sont pas
+> touchées : l'expiration est une décision d'exploitation explicite.
+
+### Lot 2 — intégrité `tenant_id` sur la file du gateway
+
+FK `agent_action_requests.tenant_id → tenants(tenant_id)`, `ON DELETE RESTRICT`.
+Seul écrivain : `request_agent_action`, qui obtient le tenant via
+`resolve_active_tenant` — jamais du client. L'invariant applicatif devient un
+invariant de schéma.
+
+**`execution_logs` n'est délibérément PAS contraint** : il porte 30 lignes sur
+10 tenants inexistants (`tenant-iso-A` ×11, `tenant-hb-test` ×5,
+`tenant-loop-test` ×3, `tenant-monitoring-relapse` ×3, `tenant-execute-test` ×2,
+`tenant-sw12-test-A` ×2, plus 4 unitaires), résidus de campagnes SW12/SW17. Ses
+écrivains sont les modules SW côté n8n, **inspectables par personne** aujourd'hui.
+Poser une FK sur une table écrite par du code non auditable risquerait de faire
+échouer un écrivain légitime. Les 30 lignes ne sont pas supprimées non plus :
+ce serait destructif, et c'est une décision d'exploitation.
+
+### Deux constats de l'audit initial CORRIGÉS après mesure
+
+* **`sw13_event_outbox` — aucun index manquant.** La table porte déjà 3 index
+  (`pkey`, `idx_sw13_outbox_tenant_status`, `uq_sw13_outbox_request_type`) et
+  affiche `idx_scan = 15295` contre `seq_scan = 12073` : les index **sont**
+  utilisés. Sur 43 lignes vivantes, PostgreSQL préfère légitimement un parcours
+  séquentiel — c'est moins cher. Le chiffre relevé par l'audit était un artefact
+  de la petitesse de la table, pas un défaut. **Aucune action.**
+* **Agents 1 et « Agent Commercial IA » — pas de doublon.** Capacités
+  **disjointes** (`pilotage_commercial` · `qualification_prospects`+`handoff_crm`
+  · `suivi_affaires_commercial` pour l'Agent 3), workflows distincts, aucun
+  `duplicate_group` partagé. C'est une division du travail, pas un recouvrement.
+  L'audit avait conclu sur les noms. **Aucune action.**
+
+### Agents `legacy_superseded` encore `n8n_active`
+
+7 composants (2 Immobilier-Qualification, 2 Industrie-Production,
+2 Industrie-Maintenance, 1 SW17). **Non sélectionnables par Hermès** — prouvé :
+aucune ligne d'`agent_action_catalog` ne cible leur `workflow_id`, et
+`v_dashboard_components` les exclut déjà par `is_current_in_group = true`.
+
+Leur désactivation **dans n8n** est `BLOCKED_EXTERNAL`. Basculer
+`component_registry.n8n_active = false` sans toucher n8n ferait **mentir le
+registre**, qui est un miroir de l'état n8n — un faux sentiment de sécurité pire
+que le constat. Les deux invariants vérifiables sont donc verrouillés par test
+(`LEG1`, `LEG2`).
+
+### Preuves
+
+`db/tests/phase2_hygiene.test.sql` — 16 assertions, transaction annulée,
+**16 PASS**, dont `DATA1`/`DATA2` (aucune donnée réelle perdue) et
+`P1a`/`P1b`/`P1c` (les protections de la Phase 1 restent intactes).
