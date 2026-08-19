@@ -13,6 +13,11 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { TranslateFn } from "@/lib/i18n/languages";
 import type { MessageKey } from "@/lib/i18n/locales/fr";
 import { TERMINAL_RESULT_STATUSES, type PendingApproval } from "@/types/agent-actions";
+import {
+  POLL_BUDGET_MS,
+  attemptsWithinBudget,
+  pollDelayMs,
+} from "@/lib/dashboard/pollSchedule";
 
 type Banner = { tone: "ok" | "bad"; text: string } | null;
 type ResumptionLog = { requestId: string; summary: string; status: string };
@@ -123,14 +128,19 @@ export default function ApprovalsPanel({ compact = false }: ApprovalsPanelProps)
       ...prev.filter((x) => x.requestId !== requestId),
     ]);
     let attempts = 0;
-    const timer = setInterval(async () => {
-      attempts += 1;
+    // PHASE 2 — fenêtre inchangée (~60 s), recul exponentiel : ~7 requêtes au
+    // lieu de 40. Voir lib/dashboard/pollSchedule.ts.
+    const maxAttempts = attemptsWithinBudget(POLL_BUDGET_MS.form);
+    const tick = async () => {
       const r = await pollAgentActionResultAction(requestId);
       setResumptions((prev) =>
         prev.map((x) => (x.requestId === requestId ? { ...x, status: r.status } : x)),
       );
-      if (TERMINAL_RESULT_STATUSES.has(r.status) || attempts >= 40) clearInterval(timer);
-    }, 1500);
+      attempts += 1;
+      if (TERMINAL_RESULT_STATUSES.has(r.status) || attempts >= maxAttempts) return;
+      setTimeout(tick, pollDelayMs(attempts));
+    };
+    setTimeout(tick, pollDelayMs(0));
   }, []);
 
   async function onApprove(a: PendingApproval) {
