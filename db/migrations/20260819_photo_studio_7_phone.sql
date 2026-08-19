@@ -124,6 +124,10 @@ create table if not exists hermes_os.photo_calls (
   summary            text check (summary is null or length(summary) <= 2000),
   -- Numéro appelant, conservé pour rappeler. Effaçable sans casser l'appel.
   caller_phone       text check (caller_phone is null or length(caller_phone) <= 40),
+  -- Identifiant de requête, clé de rattachement à SW19 (coûts) et SW23
+  -- (réservation/engagement de budget). Sans lui, un appel facturé ne pourrait
+  -- pas être relié au grand livre : c'est le trou identifié à l'audit.
+  request_id         text check (request_id is null or length(request_id) <= 200),
   lead_id            uuid references hermes_os.photo_leads(id) on delete set null,
   started_at         timestamptz not null default now(),
   ended_at           timestamptz,

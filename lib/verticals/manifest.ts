@@ -68,15 +68,25 @@ export const VERTICAL_MANIFEST: VerticalDef[] = [
   {
     id: "photography",
     label: "Studio photographe",
+    // Ordre EXACT du brief Studio : Accueil · Prospects · Clients · Séances ·
+    // Agenda · Devis & Contrats · Paiements · Téléphone · Campagnes ·
+    // Galeries · Portail Client · Upsell · Fidélisation · Intégrations ·
+    // Paramètres. C'est de la mise en page — chaque entrée reste soumise à
+    // l'activation réelle du module chez le tenant.
     moduleOrder: [
       "core.home",
       "crm.prospects",
       "crm.clients",
       "photo.sessions",
       "agenda",
+      "photo.quotes",
+      "photo.payments",
       "phone",
       "campaigns",
       "photo.gallery",
+      "photo.portal",
+      "photo.upsell",
+      "photo.lifecycle",
       "core.integrations",
       "core.settings",
     ],

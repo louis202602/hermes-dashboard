@@ -357,6 +357,12 @@ export const CAPABILITY_TOKEN_RULES: { prefix: string; tokens: CapabilityToken[]
   // `photo.` — elles s'unionnent, elles ne remplacent rien.
   { prefix: "photo.lead", tokens: ["leads", "crm"] },
   { prefix: "photo.marketing", tokens: ["marketing", "campaigns", "social"] },
+  // P2 — commerce du studio. Sans ces règles, une photographe détenant de vraies
+  // actions de devis ou d'encaissement n'obtiendrait ni « Devis & Contrats » ni
+  // « Paiements » : les modules existeraient sans jamais être accordés.
+  { prefix: "photo.quote", tokens: ["quotes", "sales"] },
+  { prefix: "photo.contract", tokens: ["quotes", "documents"] },
+  { prefix: "photo.payment", tokens: ["payments", "invoicing", "finance"] },
 ];
 
 const CAPABILITY_TOKEN_SET = new Set<string>(CAPABILITY_TOKENS);

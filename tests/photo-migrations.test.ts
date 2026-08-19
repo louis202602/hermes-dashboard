@@ -393,6 +393,7 @@ test("chaque lot est transactionnel (begin/commit) et le rollback aussi", () => 
 test("les fichiers de migration photo suivent la convention de nommage du dépôt", () => {
   const files = readdirSync(DIR).filter((f) => f.includes("photo_studio")).sort();
   // P0 (appliqué) : lots 1→5 + son rollback.  P1 (préparé) : lots 6→7 + le sien.
+  // P2 (préparé) : lot 8 + le sien.
   assert.deepEqual(files, [
     "20260818_photo_studio_1_schema.sql",
     "20260818_photo_studio_2_services.sql",
@@ -403,11 +404,16 @@ test("les fichiers de migration photo suivent la convention de nommage du dépô
     "20260819_photo_studio_6_acquisition.sql",
     "20260819_photo_studio_7_phone.sql",
     "20260819_photo_studio_9_rollback_p1.sql",
+    "20260820_photo_studio_10_phone_costs.sql",
+    "20260820_photo_studio_10_rollback.sql",
+    "20260820_photo_studio_8_commerce.sql",
+    "20260820_photo_studio_9_rollback_p2.sql",
   ]);
-  assert.ok(files.every((f) => /^2026081[89]_photo_studio_[1-79]/.test(f)));
+  assert.ok(files.every((f) => /^202608(1[89]|20)_photo_studio_(10|[1-9])/.test(f)));
   // Chaque vague porte SON rollback : aucune ne peut être appliquée sans issue.
   assert.ok(files.includes("20260818_photo_studio_9_rollback.sql"));
   assert.ok(files.includes("20260819_photo_studio_9_rollback_p1.sql"));
+  assert.ok(files.includes("20260820_photo_studio_9_rollback_p2.sql"));
 });
 
 test("les 5 lots P0 déclarent leur application réelle, les lots P1 restent non appliqués", () => {
@@ -417,7 +423,12 @@ test("les 5 lots P0 déclarent leur application réelle, les lots P1 restent non
     // La dormance reste vraie même après application — c'est le point clé.
     assert.ok(read(f).includes("GO_LIVE = NO"), `${f} : GO_LIVE = NO doit rester affirmé`);
   }
-  for (const f of ["20260819_photo_studio_6_acquisition.sql", "20260819_photo_studio_7_phone.sql"]) {
+  for (const f of [
+    "20260819_photo_studio_6_acquisition.sql",
+    "20260819_photo_studio_7_phone.sql",
+    "20260820_photo_studio_8_commerce.sql",
+    "20260820_photo_studio_10_phone_costs.sql",
+  ]) {
     assert.ok(read(f).includes("⚠️ NON APPLIQUÉE"), `${f} doit être marqué non appliqué`);
   }
 });

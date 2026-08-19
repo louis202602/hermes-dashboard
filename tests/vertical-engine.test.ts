@@ -267,6 +267,45 @@ test("citer un module dans une verticale ne l'accorde pas", () => {
   assert.ok(!nav.some((n) => n.moduleId === "campaigns"));
 });
 
+test("un module de verticale exige TOUJOURS le token de sa verticale", () => {
+  // Ce test existe à cause d'une fuite réelle, dans les deux sens : « Études »
+  // (solaire) entrait chez une photographe parce que `quotes` suffisait, et
+  // « Devis » (photo) entrait chez un solaire pour la même raison. Un token
+  // trop général ne désigne pas un métier. La règle est donc générique, pour
+  // que la faute ne puisse pas revenir sur un module ajouté demain.
+  const REQUIRED: Record<string, string> = {
+    "photo.": "photo_studio",
+    "immo.": "properties",
+    "solar.": "worksites",
+  };
+  for (const m of MODULE_REGISTRY) {
+    const prefix = Object.keys(REQUIRED).find((p) => m.id.startsWith(p));
+    if (!prefix) continue;
+    const token = REQUIRED[prefix];
+    assert.ok(
+      m.requiresAllTokens?.includes(token),
+      `${m.id} n'exige pas « ${token} » : il peut fuir dans une autre verticale`,
+    );
+  }
+});
+
+test("aucune fuite croisée entre les trois verticales, dans les deux sens", () => {
+  const CASES = [
+    { keys: ["photo.studio", "photo.quote.send", "photo.payment.record"], banned: ["solar.", "immo.", "worksites"] },
+    { keys: ["btp.qualification.create", "btp.suivi.progress.report"], banned: ["photo.", "immo."] },
+    { keys: ["immo.lead.create", "immo.property.publish"], banned: ["photo.", "solar.", "worksites"] },
+  ];
+  for (const c of CASES) {
+    const ids = resolveTenantComposition({ capabilityKeys: c.keys }).navigation.map(
+      (n) => n.moduleId as string,
+    );
+    for (const b of c.banned) {
+      const leak = ids.find((id) => id.startsWith(b));
+      assert.equal(leak, undefined, `fuite : ${leak} pour ${c.keys[0]}`);
+    }
+  }
+});
+
 test("toute verticale ne cite que des modules existants", () => {
   const known = new Set(MODULE_REGISTRY.map((m) => m.id));
   for (const v of VERTICAL_MANIFEST) {

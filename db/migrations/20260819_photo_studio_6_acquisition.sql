@@ -175,7 +175,8 @@ create table if not exists hermes_os.photo_lead_events (
   -- Motif, pour les relances : c'est la clé du plafond « 1 relance par motif ».
   reason       text check (reason is null or reason in
                  ('NEW_REQUEST','NO_REPLY','QUOTE_SENT','QUOTE_UNSIGNED',
-                  'CALLBACK_REQUESTED','OFFER_EXPIRING','BOOKING_TO_CONFIRM')),
+                  'CALLBACK_REQUESTED','OFFER_EXPIRING','BOOKING_TO_CONFIRM',
+                  'MISSED_CALL')),
   channel      text check (channel is null or channel in ('EMAIL','SMS','WHATSAPP','PHONE','NONE')),
   amount_eur   numeric(12,2) check (amount_eur is null or amount_eur >= 0),
   payload      jsonb not null default '{}'::jsonb,
