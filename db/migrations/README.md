@@ -888,3 +888,102 @@ action `POSTGRES_FUNCTION` : une requête resterait `QUEUED` indéfiniment tant 
 CRUD synchrone par une file asynchrone transformerait par ailleurs « créer une séance » en
 attente de résultat. La convergence reste possible et documentée ; elle n'a pas sa place
 dans une phase qui doit rester dormante.
+
+---
+
+## 2026-08-19 — PHASE 1 : sécurisation du socle (BLOCKER B2)
+
+Lots `20260819_phase1_security_1..4` + `_9_rollback`. Appliqués au projet
+`smubxqorirlfldatzmym`. **Aucune capacité rendue autonome, aucun runner réveillé,
+aucune table `pv_*`.**
+
+### Le défaut corrigé
+
+`hermes_os.gateway_policy_gate(uuid)` était **FAIL-OPEN** : lorsqu'aucune politique
+SW15 `ACTIVE` ne correspondait, elle appliquait `v_effect := 'PERMIT'`. Or les
+13 politiques en base sont toutes `DISABLED`, et `agent_action_catalog.is_sensitive`
+n'intervenait **pas** dans la décision. Conséquence mesurée avant migration, sur une
+action de fixture `is_sensitive = true` sans politique :
+
+```
+gate_result = PERMIT        -- attendu après correctif : REQUIRE_APPROVAL
+```
+
+Les trois capacités d'écriture métier réellement actives
+(`btp.qualification.create`, `btp.planning.phase.add`, `btp.suivi.progress.report`),
+toutes marquées `is_sensitive = true`, étaient donc exécutables **sans aucune
+approbation humaine**.
+
+### Comportement après
+
+| `is_sensitive` | politique ACTIVE correspondante | décision |
+|---|---|---|
+| `true`  | `DENY`             | `DENY` |
+| `true`  | `REQUIRE_APPROVAL` | `REQUIRE_APPROVAL` |
+| `true`  | `PERMIT`           | `PERMIT`, motif d'audit dédié « PERMIT EXPLICITE » |
+| `true`  | **aucune**         | **`REQUIRE_APPROVAL`** ← le correctif |
+| `false` | selon la politique | effet de la politique |
+| `false` | **aucune**         | `PERMIT` (défaut conservé, décision documentée) |
+
+Le défaut `PERMIT` sur action **non sensible** est assumé : `is_sensitive = false` est
+une déclaration explicite du catalogue, et le catalogue n'est modifiable que par
+migration. Les deux seules actions concernées sont `diag.echo` (aucun effet) et
+`hermes.intent.resolve` (proposition seule — l'action cible repasse par la même
+passerelle avec **sa** sensibilité).
+
+Action absente du catalogue ⇒ traitée comme sensible (`coalesce(is_sensitive, true)`).
+En pratique la FK `agent_action_requests_action_key_fkey` rend le cas impossible : le
+`coalesce` est une ceinture de sécurité, la contrainte est la garantie.
+
+### Limite connue, volontairement non modifiée
+
+La sélection de politique reste scopée `p.tenant_id = v_req.tenant_id`. Les politiques
+à `tenant_id IS NULL` (les 12 lignes photo, toutes `DISABLED`) ne correspondent donc
+jamais. Élargir le matching aux politiques globales **augmenterait** la surface
+d'autonomie — l'inverse de l'objectif de cette phase. À traiter séparément quand les
+verticales concernées sortiront de dormance.
+
+### Autres lots
+
+* **Lot 2** — 3 politiques SW15 `ACTIVE` / `REQUIRE_APPROVAL` pour les capacités BTP,
+  tenant `heliosolar`, marquées `updated_by = 'phase1_security_2'` (le rollback ne
+  supprime que celles-là). Les 13 politiques préexistantes restent `DISABLED`.
+* **Lot 3** — `dashboard_context_settings` : RLS activée (deny-all, 0 politique).
+  C'était la seule table de `hermes_os` sans RLS (1/178). Comportement applicatif
+  inchangé : l'accès passe par `public.get_dashboard_context_settings()`
+  (SECURITY DEFINER). `REVOKE ALL` réaffirmé sur `anon` et `authenticated`.
+* **Lot 4** — `photo_session_status_rank(text)` : `search_path` épinglé. Advisor
+  `function_search_path_mutable` : **1 → 0**.
+
+### `btree_gist` — déplacement REPORTÉ (décision documentée)
+
+L'advisor `extension_in_public` reste ouvert. Évaluation menée en transaction annulée :
+
+1. `alter extension btree_gist set schema extensions` **réussit** techniquement ;
+2. la seule dépendance en base est la contrainte d'exclusion
+   `sw23_model_catalog_no_overlap` (garde-fou anti-chevauchement des prix SW23) ;
+   après déplacement simulé, une insertion chevauchante est **toujours rejetée**
+   (`exclusion_violation`) — l'invariant survit.
+
+Le déplacement est donc *possible*. Il est néanmoins **reporté** : le bénéfice de
+sécurité est nul (les fonctions `gbt_*` exposées prennent des arguments `internal` et
+ne sont pas appelables ; `anon` n'a aucun privilège sur `hermes_os`), tandis que les
+consommateurs n8n — **non inspectables**, instance injoignable — pourraient utiliser
+des opérateurs résolus via `search_path`. Un risque non nul contre un gain nul ne se
+prend pas dans une phase dont la contrainte est « aucune régression ». À reprendre
+quand n8n sera de nouveau auditable, avec en préalable l'ajout de `extensions` au
+`search_path` de toute future migration créant une contrainte d'exclusion GiST.
+
+### Preuves
+
+`db/tests/phase1_gateway_fail_closed.test.sql` — 23 assertions, transaction annulée,
+**23 PASS** (A/B/C/D + PERMIT explicite tracé, défaut non sensible, FK anti-orphelin,
+court-circuit d'approbation humaine, `NOT_FOUND`, politiques BTP, doctrine
+« aucun PERMIT actif sur action sensible », permission insuffisante, isolation tenant,
+`dashboard_context_settings` inaccessible en direct).
+
+`tests/phase1-security-migrations.test.ts` — 18 assertions de contrat sur le diff SQL.
+Vérifiées par mutation : remettre le défaut fail-open fait échouer 2 tests.
+
+Les 11 requêtes réelles en file (`10 × hermes.intent.resolve`,
+`1 × btp.qualification.create`) n'ont été ni lues en écriture, ni claim ées, ni mutées.
