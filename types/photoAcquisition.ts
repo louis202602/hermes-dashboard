@@ -70,7 +70,11 @@ export type PhotoFollowUpReason =
   | "QUOTE_UNSIGNED"
   | "CALLBACK_REQUESTED"
   | "OFFER_EXPIRING"
-  | "BOOKING_TO_CONFIRM";
+  | "BOOKING_TO_CONFIRM"
+  // P2 — récupération d'appel manqué. Motif À PART ENTIÈRE : il porte son propre
+  // plafond, donc rattraper un appel ne consomme pas le quota d'une relance de
+  // devis, et inversement.
+  | "MISSED_CALL";
 
 export type PhotoLead = {
   leadId: string;

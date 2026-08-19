@@ -47,6 +47,12 @@ export const MODULE_IDS = [
   // — verticale photographie —
   "photo.sessions",
   "photo.gallery",
+  // — P2 : commerce, portail et fidélisation du studio —
+  "photo.quotes",
+  "photo.payments",
+  "photo.portal",
+  "photo.upsell",
+  "photo.lifecycle",
   // — verticale immobilier —
   "immo.properties",
   "immo.sellers",
@@ -80,6 +86,17 @@ export type ModuleDef = {
    * automatiquement (réservé à une activation explicite).
    */
   capabilityTokens: CapabilityToken[];
+  /**
+   * Capacités exigées CONJOINTEMENT, en plus de `capabilityTokens`.
+   *
+   * Nécessaire parce que certains tokens sont trop généraux pour identifier un
+   * métier à eux seuls. `quotes` en est l'exemple : une photographe qui émet des
+   * devis le détient, et se voyait attribuer « Études » — un module solaire.
+   * Trou trouvé par un test d'isolation, pas par relecture.
+   *
+   * Vide = aucune exigence supplémentaire (le cas de presque tous les modules).
+   */
+  requiresAllTokens?: CapabilityToken[];
   /**
    * Route principale, si la page EXISTE aujourd'hui. `null` ⇒ destination
    * prévue mais non construite : le menu l'affiche désactivée (« bientôt »),
@@ -295,6 +312,7 @@ export const MODULE_REGISTRY: ModuleDef[] = [
     labelKey: "nav.photoSessions",
     core: false,
     capabilityTokens: ["photo_studio"],
+    requiresAllTokens: ["photo_studio"],
     route: "/seances",
     ownedRoutes: ["/seances"],
     widgets: ["photo-today", "photo-sessions", "photo-culling-queue"],
@@ -305,10 +323,71 @@ export const MODULE_REGISTRY: ModuleDef[] = [
     labelKey: "nav.galleries",
     core: false,
     capabilityTokens: ["photo_studio"],
+    requiresAllTokens: ["photo_studio"],
     route: null,
     ownedRoutes: ["/galeries"],
     widgets: [],
     actionPrefixes: ["photo.gallery."],
+  },
+  {
+    // Devis, contrat et signature vivent ensemble : c'est une seule démarche
+    // pour la photographe, même si la base en fait trois tables.
+    id: "photo.quotes",
+    labelKey: "nav.quotesContracts",
+    core: false,
+    capabilityTokens: ["quotes"],
+    requiresAllTokens: ["photo_studio", "quotes"],
+    route: null,
+    ownedRoutes: ["/devis"],
+    widgets: [],
+    actionPrefixes: ["photo.quote.", "photo.contract."],
+  },
+  {
+    id: "photo.payments",
+    labelKey: "nav.payments",
+    core: false,
+    capabilityTokens: ["payments", "invoicing"],
+    requiresAllTokens: ["photo_studio"],
+    route: null,
+    ownedRoutes: ["/paiements"],
+    widgets: [],
+    actionPrefixes: ["photo.payment."],
+  },
+  {
+    // Le portail est un MODULE, pas une seconde application : mêmes tables,
+    // même tenant. Ses routes sont publiques côté client mais portées par un
+    // jeton de portée, jamais par une session Hermès.
+    id: "photo.portal",
+    labelKey: "nav.clientPortal",
+    core: false,
+    capabilityTokens: ["photo_studio"],
+    requiresAllTokens: ["photo_studio"],
+    route: null,
+    ownedRoutes: ["/portail"],
+    widgets: [],
+    actionPrefixes: ["photo.portal."],
+  },
+  {
+    id: "photo.upsell",
+    labelKey: "nav.upsell",
+    core: false,
+    capabilityTokens: ["photo_studio", "sales"],
+    requiresAllTokens: ["photo_studio"],
+    route: null,
+    ownedRoutes: ["/upsell"],
+    widgets: [],
+    actionPrefixes: ["photo.upsell."],
+  },
+  {
+    id: "photo.lifecycle",
+    labelKey: "nav.loyalty",
+    core: false,
+    capabilityTokens: ["photo_studio", "marketing"],
+    requiresAllTokens: ["photo_studio"],
+    route: null,
+    ownedRoutes: ["/fidelisation"],
+    widgets: [],
+    actionPrefixes: ["photo.lifecycle.", "photo.referral."],
   },
 
   // --- verticale immobilier ------------------------------------------------
@@ -317,6 +396,7 @@ export const MODULE_REGISTRY: ModuleDef[] = [
     labelKey: "nav.properties",
     core: false,
     capabilityTokens: ["properties"],
+    requiresAllTokens: ["properties"],
     route: null,
     ownedRoutes: ["/biens"],
     widgets: [],
@@ -327,6 +407,7 @@ export const MODULE_REGISTRY: ModuleDef[] = [
     labelKey: "nav.sellers",
     core: false,
     capabilityTokens: ["properties"],
+    requiresAllTokens: ["properties"],
     route: null,
     ownedRoutes: ["/vendeurs"],
     widgets: [],
@@ -337,6 +418,7 @@ export const MODULE_REGISTRY: ModuleDef[] = [
     labelKey: "nav.buyers",
     core: false,
     capabilityTokens: ["properties"],
+    requiresAllTokens: ["properties"],
     route: null,
     ownedRoutes: ["/acquereurs"],
     widgets: [],
@@ -347,6 +429,7 @@ export const MODULE_REGISTRY: ModuleDef[] = [
     labelKey: "nav.viewings",
     core: false,
     capabilityTokens: ["properties"],
+    requiresAllTokens: ["properties"],
     route: null,
     ownedRoutes: ["/visites"],
     widgets: [],
@@ -358,7 +441,10 @@ export const MODULE_REGISTRY: ModuleDef[] = [
     id: "solar.studies",
     labelKey: "nav.studies",
     core: false,
+    // `quotes` seul désignerait n'importe quel métier qui devise. Une étude
+    // n'existe que là où elle débouche sur un chantier.
     capabilityTokens: ["quotes"],
+    requiresAllTokens: ["quotes", "worksites"],
     route: null,
     ownedRoutes: ["/etudes"],
     widgets: [],
@@ -401,7 +487,10 @@ export function grantedModules(capabilityTokens: Iterable<string>): Set<ModuleId
   const out = new Set<ModuleId>(CORE_MODULE_IDS);
   for (const m of MODULE_REGISTRY) {
     if (m.core) continue;
-    if (m.capabilityTokens.some((t) => tokens.has(t))) out.add(m.id);
+    if (!m.capabilityTokens.some((t) => tokens.has(t))) continue;
+    // Conjonction, quand elle est déclarée : TOUS les tokens sont exigés.
+    if (m.requiresAllTokens && !m.requiresAllTokens.every((t) => tokens.has(t))) continue;
+    out.add(m.id);
   }
   return out;
 }
