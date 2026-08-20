@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import {
+  PV_ADVISORY_LABELS,
   PV_DEAL_STATE_LABELS,
   PV_REQUIREMENT_LABELS,
   type PvReadiness,
@@ -73,6 +74,21 @@ export default function PvDealPanel({
             </ul>
           </div>
         )}
+
+        {/* PV-6 — SIGNALEMENTS, distincts des blocages. Ils n'interdisent rien
+            et ne cassent aucun dossier engagé : ils disent ce qui n'est pas
+            vérifié. Les confondre avec des blocages ferait passer pour cassé un
+            dossier qui ne l'est pas. */}
+        {readiness.advisories.length > 0 ? (
+          <div className="pv-advisories" role="note">
+            <strong>À signaler :</strong>
+            <ul className="pv-blockers">
+              {readiness.advisories.map((a) => (
+                <li key={a}>{PV_ADVISORY_LABELS[a]}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </section>
 
       <section className="dashboard-card pv-card">

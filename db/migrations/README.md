@@ -1226,3 +1226,107 @@ n'avait aucun état entre `STUDY_DELIVERED` et `WON` — un dossier passait donc
   quatrième a d'abord **survécu** — l'assertion d'arrondi ne distinguait pas les
   deux règles sur son jeu d'essai ; le cas qui les sépare (trois lignes à 0,03 €)
   a été ajouté, et tue le mutant.
+
+---
+
+## 2026-08-23 — PACK PHOTOVOLTAÏQUE, LOT PV-6 : la visite technique
+
+Le trou que ce lot ferme, mesuré avant d'être traité :
+
+```sql
+select column_name from information_schema.columns
+ where table_schema='hermes_os' and table_name='pv_sites'
+   and (column_name like '%verif%' or column_name like '%visit%');
+-- → AUCUNE LIGNE
+```
+
+`pv_sites` ne portait **aucun champ de vérification**. Les six données qui
+déterminent la puissance, la production et donc le prix — surface exploitable,
+azimut, inclinaison, état de couverture, ombrage, accès — étaient saisies au
+bureau et jamais confrontées au terrain. PV-5 en avait fait la base d'un
+engagement contractuel, et les deux PDF produits par Hermès **promettaient déjà**
+cette visite (« sous réserve de … visite technique … »). Le système promettait
+une visite que rien n'implémentait.
+
+| Fichier | Migration appliquée | Objet |
+|---|---|---|
+| `20260823_pv6_1_survey_schema.sql` | `pv6_1_survey_schema` | `pv_survey_thresholds` (seuils **en données**, défaut global + surcharge par tenant), `pv_site_surveys` (mesures en **colonnes typées**), `pv_site_survey_findings` ; FK **composites** ; `survey_id` sur `pv_documents` |
+| `20260823_pv6_2_state_machine.sql` | `pv6_2_state_machine` | `pv_survey_transitions` (15 chemins, **données**) ; garde de validation humaine **réutilisée** de PV-1 ; gel du relevé après validation ; audit via `entity_audit_log` |
+| `20260823_pv6_3_findings_engine.sql` | `pv6_3_findings_engine` | Moteur d'écarts **déterministe** (10 règles, aucune IA), écart d'azimut **circulaire**, `pv_survey_gate` |
+| `20260823_pv6_3b_gate_blocking_priority.sql` | `pv6_3b_gate_blocking_priority` | **Correctif** : la porte testait `VALIDATED` avant `BLOCKING` — une visite validée en mars masquait une visite d'octobre constatant un toit impraticable. Un blocage prime désormais sur une validation antérieure. |
+| `20260823_pv6_4_facades.sql` | `pv6_4_facades` | 11 façades `public.*` ; extension de `pv_quote_blockers` (3 codes de visite) ; `get_pv_deal` gagne `survey_gate` |
+| `20260823_pv6_9_rollback.sql` | — | Teardown complet. **Destructif** sur les visites et les écarts ; restaure `pv_quote_blockers` et `get_pv_deal` **avant** de supprimer `pv_survey_gate`. |
+
+### Invariants
+
+- **La mesure n'écrase jamais la déclaration.** Une valeur relevée sur le toit ne
+  remplace pas la valeur saisie au bureau : les deux coexistent, l'écart est
+  nommé, et un humain décide. `apply_pv_survey_measurement` est la **seule**
+  fonction de ce lot qui écrit dans `pv_sites` ; aucun déclencheur ne le fait, et
+  chaque application est confirmée puis auditée avec son avant/après.
+- **Les mesures sont des colonnes typées.** Une surface cachée dans un blob JSON
+  ne peut être ni contrainte, ni indexée, ni comparée par une règle déterministe.
+  `metadata` existe pour le complément, jamais comme source.
+- **Les vocabulaires mesurés sont alignés sur `pv_sites`** (`PENTE`, `BON`,
+  `FAIBLE`, …). Deux échelles pour la même grandeur auraient exigé une table de
+  traduction que personne n'aurait maintenue, et la comparaison serait devenue
+  une approximation.
+- **Aucune IA ne décide d'une gravité.** Dix règles SQL documentées, deux paliers
+  par grandeur (`REVIEW` puis `BLOCKING`), lisant des seuils **stockés en base** :
+  changer une tolérance ne demande aucun redéploiement, et le même relevé produit
+  toujours les mêmes écarts.
+- **Un agent ne valide jamais une visite** — `pv_human_validation_guard`
+  paramétrée, réutilisée de PV-1 : refus quand `auth.uid()` est NULL, refus quand
+  l'acteur déclaré n'est pas l'appelant. `SECURITY DEFINER` ne la contourne pas.
+- **`PLANNED → VALIDATED` et `BLOCKING → VALIDATED` sont absents** de la table de
+  transitions : on ne valide pas une visite qui n'a pas eu lieu, et un blocage se
+  lève par le terrain ou par une revue, jamais par un changement de statut.
+- **Une visite ne peut pas être validée avec un écart bloquant non résolu** :
+  sinon la preuve terrain dirait le contraire de ce qu'elle a constaté.
+- **Les dossiers engagés ne cassent pas.** L'absence de visite et la visite non
+  validée sont des **avis** (`PV_ADVISORIES`), pas des exigences : un dossier
+  reste `READY_FOR_OFFER`. La garde dure est ciblée sur le devis — `READY`,
+  transmission et PDF `FINAL` exigent une visite validée. Un devis **déjà `SENT`
+  ou `ACCEPTED` n'est jamais modifié** : il affiche l'alerte, et la seule voie de
+  correction reste la révision.
+- **Aucun nouveau bucket.** Photos et rapports rejoignent `hermes-pv-documents`,
+  chemins privés bornés au tenant. Aucun `delete from storage.*` nulle part.
+- **Aucun cron, aucun scheduler, aucune capacité IA.** n8n reste hors périmètre.
+
+### Permissions — décision documentée
+
+La visite est un geste **technique**, pas administratif. Exiger `tenant.admin`
+pour saisir un relevé de toiture interdirait à un technicien de faire son travail
+et pousserait à partager un compte d'administrateur — ce qui serait pire. Les 11
+façades de ce lot passent donc par `pv_guard()` (membre du tenant), comme la
+validation d'étude en PV-3. La seule irréversibilité du Pack PV, la purge
+d'octets, reste réservée à `tenant.admin` (PV-4) : elle détruit, la visite
+constate.
+
+### Preuves
+
+* **65 assertions SQL** (`db/tests/pv6_site_survey.test.sql`), en transaction
+  annulée — **65/65 PASS**.
+* **53 assertions de contrat TS** (`tests/pv6-survey.test.ts` 33,
+  `tests/pv6-survey-pdf.test.ts` 20), dont le contenu **décodé** du PDF.
+* **Mutation testing (2 mutations)**, toutes deux **tuées** : ordre
+  `VALIDATED`-avant-`BLOCKING` rétabli dans la porte ; régénération des écarts
+  effaçant les résolutions humaines.
+* **Rollback exécuté** dans une transaction annulée : 4 tables et 11 façades
+  retirées, `pv_quote_blockers` et `get_pv_deal` restaurés et **appelables**,
+  0 objet de stockage supprimé, bucket intact.
+* **Équivalence fichier ↔ production vérifiée** : le SQL de chaque migration du
+  dépôt est identique (commentaires exclus) à celui réellement appliqué —
+  empreintes MD5 comparées ligne à ligne.
+
+### Deux défauts trouvés par les tests, et corrigés
+
+1. **La porte masquait un blocage postérieur** — `pv_survey_gate` testait
+   `VALIDATED` avant `BLOCKING`. Trouvé en écrivant l'assertion T55. Corrigé par
+   la migration `pv6_3b`, dans un **fichier séparé** : `pv6_3` était déjà
+   appliquée, et on ne réécrit pas une migration appliquée.
+2. **Le rapport PDF imprimait « ?18 m² »** — le moins typographique `−` (U+2212)
+   et le `≠` (U+2260) n'existent pas dans WinAnsi ; le moteur les remplaçait
+   silencieusement. L'écran affichait donc une chose et le rapport une autre. Les
+   deux caractères sont remplacés par de l'ASCII et par le mot « différent », et
+   une assertion vérifie désormais qu'aucun `?` n'apparaît dans le PDF décodé.

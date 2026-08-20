@@ -6,6 +6,8 @@ import { resolvePvReadiness } from "@/lib/pv/readiness";
 import { buildPvQuotePdf } from "@/lib/pv/quotePdf";
 import { buildPvQuotePdfModel } from "@/lib/pv/quotePdfModel";
 import { buildPvStudyPdf } from "@/lib/pv/studyPdf";
+import { buildPvSurveyPdf } from "@/lib/pv/surveyPdf";
+import { buildPvSurveyPdfModel } from "@/lib/pv/surveyPdfModel";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   PvBillExtraction,
@@ -31,6 +33,11 @@ import type {
   PvQuoteLine,
   PvQuoteOutcome,
   PvQuoteSummary,
+  PvSiteSurvey,
+  PvSiteSurveyDetail,
+  PvSiteSurveySummary,
+  PvSurveyFinding,
+  PvSurveyOutcome,
 } from "@/types/pv";
 
 /**
@@ -1239,6 +1246,10 @@ export async function getPvDeal(prospectId: string): Promise<PvDeal | null> {
       }),
     ),
     documents,
+    // PV-6 — lue en base, jamais recalculée ici. Une façade PV-4 antérieure au
+    // lot ne renvoie pas la clé : on retombe alors sur « aucune visite », ce
+    // qui est vrai tant que PV-6 n'est pas appliqué.
+    surveyGate: (payload.survey_gate ?? "NONE") as PvDeal["surveyGate"],
   };
 }
 
@@ -1732,6 +1743,439 @@ export async function generatePvQuotePdf(input: {
     code: String(registered.code ?? "GENERATED"),
     documentId: str(registered.document_id),
     stage,
+    reason: null,
+  };
+}
+
+// --- PV-6 : la visite technique ---------------------------------------------
+
+function surveyOutcome(payload: Record<string, unknown> | null): PvSurveyOutcome {
+  if (!payload) {
+    return { ok: false, code: "RPC_ERROR", surveyId: null, blockingFindings: [], findings: null };
+  }
+  const blocking = payload.findings;
+  return {
+    ok: Boolean(payload.ok),
+    code: String(payload.code ?? "UNKNOWN"),
+    surveyId: str(payload.survey_id),
+    blockingFindings: Array.isArray(blocking) ? blocking.map((b) => String(b)) : [],
+    findings: typeof payload.findings === "number" ? (payload.findings as number) : null,
+  };
+}
+
+function mapSurvey(x: Record<string, unknown>): PvSiteSurvey {
+  return {
+    id: String(x.id ?? ""),
+    prospectId: String(x.prospect_id ?? ""),
+    siteId: String(x.site_id ?? ""),
+    technicianUserId: str(x.technician_user_id),
+    scheduledOn: str(x.scheduled_on),
+    startedAt: str(x.started_at),
+    completedAt: str(x.completed_at),
+    validatedAt: str(x.validated_at),
+    validatedBy: str(x.validated_by),
+    status: String(x.status ?? "PLANNED"),
+    weatherConditions: str(x.weather_conditions),
+    roofAccess: str(x.roof_access),
+    accessMeans: str(x.access_means),
+    siteCondition: str(x.site_condition),
+    safetyConstraints: str(x.safety_constraints),
+    observations: str(x.observations),
+    remarks: str(x.remarks),
+    roofAreaTotalMeasuredM2: numOrNull(x.roof_area_total_measured_m2),
+    roofAreaUsableMeasuredM2: numOrNull(x.roof_area_usable_measured_m2),
+    azimuthMeasuredDeg: numOrNull(x.azimuth_measured_deg),
+    tiltMeasuredDeg: numOrNull(x.tilt_measured_deg),
+    roofTypeMeasured: str(x.roof_type_measured),
+    roofConditionMeasured: str(x.roof_condition_measured),
+    shadingMeasured: str(x.shading_measured),
+    accessDifficultyMeasured: str(x.access_difficulty_measured),
+    heightMeasuredM: numOrNull(x.height_measured_m),
+    ridgeLengthM: numOrNull(x.ridge_length_m),
+    eaveLengthM: numOrNull(x.eave_length_m),
+    slopeLengthM: numOrNull(x.slope_length_m),
+    obstacles: str(x.obstacles),
+    asbestosSuspicion: Boolean(x.asbestos_suspicion),
+    asbestosNote: str(x.asbestos_note),
+    panelLocation: str(x.panel_location),
+    inverterLocation: str(x.inverter_location),
+    batteryLocation: str(x.battery_location),
+    cableRoute: str(x.cable_route),
+    cableDistanceM: numOrNull(x.cable_distance_m),
+    panelBoardLocation: str(x.panel_board_location),
+    panelBoardCondition: str(x.panel_board_condition),
+    panelBoardFreeSlots: numOrNull(x.panel_board_free_slots),
+    mainBreakerRatingA: numOrNull(x.main_breaker_rating_a),
+    earthingObserved: str(x.earthing_observed),
+    earthingNote: str(x.earthing_note),
+    createdAt: String(x.created_at ?? ""),
+    updatedAt: String(x.updated_at ?? ""),
+  };
+}
+
+function mapFinding(x: Record<string, unknown>): PvSurveyFinding {
+  return {
+    id: String(x.id ?? ""),
+    surveyId: String(x.survey_id ?? ""),
+    code: String(x.code ?? ""),
+    category: String(x.category ?? "AUTRE"),
+    severity: (x.severity ?? "INFO") as PvSurveyFinding["severity"],
+    isBlocking: Boolean(x.is_blocking),
+    declaredValue: str(x.declared_value),
+    measuredValue: str(x.measured_value),
+    unit: str(x.unit),
+    comment: str(x.comment),
+    resolution: str(x.resolution),
+    resolvedBy: str(x.resolved_by),
+    resolvedAt: str(x.resolved_at),
+  };
+}
+
+export async function getPvSiteSurveys(prospectId: string | null): Promise<PvSiteSurveySummary[]> {
+  const payload = await callRpc("get_pv_site_surveys", { p_prospect_id: prospectId, p_limit: 50 });
+  if (!payload || !payload.ok) return [];
+  return rows(payload).map((x) => ({
+    id: String(x.id ?? ""),
+    siteId: String(x.site_id ?? ""),
+    status: String(x.status ?? "PLANNED"),
+    scheduledOn: str(x.scheduled_on),
+    completedAt: str(x.completed_at),
+    validatedAt: str(x.validated_at),
+    technicianUserId: str(x.technician_user_id),
+    createdAt: String(x.created_at ?? ""),
+    findingsTotal: num(x.findings_total),
+    findingsBlocking: num(x.findings_blocking),
+  }));
+}
+
+export async function getPvSiteSurvey(surveyId: string): Promise<PvSiteSurveyDetail | null> {
+  const payload = await callRpc("get_pv_site_survey", { p_survey_id: surveyId });
+  if (!payload || !payload.ok) return null;
+
+  const s = payload.site === null ? null : asRecord(payload.site);
+  const p = payload.prospect === null ? null : asRecord(payload.prospect);
+  const findingsRaw = Array.isArray(payload.findings)
+    ? (payload.findings as Record<string, unknown>[])
+    : [];
+  const docsRaw = Array.isArray(payload.documents)
+    ? (payload.documents as Record<string, unknown>[])
+    : [];
+
+  // Les documents d'une visite sont PRIVÉS : on ne rend jamais un chemin brut,
+  // seulement une URL signée courte, produite à la demande.
+  const paths = docsRaw.map((d) => str(d.storage_path)).filter((x): x is string => x !== null);
+  const signedByPath = new Map<string, string>();
+  if (paths.length > 0) {
+    const supabase = await createSupabaseServerClient();
+    const { data: signed } = await supabase.storage
+      .from(PV_DOCUMENT_BUCKET)
+      .createSignedUrls(paths, SIGNED_URL_TTL_SECONDS);
+    for (const entry of signed ?? []) {
+      if (entry.path && entry.signedUrl) signedByPath.set(entry.path, entry.signedUrl);
+    }
+  }
+
+  return {
+    survey: mapSurvey(asRecord(payload.survey)),
+    site:
+      s === null
+        ? null
+        : {
+            id: String(s.id ?? ""),
+            label: str(s.label),
+            addressLine1: str(s.address_line1),
+            postalCode: str(s.postal_code),
+            city: str(s.city),
+            buildingType: str(s.building_type),
+            buildingUse: str(s.building_use),
+            occupancy: str(s.occupancy),
+            roofType: str(s.roof_type),
+            roofMaterial: str(s.roof_material),
+            roofCondition: str(s.roof_condition),
+            roofAreaTotalM2: numOrNull(s.roof_area_total_m2),
+            roofAreaUsableM2: numOrNull(s.roof_area_usable_m2),
+            azimuthDeg: numOrNull(s.azimuth_deg),
+            tiltDeg: numOrNull(s.tilt_deg),
+            shadingLevel: str(s.shading_level),
+            accessDifficulty: str(s.access_difficulty),
+          },
+    prospect:
+      p === null
+        ? null
+        : {
+            id: String(p.id ?? ""),
+            prospectType: String(p.prospect_type ?? "PARTICULIER"),
+            firstName: str(p.first_name),
+            lastName: str(p.last_name),
+            companyName: str(p.company_name),
+            phone: str(p.phone),
+            email: str(p.email),
+            source: String(p.source ?? "MANUAL"),
+            ownerUserId: str(p.owner_user_id),
+            contactConsent: Boolean(p.contact_consent),
+            contactConsentAt: str(p.contact_consent_at),
+            optedOut: Boolean(p.opted_out),
+            status: String(p.status ?? "NEW"),
+          },
+    findings: findingsRaw.map(mapFinding),
+    documents: docsRaw.map((d) => {
+      const path = str(d.storage_path);
+      return {
+        id: String(d.id ?? ""),
+        docType: String(d.doc_type ?? "AUTRE"),
+        documentStage: String(d.document_stage ?? "SOURCE"),
+        originalFilename: str(d.original_filename),
+        mimeType: String(d.mime_type ?? "application/octet-stream"),
+        sizeBytes: num(d.size_bytes),
+        status: String(d.status ?? "UPLOADED"),
+        storagePath: path,
+        uploadedAt: str(d.uploaded_at),
+        signedUrl: path === null ? null : (signedByPath.get(path) ?? null),
+      };
+    }),
+    gate: (payload.gate ?? "NONE") as PvSiteSurveyDetail["gate"],
+    nextStatuses: Array.isArray(payload.next_statuses)
+      ? payload.next_statuses.map((x) => String(x))
+      : [],
+  };
+}
+
+export async function planPvSiteSurvey(input: {
+  prospectId: string;
+  scheduledOn: string | null;
+  technicianUserId: string | null;
+}): Promise<PvSurveyOutcome> {
+  return surveyOutcome(
+    await callRpc("plan_pv_site_survey", {
+      p_prospect_id: input.prospectId,
+      p_scheduled_on: input.scheduledOn,
+      p_technician_user_id: input.technicianUserId,
+    }),
+  );
+}
+
+export async function upsertPvSurveyRoof(input: {
+  surveyId: string;
+  roofAreaTotalM2: number | null;
+  roofAreaUsableM2: number | null;
+  azimuthDeg: number | null;
+  tiltDeg: number | null;
+  roofType: string | null;
+  roofCondition: string | null;
+  shading: string | null;
+  accessDifficulty: string | null;
+  heightM: number | null;
+  ridgeLengthM: number | null;
+  eaveLengthM: number | null;
+  slopeLengthM: number | null;
+  obstacles: string | null;
+  asbestosSuspicion: boolean | null;
+  asbestosNote: string | null;
+}): Promise<PvSurveyOutcome> {
+  return surveyOutcome(
+    await callRpc("upsert_pv_survey_roof", {
+      p_survey_id: input.surveyId,
+      p_roof_area_total_m2: input.roofAreaTotalM2,
+      p_roof_area_usable_m2: input.roofAreaUsableM2,
+      p_azimuth_deg: input.azimuthDeg,
+      p_tilt_deg: input.tiltDeg,
+      p_roof_type: input.roofType,
+      p_roof_condition: input.roofCondition,
+      p_shading: input.shading,
+      p_access_difficulty: input.accessDifficulty,
+      p_height_m: input.heightM,
+      p_ridge_length_m: input.ridgeLengthM,
+      p_eave_length_m: input.eaveLengthM,
+      p_slope_length_m: input.slopeLengthM,
+      p_obstacles: input.obstacles,
+      p_asbestos_suspicion: input.asbestosSuspicion,
+      p_asbestos_note: input.asbestosNote,
+    }),
+  );
+}
+
+export async function upsertPvSurveyElectrical(input: {
+  surveyId: string;
+  panelLocation: string | null;
+  inverterLocation: string | null;
+  batteryLocation: string | null;
+  cableRoute: string | null;
+  cableDistanceM: number | null;
+  panelBoardLocation: string | null;
+  panelBoardCondition: string | null;
+  panelBoardFreeSlots: number | null;
+  mainBreakerRatingA: number | null;
+  earthingObserved: string | null;
+  earthingNote: string | null;
+}): Promise<PvSurveyOutcome> {
+  return surveyOutcome(
+    await callRpc("upsert_pv_survey_electrical", {
+      p_survey_id: input.surveyId,
+      p_panel_location: input.panelLocation,
+      p_inverter_location: input.inverterLocation,
+      p_battery_location: input.batteryLocation,
+      p_cable_route: input.cableRoute,
+      p_cable_distance_m: input.cableDistanceM,
+      p_panel_board_location: input.panelBoardLocation,
+      p_panel_board_condition: input.panelBoardCondition,
+      p_panel_board_free_slots: input.panelBoardFreeSlots,
+      p_main_breaker_rating_a: input.mainBreakerRatingA,
+      p_earthing_observed: input.earthingObserved,
+      p_earthing_note: input.earthingNote,
+    }),
+  );
+}
+
+export async function upsertPvSurveyContext(input: {
+  surveyId: string;
+  weatherConditions: string | null;
+  roofAccess: string | null;
+  accessMeans: string | null;
+  siteCondition: string | null;
+  safetyConstraints: string | null;
+  observations: string | null;
+  remarks: string | null;
+}): Promise<PvSurveyOutcome> {
+  return surveyOutcome(
+    await callRpc("upsert_pv_survey_context", {
+      p_survey_id: input.surveyId,
+      p_weather_conditions: input.weatherConditions,
+      p_roof_access: input.roofAccess,
+      p_access_means: input.accessMeans,
+      p_site_condition: input.siteCondition,
+      p_safety_constraints: input.safetyConstraints,
+      p_observations: input.observations,
+      p_remarks: input.remarks,
+    }),
+  );
+}
+
+export async function setPvSurveyStatus(surveyId: string, status: string): Promise<PvSurveyOutcome> {
+  return surveyOutcome(await callRpc("set_pv_survey_status", { p_survey_id: surveyId, p_status: status }));
+}
+
+/** Validation HUMAINE. La base refuse si `auth.uid()` est NULL, ou si un écart bloquant reste non résolu. */
+export async function validatePvSiteSurvey(surveyId: string): Promise<PvSurveyOutcome> {
+  return surveyOutcome(await callRpc("validate_pv_site_survey", { p_survey_id: surveyId }));
+}
+
+export async function resolvePvSurveyFinding(input: {
+  findingId: string;
+  resolution: string;
+  comment: string | null;
+}): Promise<PvWriteOutcome> {
+  return outcome(
+    await callRpc("resolve_pv_survey_finding", {
+      p_finding_id: input.findingId,
+      p_resolution: input.resolution,
+      p_comment: input.comment,
+    }),
+    "finding_id",
+  );
+}
+
+/**
+ * Applique UNE mesure de terrain au site. Le SEUL chemin par lequel une valeur
+ * relevée remplace une valeur déclarée — explicite, champ par champ, audité.
+ * Aucun déclencheur ne le fait automatiquement, et c'est le point du lot.
+ */
+export async function applyPvSurveyMeasurement(input: {
+  surveyId: string;
+  field: string;
+}): Promise<{ ok: boolean; code: string; previousValue: string | null; newValue: string | null }> {
+  const payload = await callRpc("apply_pv_survey_measurement", {
+    p_survey_id: input.surveyId,
+    p_field: input.field,
+  });
+  if (!payload) return { ok: false, code: "RPC_ERROR", previousValue: null, newValue: null };
+  return {
+    ok: Boolean(payload.ok),
+    code: String(payload.code ?? "UNKNOWN"),
+    previousValue: str(payload.previous_value),
+    newValue: str(payload.new_value),
+  };
+}
+
+/**
+ * LE RAPPORT DE VISITE TECHNIQUE (PDF).
+ *
+ * Ce n'est PAS un devis : aucune signature, aucun prix, aucune valeur
+ * d'engagement. C'est le constat de terrain, rendu lisible et opposable en
+ * interne. Il se génère à n'importe quel stade — un constat provisoire porte
+ * alors son bandeau « visite non validée », ce qui vaut mieux qu'un document
+ * absent au moment où l'on en a besoin sur le chantier.
+ *
+ * Traçabilité : `request_id` (idempotence), SHA-256, taille, MIME, chemin privé
+ * borné au tenant. Aucun nouveau bucket : on réutilise `hermes-pv-documents`.
+ */
+export async function generatePvSurveyReport(input: {
+  surveyId: string;
+  requestId: string;
+  company: string;
+  generatedOn: string;
+}): Promise<PvPdfOutcome> {
+  const detail = await getPvSiteSurvey(input.surveyId);
+  if (detail === null) {
+    return { ok: false, code: "NOT_FOUND", documentId: null, stage: null, reason: null };
+  }
+
+  const pdf = buildPvSurveyPdf(
+    buildPvSurveyPdfModel({
+      detail,
+      company: input.company,
+      generatedOn: input.generatedOn,
+      // Aucun nom d'agent inventé : la base ne renvoie qu'un identifiant, et
+      // afficher un UUID n'aiderait personne. Absence assumée.
+      technicianLabel: null,
+    }),
+  );
+
+  const digest = await crypto.subtle.digest("SHA-256", pdf.slice().buffer as ArrayBuffer);
+  const sha256 = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+  // Le chemin est demandé à la base — jamais reconstruit ici : c'est elle qui
+  // sait quel tenant est actif, et le préfixe est revérifié à l'enregistrement.
+  const slot = await preparePvDocument({
+    siteId: detail.survey.siteId,
+    docType: "AUTRE",
+    filename: `rapport-visite-${input.requestId}.pdf`,
+  });
+  if (!slot.ok || slot.path === null) {
+    return { ok: false, code: slot.code, documentId: null, stage: null, reason: null };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.storage
+    .from(PV_DOCUMENT_BUCKET)
+    .upload(slot.path, pdf, { contentType: "application/pdf", upsert: true });
+  if (error) {
+    logEvent("error", "pv.survey_report_upload_failed", { code: error.name });
+    return { ok: false, code: "UPLOAD_FAILED", documentId: null, stage: null, reason: null };
+  }
+
+  const registered = await callRpc("register_pv_survey_report", {
+    p_request_id: input.requestId,
+    p_survey_id: detail.survey.id,
+    p_path: slot.path,
+    p_bytes: pdf.byteLength,
+    p_sha256: sha256,
+  });
+  if (!registered || !registered.ok) {
+    return {
+      ok: false,
+      code: String(registered?.code ?? "RPC_ERROR"),
+      documentId: null,
+      stage: null,
+      reason: null,
+    };
+  }
+  return {
+    ok: true,
+    code: String(registered.code ?? "GENERATED"),
+    documentId: str(registered.document_id),
+    // Le rapport n'a qu'une forme : il n'existe pas de « version finale »
+    // opposable au client. On le dit plutôt que de réutiliser FINAL par défaut.
+    stage: "DRAFT",
     reason: null,
   };
 }

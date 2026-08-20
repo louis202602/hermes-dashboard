@@ -425,6 +425,13 @@ export type PvDeal = {
   retainedEconomics: PvEconomics | null;
   studies: { id: string; version: number; status: string; preparedBy: string; targetPowerKwc: number | null }[];
   documents: PvDealDocument[];
+  /**
+   * PV-6 — état de la preuve terrain pour le site de l'affaire, tel que la base
+   * le calcule (`hermes_os.pv_survey_gate`). `NONE` par défaut : une affaire
+   * sans site n'a pas de visite possible, et l'absence se dit plutôt qu'elle ne
+   * se devine.
+   */
+  surveyGate: "NONE" | "NOT_VALIDATED" | "BLOCKING" | "OK";
 };
 
 /** Résultat d'une génération de synthèse PDF. */
@@ -552,3 +559,200 @@ export type PvQuoteOutcome = {
   version: number | null;
   missingRequirements: string[];
 };
+
+// --- PV-6 : la visite technique ---------------------------------------------
+
+/** Codes d'écart. Liste CLOSE côté base (contrainte CHECK). */
+export const PV_SURVEY_FINDING_CODES = [
+  "ROOF_AREA_MISMATCH",
+  "USABLE_AREA_MISMATCH",
+  "AZIMUTH_MISMATCH",
+  "TILT_MISMATCH",
+  "ROOF_TYPE_MISMATCH",
+  "ROOF_CONDITION_ISSUE",
+  "SHADING_MISMATCH",
+  "ACCESS_BLOCKED",
+  "ELECTRICAL_PANEL_ISSUE",
+  "CABLE_ROUTE_ISSUE",
+  "STRUCTURAL_CONCERN",
+  "ASBESTOS_SUSPICION",
+  "EARTHING_ISSUE",
+  "HEIGHT_ACCESS_NOTICE",
+] as const;
+export type PvSurveyFindingCode = (typeof PV_SURVEY_FINDING_CODES)[number];
+
+export const PV_SURVEY_RESOLUTIONS = [
+  "ACCEPTED_AS_IS",
+  "SITE_UPDATED",
+  "STUDY_TO_REVISE",
+  "QUOTE_TO_REVISE",
+  "NOT_AN_ISSUE",
+] as const;
+export type PvSurveyResolution = (typeof PV_SURVEY_RESOLUTIONS)[number];
+
+/**
+ * UN ÉCART entre le déclaré et le mesuré.
+ *
+ * Il porte les DEUX valeurs, jamais une seule : c'est ce qui permet à l'écran de
+ * montrer « 90 m² déclarés / 72 m² mesurés / −18 m² » plutôt qu'un drapeau rouge
+ * sans explication.
+ */
+export type PvSurveyFinding = {
+  id: string;
+  surveyId: string;
+  code: string;
+  category: string;
+  severity: "INFO" | "REVIEW" | "BLOCKING";
+  isBlocking: boolean;
+  declaredValue: string | null;
+  measuredValue: string | null;
+  unit: string | null;
+  comment: string | null;
+  resolution: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+};
+
+/** Le relevé de terrain. Colonnes TYPÉES — jamais un blob JSON. */
+export type PvSiteSurvey = {
+  id: string;
+  prospectId: string;
+  siteId: string;
+  technicianUserId: string | null;
+  scheduledOn: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  validatedAt: string | null;
+  validatedBy: string | null;
+  status: string;
+
+  weatherConditions: string | null;
+  roofAccess: string | null;
+  accessMeans: string | null;
+  siteCondition: string | null;
+  safetyConstraints: string | null;
+  observations: string | null;
+  remarks: string | null;
+
+  roofAreaTotalMeasuredM2: number | null;
+  roofAreaUsableMeasuredM2: number | null;
+  azimuthMeasuredDeg: number | null;
+  tiltMeasuredDeg: number | null;
+  roofTypeMeasured: string | null;
+  roofConditionMeasured: string | null;
+  shadingMeasured: string | null;
+  accessDifficultyMeasured: string | null;
+  heightMeasuredM: number | null;
+  ridgeLengthM: number | null;
+  eaveLengthM: number | null;
+  slopeLengthM: number | null;
+  obstacles: string | null;
+  /** CONSTAT de terrain, jamais un diagnostic — celui-ci relève d'un opérateur certifié. */
+  asbestosSuspicion: boolean;
+  asbestosNote: string | null;
+
+  panelLocation: string | null;
+  inverterLocation: string | null;
+  batteryLocation: string | null;
+  cableRoute: string | null;
+  cableDistanceM: number | null;
+  panelBoardLocation: string | null;
+  panelBoardCondition: string | null;
+  panelBoardFreeSlots: number | null;
+  mainBreakerRatingA: number | null;
+  /** OBSERVATION visuelle, pas un contrôle réglementaire. */
+  earthingObserved: string | null;
+  earthingNote: string | null;
+
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Une ligne de la vue comparative : déclaré, mesuré, écart, statut. */
+export type PvSurveyComparisonRow = {
+  field: string;
+  label: string;
+  declared: string | null;
+  measured: string | null;
+  delta: string | null;
+  unit: string | null;
+  /** `OK` quand la mesure confirme la déclaration ou qu'aucun écart n'est retenu. */
+  status: "OK" | "INFO" | "REVIEW" | "BLOCKING" | "NON_MESURE";
+  findingCode: string | null;
+  /** `true` quand une mesure existe et peut être appliquée au site. */
+  applicable: boolean;
+};
+
+export type PvSiteSurveyDetail = {
+  survey: PvSiteSurvey;
+  site: PvDealSite | null;
+  prospect: PvDealProspect | null;
+  findings: PvSurveyFinding[];
+  documents: PvDealDocument[];
+  /** Miroir de `hermes_os.pv_survey_gate` pour le SITE de cette visite. */
+  gate: "NONE" | "NOT_VALIDATED" | "BLOCKING" | "OK";
+  /**
+   * Statuts atteignables depuis le statut courant, LUS dans
+   * `hermes_os.pv_survey_transitions`. L'écran ne redéclare pas la machine :
+   * il affiche ce que la base autorise. `VALIDATED` n'y figure jamais — il
+   * s'obtient par la façade de validation humaine, pas par une transition.
+   */
+  nextStatuses: string[];
+};
+
+export type PvSiteSurveySummary = {
+  id: string;
+  siteId: string;
+  status: string;
+  scheduledOn: string | null;
+  completedAt: string | null;
+  validatedAt: string | null;
+  technicianUserId: string | null;
+  createdAt: string;
+  findingsTotal: number;
+  findingsBlocking: number;
+};
+
+/** Résultat d'une écriture sur une visite : le refus porte ses raisons. */
+export type PvSurveyOutcome = {
+  ok: boolean;
+  code: string;
+  surveyId: string | null;
+  /** Écarts bloquants non résolus qui ont fait échouer une validation. */
+  blockingFindings: string[];
+  findings: number | null;
+};
+
+/**
+ * VOCABULAIRES DE LA VISITE — listes CLOSES, identiques aux contraintes `CHECK`
+ * de `hermes_os.pv_site_surveys`. Elles servent à peupler les listes déroulantes ;
+ * la base reste l'arbitre : une valeur forgée hors de ces listes est refusée.
+ *
+ * Les quatre premières sont ALIGNÉES sur `pv_sites` — c'est ce qui rend la
+ * comparaison déclaré/mesuré exacte plutôt qu'approximative.
+ */
+export const PV_SURVEY_ROOF_TYPES = [
+  "PENTE", "TERRASSE", "MULTIPENTE", "SHED", "COURBE", "SOL", "OMBRIERE", "AUTRE",
+] as const;
+export const PV_SURVEY_ROOF_CONDITIONS = ["BON", "MOYEN", "MAUVAIS", "INCONNU"] as const;
+export const PV_SURVEY_SHADING_LEVELS = ["AUCUN", "FAIBLE", "MODERE", "FORT"] as const;
+export const PV_SURVEY_ACCESS_DIFFICULTIES = [
+  "FACILE", "MOYEN", "DIFFICILE", "TRES_DIFFICILE",
+] as const;
+
+export const PV_SURVEY_WEATHER = ["SEC", "PLUIE", "NEIGE", "VENT_FORT", "AUTRE"] as const;
+export const PV_SURVEY_ROOF_ACCESS = ["FACILE", "MOYEN", "DIFFICILE", "IMPOSSIBLE"] as const;
+export const PV_SURVEY_ACCESS_MEANS = [
+  "ECHELLE", "ECHAFAUDAGE", "NACELLE", "TRAPPE", "AUCUN", "AUTRE",
+] as const;
+export const PV_SURVEY_SITE_CONDITIONS = ["BON", "MOYEN", "DEGRADE", "CRITIQUE"] as const;
+export const PV_SURVEY_BOARD_CONDITIONS = [
+  "BON", "MOYEN", "DEGRADE", "NON_CONFORME_APPARENT",
+] as const;
+export const PV_SURVEY_EARTHING_STATES = ["PRESENTE", "ABSENTE", "NON_VERIFIABLE"] as const;
+
+/** Statuts pouvant être posés à la main. `VALIDATED` en est ABSENT : il passe
+ *  par la façade de validation humaine, jamais par un changement de statut. */
+export const PV_SURVEY_MANUAL_STATUSES = [
+  "IN_PROGRESS", "DONE", "NEEDS_REVIEW", "BLOCKING", "PLANNED", "CANCELLED",
+] as const;
