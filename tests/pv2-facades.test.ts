@@ -413,3 +413,29 @@ test("PV-2 — CSS : le bloc PV est intégralement préfixé `pv-`", () => {
     assert.ok(selector.startsWith("pv-"), `sélecteur non préfixé: .${selector}`);
   }
 });
+
+// --- Rollback ----------------------------------------------------------------
+
+test("PV-2 — le rollback retire TOUT le lot, et rien d'autre", () => {
+  const body = code(ROLLBACK);
+  const created = [...ALL_MIGRATIONS.matchAll(/create or replace function (public|hermes_os)\.(\w+)/g)]
+    .map((m) => `${m[1]}.${m[2]}`);
+  for (const fn of new Set(created)) {
+    assert.ok(body.includes(`drop function if exists ${fn}(`), `rollback incomplet: ${fn}`);
+  }
+  assert.match(body, /drop table if exists hermes_os\.pv_documents/);
+  // Les briques ANTÉRIEURES sont explicitement préservées.
+  for (const keep of [
+    "hermes_os.is_active_tenant_member",
+    "hermes_os._pv_audit",
+    "hermes_os.pv_tenant_immutable",
+    "hermes_os.pv_promote_bill_extraction",
+    "hermes_os.set_updated_at",
+  ]) {
+    assert.equal(body.includes(`drop function if exists ${keep}`), false, `le rollback détruit ${keep}`);
+  }
+  // Aucune table de PV-1 n'est retirée.
+  for (const t of ["pv_prospects", "pv_sites", "pv_studies", "pv_energy_bills", "pv_economics"]) {
+    assert.equal(body.includes(`drop table if exists hermes_os.${t}`), false, `le rollback détruit ${t}`);
+  }
+});
