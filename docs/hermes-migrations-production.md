@@ -48,46 +48,87 @@ Ce qu'il apporte est plus modeste et suffit aujourd'hui :
 | Aucune capacité métier | RLS deny-all, `revoke all … from public, anon, authenticated`, aucune façade `public`. Ce n'est pas une fonctionnalité du produit. |
 | `base_sha` réel | `check (base_sha ~ '^[0-9a-f]{40}$')`. On ne peut pas verrouiller en déclarant « main » : ce mot ne désigne rien deux heures plus tard. |
 
-## La procédure — `BEFORE_PRODUCTION_DB_WRITE`
+## La procédure — `BEFORE_ANY_PRODUCTION_DB_WRITE`
 
 À appliquer par tout Claude, Codex ou migrateur Hermès, sans exception.
+**Si une étape échoue : STOP.** On ne passe pas à la suivante, on ne contourne pas.
 
 ```
-1. VÉRIFIER LA DÉRIVE
+1. PULL / FETCH MAIN
+   git fetch origin --prune
+
+2. VÉRIFIER LE SHA
+   git rev-parse origin/main
+   → c'est le base_sha à déclarer à l'étape 4. Un SHA de 40 hexadécimaux :
+     « main » et « HEAD » ne désignent rien deux heures plus tard.
+
+3. LANCER LE GARDE-FOU DE DÉRIVE
    select hermes_os.migration_baseline_summary();
    select * from hermes_os.migrations_since_baseline();
-   → node scripts/check-migration-drift.mjs   (code 1 = STOP)
+   → node scripts/check-migration-drift.mjs      (code 1 = STOP)
 
-2. VÉRIFIER LE SHA DE MAIN
-   git fetch origin && git rev-parse origin/main
-   → c'est le base_sha qu'on déclare à l'étape 3
-
-3. ACQUÉRIR LE VERROU
+4. ACQUÉRIR LE VERROU
    select hermes_os.acquire_production_migration_lock(
             '<qui>', '<mission>', '<sha40>', <ttl_minutes>);
-   → status = STOP_CONCURRENT_MIGRATION  ⇒  STOP, ne pas écrire
-   → status = ACQUIRED_AFTER_EXPIRY      ⇒  lire l'avertissement AVANT d'écrire :
-                                            la migration précédente peut être
-                                            incomplète
+   → STOP_CONCURRENT_MIGRATION  ⇒ STOP, ne pas écrire
+   → ACQUIRED_AFTER_EXPIRY      ⇒ lire l'avertissement AVANT d'écrire : la
+                                  migration précédente peut être incomplète
 
-4. REVÉRIFIER LA VERSION DE LA BASE
+5. RELIRE LA VERSION DE LA BASE
    select max(version) from supabase_migrations.schema_migrations;
-   → si elle a bougé depuis l'étape 1 : relâcher et reprendre à 1
+   → si elle a bougé depuis l'étape 3 : relâcher le verrou et reprendre à 1.
+     Ce n'est pas de la paranoïa — c'est exactement ce qui s'est produit le
+     2026-08-20 à 06:38, où une migration est arrivée pendant l'installation
+     de ce verrou.
 
-5. APPLIQUER
+6. APPLIQUER
    Une migration = un fichier dans db/migrations/, commité AVANT ou AVEC
    l'application. Le nom appliqué doit être EXACTEMENT le nom du fichier privé
    de son préfixe `YYYYMMDD_` et de `.sql`.
 
-6. VALIDER
+7. VALIDER
    Les assertions du lot, dans une transaction annulée.
 
-7. RELÂCHER
+8. RELÂCHER LE VERROU
    select hermes_os.release_production_migration_lock('<qui>');
+   Même si la migration a échoué. Un verrou qu'on abandonne bloque les autres
+   jusqu'à son TTL.
 ```
 
 Si le verrou est occupé : **`STOP_CONCURRENT_MIGRATION`**. On ne force pas, on ne
 contourne pas, on attend ou on prévient.
+
+## La ligne de base réellement posée
+
+Installée le **2026-08-20 à 06:38:07 UTC**, après PV-1 et PV-2 :
+
+| | |
+|---|---|
+| `cutoff_version` | `20260820063740` |
+| migrations en héritage | **205** |
+| première migration soumise à la règle | `20260820063807` |
+
+Tout ce qui précède ce cutoff est de la dette documentée et **ne bloque rien**.
+Tout ce qui suit doit avoir un fichier.
+
+### Le garde-fou a servi dans la minute
+
+Deux secondes après la pose de la ligne de base, `pv3_1_status_machines` a été
+appliquée par une autre session, sans fichier au dépôt. Premier passage réel du
+garde-fou :
+
+```
+STOP_UNVERSIONED_DB_DRIFT
+1 migration(s) appliquee(s) apres la ligne de base 20260820063740
+sans fichier declarant :
+  - 20260820063809 pv3_1_status_machines
+```
+
+Il a laissé passer `hermes_migration_governance_3_baseline` — qui a son fichier —
+et arrêté l'autre. C'est le comportement voulu, vérifié sur un cas non fabriqué.
+Cela illustre aussi la limite du mode coopératif, énoncée plus haut : le garde-fou
+**constate**, il n'empêche pas. PV-3 n'a consulté ni le verrou ni la règle, et
+n'avait aucun moyen de les connaître.
 
 ## Dette historique — ce qui ne bloque pas
 
