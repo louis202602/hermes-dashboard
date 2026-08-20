@@ -1180,3 +1180,49 @@ fichier) rend `STOP_UNVERSIONED_DB_DRIFT`.
   sens **ou dans l'autre**, oublier une table dans le rollback, faire diverger le
   script du module, ou neutraliser son contrôle de ligne de base — chacune fait
   échouer au moins un test.
+
+## 2026-08-22 — PACK PHOTOVOLTAÏQUE, LOT PV-5 : le devis
+
+Le premier artefact **contractuel** du Pack PV. PV-4 produisait un état terminal
+`READY_FOR_OFFER` que rien ne consommait, et la machine à états du prospect
+n'avait aucun état entre `STUDY_DELIVERED` et `WON` — un dossier passait donc de
+« étude livrée » à « gagné » sans qu'aucun artefact ne justifie le passage.
+
+| Fichier | Migration appliquée | Objet |
+|---|---|---|
+| `20260822_pv5_1_quotes_schema.sql` | `pv5_1_quotes_schema` | `pv_quotes`, `pv_quote_lines`, `pv_quote_sequences` ; FK **composites** `(tenant_id, …)` ; total de ligne en **colonne générée** ; recalcul des totaux par déclencheur ; `quote_id` sur `pv_documents` |
+| `20260822_pv5_2_state_machine.sql` | `pv5_2_state_machine` | `pv_quote_transitions` (15 chemins, **données**) ; gel du contenu après envoi (devis **et** lignes) ; audit via `entity_audit_log` ; états `OFFER_*` du prospect et **retrait** du raccourci `STUDY_DELIVERED → WON` |
+| `20260822_pv5_3_facades.sql` | `pv5_3_facades` | 14 façades `public.*` ; garde d'acceptation humaine réutilisée de PV-1 ; `pv_quote_blockers` |
+| `20260822_pv5_3b_blocker_array_cast.sql` | `pv5_3b_blocker_array_cast` | **Correctif** : `text[] \|\| 'chaîne'` n'est pas l'ajout d'un élément — PostgreSQL lit la chaîne comme un array et échoue. `array_append()` partout. |
+| `20260822_pv5_9_rollback.sql` | — | Teardown complet. **Destructif** sur les devis ; **échoue volontairement** si des prospects sont en état `OFFER_*`. |
+
+### Invariants
+
+- **Aucun total ne vient du navigateur.** `line_total_ht_eur` est une colonne
+  `generated always as … stored` : il n'existe aucun point d'écriture. Les totaux
+  du devis sont recalculés par déclencheur. Aucune façade n'accepte de total,
+  aucun formulaire ne porte de champ qui en soit un.
+- **TVA arrondie une fois PAR TAUX**, après répartition proportionnelle de la
+  remise globale. Arrondir par ligne accumulerait l'erreur.
+- **Un devis transmis est figé.** La seule voie de modification est la
+  **révision** : nouvelle version, même numéro commercial, ancienne intacte en
+  `SUPERSEDED`.
+- **`WON` n'est atteignable que depuis `OFFER_ACCEPTED`.** L'acceptation d'un
+  devis met le prospect en `OFFER_ACCEPTED`, pas en `WON` : gagner l'affaire
+  reste un second geste délibéré.
+- **Un agent ne peut pas accepter un devis** — `pv_human_validation_guard`
+  paramétrée, réutilisée de PV-1 : refus quand `auth.uid()` est NULL.
+- **Aucun cron, aucun scheduler.** La péremption est calculée à la lecture et
+  applicable à la demande. n8n reste hors périmètre.
+- **Aucune capacité IA créée** : le devis est 100 % manuel en PV-5.
+
+### Preuves
+
+* **80 assertions SQL** (`db/tests/pv5_quotes.test.sql`), en transaction annulée.
+* **52 assertions de contrat TS** (`tests/pv5-quotes.test.ts`,
+  `tests/pv5-quote-pdf.test.ts`), dont le contenu **décodé** du PDF.
+* **Mutation testing (5 mutations)** : filtrage du statut d'étude neutralisé, gel
+  après envoi neutralisé, raccourci `WON` remis, arrondi TVA par ligne. La
+  quatrième a d'abord **survécu** — l'assertion d'arrondi ne distinguait pas les
+  deux règles sur son jeu d'essai ; le cas qui les sépare (trois lignes à 0,03 €)
+  a été ajouté, et tue le mutant.

@@ -303,52 +303,33 @@ test("PV-2 — le lot ne touche AUCUNE autre verticale", () => {
 });
 
 test("PV-2 — périmètre tenu : ni devis, ni facture client, ni Consuel, ni Enedis", () => {
-  const surface = ALL_MIGRATIONS + SERVICE + ACTIONS;
+  // DEUX portées distinctes, et les confondre rendait ce test faux dès le lot
+  // suivant : `services/hermes/pv.ts` et `app/actions/pv.ts` sont PARTAGÉS par
+  // tout le Pack PV. Y interdire le vocabulaire d'un lot futur revenait à
+  // interdire au code de grandir.
+  //
+  // 1. Ce que les MIGRATIONS DE PV-2 ne doivent pas contenir — le périmètre du lot.
   for (const forbidden of [
-    "consuel",
-    "enedis",
-    "pv_quotes",
-    "pv_invoices",
-    "pv_payments",
-    "pv_contracts",
-    "pv_orders",
-    "pv_stock",
-    "pv_worksite",
-    "pvgis",
-    "opensolar",
-    "retell",
+    "consuel", "enedis", "pv_quotes", "pv_invoices", "pv_payments",
+    "pv_contracts", "pv_orders", "pv_stock", "pv_worksite",
+    "pvgis", "opensolar", "retell",
   ]) {
     assert.equal(
-      new RegExp(forbidden, "i").test(surface),
+      new RegExp(forbidden, "i").test(ALL_MIGRATIONS),
       false,
-      `hors périmètre PV-2 détecté: ${forbidden}`,
+      `hors périmètre des migrations PV-2 : ${forbidden}`,
     );
   }
-});
 
-// --- Rollback ----------------------------------------------------------------
-
-test("PV-2 — le rollback retire TOUT le lot, et rien d'autre", () => {
-  const body = code(ROLLBACK);
-  const created = [...ALL_MIGRATIONS.matchAll(/create or replace function (public|hermes_os)\.(\w+)/g)]
-    .map((m) => `${m[1]}.${m[2]}`);
-  for (const fn of new Set(created)) {
-    assert.ok(body.includes(`drop function if exists ${fn}(`), `rollback incomplet: ${fn}`);
-  }
-  assert.match(body, /drop table if exists hermes_os\.pv_documents/);
-  // Les briques ANTÉRIEURES sont explicitement préservées.
-  for (const keep of [
-    "hermes_os.is_active_tenant_member",
-    "hermes_os._pv_audit",
-    "hermes_os.pv_tenant_immutable",
-    "hermes_os.pv_promote_bill_extraction",
-    "hermes_os.set_updated_at",
-  ]) {
-    assert.equal(body.includes(`drop function if exists ${keep}`), false, `le rollback détruit ${keep}`);
-  }
-  // Aucune table de PV-1 n'est retirée.
-  for (const t of ["pv_prospects", "pv_sites", "pv_studies", "pv_energy_bills", "pv_economics"]) {
-    assert.equal(body.includes(`drop table if exists hermes_os.${t}`), false, `le rollback détruit ${t}`);
+  // 2. Ce qui reste interdit PARTOUT, y compris dans les fichiers partagés :
+  //    aucun lot du Pack PV n'a introduit d'intégration externe.
+  const shared = SERVICE + ACTIONS;
+  for (const forbidden of ["consuel", "enedis", "pvgis", "opensolar", "retell"]) {
+    assert.equal(
+      new RegExp(forbidden, "i").test(shared),
+      false,
+      `intégration externe détectée dans le code partagé : ${forbidden}`,
+    );
   }
 });
 

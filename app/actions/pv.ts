@@ -5,6 +5,12 @@ import { revalidatePath } from "next/cache";
 import { randomUUID } from "node:crypto";
 
 import {
+  acceptPvQuote,
+  cancelPvQuote,
+  createPvQuote,
+  deletePvQuoteLine,
+  expirePvQuotes,
+  generatePvQuotePdf,
   generatePvStudySummary,
   promotePvBillExtraction,
   purgePvDocuments,
@@ -14,6 +20,12 @@ import {
   uploadPvDocument,
   upsertPvEconomics,
   upsertPvStudy,
+  refusePvQuote,
+  revisePvQuote,
+  sendPvQuote,
+  setPvQuoteReady,
+  updatePvQuote,
+  upsertPvQuoteLine,
   upsertPvStudyAssumptions,
   verifyPvConsumptionProfile,
   registerPvEnergyBill,
@@ -25,7 +37,8 @@ import {
   verifyPvEconomics,
   verifyPvEnergyBill,
 } from "@/services/hermes/pv";
-import type { PvWriteOutcome } from "@/types/pv";
+import { PV_QUOTE_BLOCKER_LABELS } from "@/lib/pv/quoteLabels";
+import type { PvQuoteOutcome, PvWriteOutcome } from "@/types/pv";
 
 /**
  * PACK PHOTOVOLTAÏQUE — Server Actions du LOT PV-2.
@@ -91,6 +104,21 @@ const ERROR_MESSAGES: Record<string, string> = {
   BAD_STAGE: "Stade de document invalide.",
   BAD_HASH: "Empreinte du document invalide.",
   ECONOMICS_NOT_FOUND: "Le chiffrage indiqué n’appartient pas à cette étude.",
+  QUOTE_NOT_READY:
+    "Ce dossier n’est pas prêt pour un devis. Les éléments manquants sont listés ci-dessous.",
+  QUOTE_LOCKED:
+    "Ce devis a été transmis : son contenu est figé. Créez une nouvelle version pour le modifier.",
+  QUOTE_ACCEPTED_IMMUTABLE:
+    "Ce devis a été accepté. Il ne peut plus être révisé.",
+  ALREADY_SUPERSEDED: "Ce devis a déjà été remplacé par une version plus récente.",
+  QUOTE_PDF_NOT_READY:
+    "Le PDF définitif est refusé : le devis n’est pas complet ou n’est pas encore préparé.",
+  BAD_QUANTITY: "La quantité doit être strictement positive.",
+  BAD_PRICE: "Le prix unitaire ne peut pas être négatif.",
+  BAD_DISCOUNT: "La remise doit être comprise entre 0 et 100 %.",
+  BAD_STATUS: "Cette action n’est pas possible dans l’état actuel du devis.",
+  INVALID_LINE: "Ligne refusée : une valeur est hors des bornes autorisées.",
+  LINE_NOT_FOUND: "Cette ligne n’existe plus.",
 };
 
 export type PvActionState = {
@@ -741,5 +769,289 @@ export async function generatePvStudySummaryAction(
       result.code === "ALREADY_GENERATED"
         ? "Cette synthèse avait déjà été générée : le document existant est réutilisé."
         : `Synthèse ${result.stage === "FINAL" ? "définitive" : "brouillon"} générée.`,
+  };
+}
+
+// --- PV-5 : le devis ----------------------------------------------------------
+
+
+/** Traduit un refus de devis en message + liste de raisons lisibles. */
+function quoteState(result: PvQuoteOutcome, successMessage: string): PvActionState {
+  if (result.ok) {
+    return {
+      phase: "ok",
+      code: result.code,
+      id: result.quoteId ?? undefined,
+      message: successMessage,
+    };
+  }
+  const base = ERROR_MESSAGES[result.code] ?? "Action refusée.";
+  const reasons = result.missingRequirements
+    .map((r) => PV_QUOTE_BLOCKER_LABELS[r] ?? r)
+    .join(" · ");
+  return {
+    phase: "error",
+    code: result.code,
+    message: reasons.length > 0 ? `${base} ${reasons}.` : base,
+  };
+}
+
+export async function createPvQuoteAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const prospectId = text(formData, "prospect_id");
+  if (prospectId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await createPvQuote(prospectId);
+  if (result.ok) revalidatePath(`/etudes/affaires/${prospectId}`);
+  return quoteState(
+    result,
+    result.quoteNumber === null
+      ? "Devis créé."
+      : `Devis ${result.quoteNumber} créé en brouillon.`,
+  );
+}
+
+export async function upsertPvQuoteLineAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const quoteId = text(formData, "quote_id");
+  if (quoteId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const designation = text(formData, "designation");
+  if (designation === null) {
+    return { phase: "error", code: "INVALID_LINE", message: "La désignation est obligatoire." };
+  }
+  // Le TOTAL n'est pas lu : il est calculé en base. Aucun champ ne le porte.
+  const result = await upsertPvQuoteLine({
+    lineId: text(formData, "line_id"),
+    quoteId,
+    category: text(formData, "category") ?? "AUTRE",
+    designation,
+    quantity: decimal(formData, "quantity") ?? 0,
+    unit: text(formData, "unit") ?? "U",
+    unitPriceHtEur: decimal(formData, "unit_price_ht_eur") ?? 0,
+    vatRatePct: decimal(formData, "vat_rate_pct") ?? 20,
+    discountPct: decimal(formData, "discount_pct") ?? 0,
+    description: text(formData, "description"),
+  });
+  if (result.ok) revalidatePath(`/etudes/devis/${quoteId}`);
+  return result.ok
+    ? { phase: "ok", code: result.code, id: result.id ?? undefined, message: "Ligne enregistrée." }
+    : { phase: "error", code: result.code, message: ERROR_MESSAGES[result.code] ?? "Ligne refusée." };
+}
+
+export async function deletePvQuoteLineAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const lineId = text(formData, "line_id");
+  const quoteId = text(formData, "quote_id");
+  if (lineId === null) {
+    return { phase: "error", code: "LINE_NOT_FOUND", message: ERROR_MESSAGES.LINE_NOT_FOUND };
+  }
+  const result = await deletePvQuoteLine(lineId);
+  if (result.ok && quoteId !== null) revalidatePath(`/etudes/devis/${quoteId}`);
+  return result.ok
+    ? { phase: "ok", code: result.code, message: "Ligne retirée du devis." }
+    : { phase: "error", code: result.code, message: ERROR_MESSAGES[result.code] ?? "Suppression refusée." };
+}
+
+export async function updatePvQuoteAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const quoteId = text(formData, "quote_id");
+  if (quoteId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await updatePvQuote({
+    quoteId,
+    discountPct: decimal(formData, "discount_pct"),
+    validUntil: text(formData, "valid_until"),
+    observations: text(formData, "observations"),
+    terms: text(formData, "terms"),
+  });
+  if (result.ok) revalidatePath(`/etudes/devis/${quoteId}`);
+  return result.ok
+    ? { phase: "ok", code: result.code, message: "Devis enregistré." }
+    : { phase: "error", code: result.code, message: ERROR_MESSAGES[result.code] ?? "Enregistrement refusé." };
+}
+
+export async function setPvQuoteReadyAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const quoteId = text(formData, "quote_id");
+  if (quoteId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await setPvQuoteReady(quoteId);
+  if (result.ok) revalidatePath(`/etudes/devis/${quoteId}`);
+  return quoteState(result, "Devis prêt à être transmis.");
+}
+
+/**
+ * « Marquer comme envoyé ». Le message le dit explicitement : PV-5 n'expédie
+ * aucun courriel. Laisser croire le contraire serait la pire des approximations
+ * sur un document contractuel.
+ */
+export async function sendPvQuoteAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const quoteId = text(formData, "quote_id");
+  if (quoteId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await sendPvQuote(quoteId, text(formData, "issued_on"));
+  if (result.ok) revalidatePath(`/etudes/devis/${quoteId}`);
+  return quoteState(
+    result,
+    "Devis marqué comme transmis. Hermès n’a envoyé aucun message : l’envoi reste à votre charge.",
+  );
+}
+
+export async function acceptPvQuoteAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const quoteId = text(formData, "quote_id");
+  if (quoteId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  // Confirmation explicite : enregistrer une acceptation engage l'entreprise.
+  if (formData.get("confirm") !== "ACCEPTER") {
+    return {
+      phase: "error",
+      code: "CONFIRMATION_REQUIRED",
+      message: "Confirmation requise : cochez la case avant d’enregistrer l’acceptation.",
+    };
+  }
+  const result = await acceptPvQuote({
+    quoteId,
+    acceptedOn: text(formData, "accepted_on"),
+    reference: text(formData, "reference"),
+  });
+  if (result.ok) revalidatePath(`/etudes/devis/${quoteId}`);
+  return quoteState(result, "Acceptation enregistrée. Le prospect passe en « offre acceptée ».");
+}
+
+export async function refusePvQuoteAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const quoteId = text(formData, "quote_id");
+  if (quoteId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await refusePvQuote(quoteId, text(formData, "reason"));
+  if (result.ok) revalidatePath(`/etudes/devis/${quoteId}`);
+  return quoteState(result, "Refus enregistré.");
+}
+
+export async function cancelPvQuoteAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const quoteId = text(formData, "quote_id");
+  if (quoteId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await cancelPvQuote(quoteId);
+  if (result.ok) revalidatePath(`/etudes/devis/${quoteId}`);
+  return quoteState(result, "Devis annulé.");
+}
+
+export async function revisePvQuoteAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const quoteId = text(formData, "quote_id");
+  if (quoteId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await revisePvQuote(quoteId);
+  if (result.ok) {
+    revalidatePath(`/etudes/devis/${quoteId}`);
+    if (result.quoteId !== null) revalidatePath(`/etudes/devis/${result.quoteId}`);
+  }
+  return quoteState(
+    result,
+    result.version === null
+      ? "Nouvelle version créée."
+      : `Version ${result.version} créée en brouillon. La version précédente reste intacte.`,
+  );
+}
+
+/**
+ * Applique la péremption. AUCUN cron, AUCUN scheduler : n8n est hors périmètre.
+ * Confirmation explicite exigée — faire basculer des offres transmises en
+ * « périmé » change leur état commercial, ce n'est pas une lecture.
+ */
+export async function expirePvQuotesAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  if (formData.get("confirm") !== "EXPIRER") {
+    return {
+      phase: "error",
+      code: "CONFIRMATION_REQUIRED",
+      message: "Confirmation requise : cochez la case avant d’appliquer la péremption.",
+    };
+  }
+  const result = await expirePvQuotes();
+  if (!result.ok) {
+    return {
+      phase: "error",
+      code: result.code,
+      message: ERROR_MESSAGES[result.code] ?? "Traitement refusé.",
+    };
+  }
+  return {
+    phase: "ok",
+    code: result.code,
+    message:
+      result.expired === 0
+        ? "Aucun devis n’était périmé."
+        : `${result.expired} devis passé(s) en « périmé ».`,
+  };
+}
+
+export async function generatePvQuotePdfAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const quoteId = text(formData, "quote_id");
+  if (quoteId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await generatePvQuotePdf({
+    quoteId,
+    requestId: text(formData, "request_id") ?? randomUUID(),
+    wantFinal: formData.get("stage") === "FINAL",
+    company: text(formData, "company") ?? "Hermès OS",
+    generatedOn: new Date().toISOString().slice(0, 10),
+  });
+
+  if (result.ok) revalidatePath(`/etudes/devis/${quoteId}`);
+  if (!result.ok) {
+    const base = ERROR_MESSAGES[result.code] ?? "Génération refusée.";
+    const reason =
+      result.reason === null ? null : PV_QUOTE_BLOCKER_LABELS[result.reason] ?? result.reason;
+    return { phase: "error", code: result.code, message: reason ? `${base} (${reason})` : base };
+  }
+  return {
+    phase: "ok",
+    code: result.code,
+    id: result.documentId ?? undefined,
+    message:
+      result.code === "ALREADY_GENERATED"
+        ? "Ce PDF avait déjà été généré : le document existant est réutilisé."
+        : `PDF ${result.stage === "FINAL" ? "définitif" : "brouillon"} généré.`,
   };
 }
