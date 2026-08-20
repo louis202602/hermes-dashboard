@@ -273,3 +273,64 @@ export type PvWriteOutcome = {
   code: string;
   id: string | null;
 };
+
+// --- PV-3 ---------------------------------------------------------------------
+
+/** Document candidat à la purge physique de ses octets. */
+export type PvPurgeCandidate = {
+  documentId: string;
+  bucket: string;
+  path: string;
+  deletedAt: string | null;
+};
+
+/**
+ * Résultat d'une passe de purge. Les quatre compteurs sont distincts à dessein :
+ * « ignoré » (hors périmètre) et « échoué » (l'API Storage a refusé) ne disent
+ * pas la même chose, et les confondre masquerait une vraie panne.
+ */
+export type PvPurgeReport = {
+  examined: number;
+  purged: number;
+  skipped: number;
+  failed: number;
+};
+
+export type PvPilotStudy = {
+  id: string;
+  siteId: string;
+  version: number;
+  status: string;
+  preparedBy: string;
+  targetPowerKwc: number | null;
+};
+
+export type PvPilotBill = {
+  id: string;
+  siteId: string;
+  supplier: string | null;
+  status: string;
+  consumptionKwh: number | null;
+};
+
+export type PvPilotProspect = {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  companyName: string | null;
+  status: string;
+};
+
+/**
+ * Instantané PARTAGÉ des trois widgets de pilotage. Un seul appel : trois
+ * widgets ne font jamais trois lectures (contrat COST-FIRST du registre).
+ */
+export type PvPilotSnapshot = {
+  ok: boolean;
+  studiesToValidate: number;
+  billsToVerify: number;
+  prospectsWithoutSite: number;
+  studies: PvPilotStudy[];
+  bills: PvPilotBill[];
+  prospects: PvPilotProspect[];
+};

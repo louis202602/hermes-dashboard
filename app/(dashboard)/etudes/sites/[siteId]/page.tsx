@@ -1,12 +1,15 @@
 import { notFound } from "next/navigation";
 
+import PvDocumentsPanel from "@/components/dashboard/PvDocumentsPanel";
 import PvEnergyPanel from "@/components/dashboard/PvEnergyPanel";
 import PvSiteDetailPanel from "@/components/dashboard/PvSiteDetailPanel";
+import { PvNewStudyForm, PvStudyEditor } from "@/components/dashboard/PvStudyEditor";
 import PvStudyPanel, { type PvStudyBundle } from "@/components/dashboard/PvStudyPanel";
 import { requireRoute } from "@/lib/dashboard/routeGuard";
 import {
   getPvBillExtractions,
   getPvConsumptionProfiles,
+  getPvDocuments,
   getPvEconomics,
   getPvEnergyBills,
   getPvSite,
@@ -31,10 +34,11 @@ export default async function PvSitePage({ params }: { params: Promise<{ siteId:
   const site = await getPvSite(siteId);
   if (site === null) notFound();
 
-  const [profiles, bills, studies] = await Promise.all([
+  const [profiles, bills, studies, documents] = await Promise.all([
     getPvConsumptionProfiles(siteId),
     getPvEnergyBills(siteId),
     getPvStudies(siteId),
+    getPvDocuments(siteId),
   ]);
 
   // Extractions : une lecture par facture QUI EN A. Une facture sans extraction
@@ -68,6 +72,19 @@ export default async function PvSitePage({ params }: { params: Promise<{ siteId:
         extractionsByBill={extractionsByBill}
       />
       <PvStudyPanel siteId={siteId} bundles={bundles} />
+      {/* Travail MANUEL : modifier chaque étude vivante, puis en créer une nouvelle.
+          L'ordre suit le geste réel — on corrige ce qui existe avant d'ajouter. */}
+      {bundles.map((b) => (
+        <PvStudyEditor
+          key={b.study.id}
+          siteId={siteId}
+          study={b.study}
+          assumptions={b.assumptions}
+          economics={b.economics}
+        />
+      ))}
+      <PvNewStudyForm siteId={siteId} />
+      <PvDocumentsPanel siteId={siteId} documents={documents} />
     </div>
   );
 }

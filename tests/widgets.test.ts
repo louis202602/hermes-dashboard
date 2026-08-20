@@ -104,17 +104,43 @@ test("CAPABILITY_FILTER: unavailable widgets are excluded + marked", () => {
   assert.ok(!r.visible.includes("cost"));
   const item = r.items.find((i) => i.id === "cost");
   assert.equal(item?.available, false);
-  // availableWidgetIds: a required capability OR capability-prefix gates the id.
+  // availableWidgetIds: a required capability, a capability-prefix OR a required
+  // MODULE gates the id. Le troisième portillon vient de PV-3 : sans lui, la
+  // formule ci-dessous compterait des widgets que la fonction ferme à raison.
   const ids = availableWidgetIds(new Set());
   assert.equal(
     ids.size,
-    WIDGET_REGISTRY.filter((w) => !w.requiredCapability && !w.requiredCapabilityPrefix).length,
+    WIDGET_REGISTRY.filter(
+      (w) => !w.requiredCapability && !w.requiredCapabilityPrefix && !w.requiredModule,
+    ).length,
   );
   // DASH-4I: BTP-gated widgets appear only when the tenant holds a btp.* capability.
   assert.ok(!availableWidgetIds(new Set()).has("projects"), "no btp ⇒ no projects");
   assert.ok(!availableWidgetIds(new Set()).has("chantiers-map"), "no btp ⇒ no chantiers-map");
   const btp = availableWidgetIds(new Set(["btp.suivi.progress.report"]));
   assert.ok(btp.has("projects") && btp.has("chantiers-map"), "btp.* ⇒ BTP widgets available");
+
+  // PV-3 : portillon par MODULE. FAIL-CLOSED — un appelant qui ne fournit pas la
+  // liste des modules ferme le widget, il ne l'ouvre pas. Et une capacité `pv.*`
+  // ne suffirait PAS : les capacités PV sont volontairement désactivées, c'est
+  // bien le module qui décide.
+  const moduleGated = WIDGET_REGISTRY.filter((w) => w.requiredModule).map((w) => w.id);
+  assert.ok(moduleGated.length >= 3, "PV-3 déclare au moins 3 widgets gardés par module");
+  for (const id of moduleGated) {
+    assert.ok(!availableWidgetIds(new Set()).has(id), `${id} fermé sans modules`);
+    assert.ok(
+      !availableWidgetIds(new Set(["pv.study.prepare"])).has(id),
+      `${id} ne s'ouvre pas sur une capacité pv.*`,
+    );
+    assert.ok(
+      !availableWidgetIds(new Set(), ["core.home"]).has(id),
+      `${id} fermé pour un module étranger`,
+    );
+    assert.ok(
+      availableWidgetIds(new Set(), ["solar.studies"]).has(id),
+      `${id} ouvert avec solar.studies`,
+    );
+  }
 });
 
 // --- UNKNOWN_WIDGET_IGNORED -------------------------------------------------

@@ -81,7 +81,12 @@ export function resolveTenantComposition(input: CompositionInput): TenantComposi
 
   // Intersection avec le filtre de capacité DÉJÀ en place : le moteur ne peut
   // qu'être plus restrictif que l'existant, jamais plus permissif.
-  const capabilityAllowed = availableWidgetIds(gateKeys);
+  //
+  // PV-3 : les modules accordés sont passés en second argument, pour que les
+  // widgets gardés par un MODULE (et non par une capacité) soient évalués ici
+  // aussi. Sans cet argument, `availableWidgetIds` est fail-closed et les
+  // fermerait — l'intersection resterait juste, mais toujours vide.
+  const capabilityAllowed = availableWidgetIds(gateKeys, modules);
   const widgets = moduleWidgets(modules).filter((w) => capabilityAllowed.has(w));
 
   return {

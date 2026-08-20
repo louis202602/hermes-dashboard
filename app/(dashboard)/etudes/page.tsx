@@ -1,7 +1,8 @@
 import PvNewProspectForm from "@/components/dashboard/PvNewProspectForm";
+import PvPilotBand from "@/components/dashboard/PvPilotBand";
 import PvProspectsPanel from "@/components/dashboard/PvProspectsPanel";
 import { requireRoute } from "@/lib/dashboard/routeGuard";
-import { getPvProspects } from "@/services/hermes/pv";
+import { getPvPilotSnapshot, getPvProspects } from "@/services/hermes/pv";
 
 export const metadata = { title: "Études photovoltaïques — Hermès" };
 
@@ -34,14 +35,20 @@ export default async function PvStudiesPage({
     type: one(params.type),
   };
 
-  const list = await getPvProspects({
-    search: filters.search,
-    status: filters.status,
-    type: filters.type,
-  });
+  // Deux lectures, pas plus : la liste filtrée et l'instantané de pilotage
+  // partagé par les trois widgets.
+  const [list, pilot] = await Promise.all([
+    getPvProspects({
+      search: filters.search,
+      status: filters.status,
+      type: filters.type,
+    }),
+    getPvPilotSnapshot(),
+  ]);
 
   return (
     <div className="page-stack">
+      <PvPilotBand snapshot={pilot} />
       <PvProspectsPanel list={list} filters={filters} />
       <PvNewProspectForm />
     </div>

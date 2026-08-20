@@ -6261,3 +6261,22 @@ html[data-reduce-transparency="1"] .notif-panel {
   border-top: 1px solid var(--border);
 }
 .pv-economics-block { display: flex; flex-direction: column; gap: 8px; }
+
+/* --- PV-3 : bandeau de pilotage. Toujours préfixé `pv-`. ------------------- */
+.pv-pilot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3);
+}
+.pv-pilot-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  min-width: 0;
+}
+.pv-pilot-count { font-size: 26px; line-height: 1.1; color: var(--text-primary); }
+.pv-pilot-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pv-pilot-list strong { font-size: 13px; color: var(--text-primary); }

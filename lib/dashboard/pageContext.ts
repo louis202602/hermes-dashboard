@@ -84,6 +84,11 @@ export async function resolvePageContext(): Promise<{
   const permissions =
     capabilities.ok && capabilities.data.resolutionStatus === "OK" ? ["tenant.member"] : [];
 
+  // La composition est calculée D'ABORD : elle porte la liste des modules
+  // accordés, dont `availableWidgetIds` a besoin pour évaluer les widgets gardés
+  // par un module (PV-3). L'ordre n'est donc pas cosmétique.
+  const composition = resolveTenantComposition({ capabilityKeys, permissions });
+
   return {
     prefs,
     locale,
@@ -92,8 +97,8 @@ export async function resolvePageContext(): Promise<{
     hour12: units.hourCycle === "12h",
     capabilities,
     capabilityKeys,
-    available: availableWidgetIds(capabilityKeys),
+    available: availableWidgetIds(capabilityKeys, composition.modules),
     photoEnabled: hasPhotoStudio(capabilityKeys),
-    composition: resolveTenantComposition({ capabilityKeys, permissions }),
+    composition,
   };
 }

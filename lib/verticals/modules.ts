@@ -452,7 +452,11 @@ export const MODULE_REGISTRY: ModuleDef[] = [
     // continuent de lire la même table de modules.
     route: "/etudes",
     ownedRoutes: ["/etudes"],
-    widgets: [],
+    // PV-3 : trois widgets de pilotage, possédés par CE module. Ils n'apparaissent
+    // donc que chez un tenant qui détient la verticale solaire — le registre de
+    // widgets porte la garde symétrique (`requiredModule`), de sorte que ni le
+    // dashboard ni la galerie de réglages ne peuvent diverger.
+    widgets: ["pv-studies-to-validate", "pv-bills-to-verify", "pv-prospects-without-site"],
     // `pv.*` — les trois capacités PV (`pv.bill.extract`, `pv.study.prepare`,
     // `pv.economics.compute`) sont rattachées ici. Sans ce rattachement,
     // `isActionAllowed` les refuserait (elle est fail-closed) ; avec lui, elles
