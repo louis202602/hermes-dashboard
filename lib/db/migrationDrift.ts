@@ -26,6 +26,29 @@
 
 export type AppliedMigration = { version: string; name: string };
 
+/**
+ * Une migration appliquée dont le contenu vit dans un AUTRE fichier.
+ *
+ * Une session applique souvent par petits pas — un lot, un correctif, un second
+ * correctif — puis consolide le tout dans un fichier unique décrivant l'état
+ * FINAL au moment de committer. C'est la bonne pratique : un fichier de migration
+ * doit être rejouable et lisible d'un bloc. Mais le registre de production, lui,
+ * garde la trace de chaque pas. Les deux ont raison et ne disent pas la même chose.
+ *
+ * Sans ce mécanisme, le garde-fou n'aurait que deux lectures, toutes deux
+ * mauvaises : refuser la consolidation, ou rapprocher les noms de façon
+ * approximative — ce qui laisserait passer les vraies dérives.
+ */
+export type ConsolidationEntry = {
+  /** Nom enregistré par la production. */
+  applied: string;
+  /** Nom de fichier (basename) qui porte réellement ce contenu. */
+  carriedBy: string;
+  reason: string;
+  /** La MESURE qui a établi que le contenu est bien là. Pas une intention. */
+  verifiedBy: string;
+};
+
 export type DriftInput = {
   /** `hermes_os.migration_baseline_summary()`. `null` = illisible ⇒ STOP. */
   baseline: { baselineEstablished: boolean; cutoffVersion: string | null } | null;
@@ -33,6 +56,8 @@ export type DriftInput = {
   appliedSinceBaseline: readonly AppliedMigration[] | null;
   /** Noms de fichiers de `db/migrations/` (basename, avec `.sql`). */
   repoFiles: readonly string[];
+  /** Registre de consolidation. Absent ⇒ aucune consolidation admise. */
+  consolidated?: readonly ConsolidationEntry[] | null;
 };
 
 export const DRIFT_VERDICTS = [
@@ -52,6 +77,10 @@ export type DriftReport = {
   newVersioned: AppliedMigration[];
   /** Fichiers du dépôt jamais appliqués. Informatif : un lot préparé n'est pas une dérive. */
   declaredNotApplied: string[];
+  /** Migrations acceptées via le registre de consolidation, et par quel fichier. */
+  consolidatedAccepted: { applied: string; carriedBy: string }[];
+  /** Entrées de consolidation refusées, avec le motif. Chacune vaut dérive. */
+  consolidatedRejected: { applied: string; carriedBy: string; why: string }[];
   /** Phrase à afficher telle quelle par l'appelant. */
   detail: string;
 };
@@ -78,6 +107,53 @@ export function declaredMigrationNames(repoFiles: readonly string[]): Set<string
 }
 
 /**
+ * Valide le registre de consolidation contre les fichiers réellement présents.
+ *
+ * FAIL-CLOSED, et c'est le point important : une entrée qui désigne un fichier
+ * absent est REFUSÉE, pas ignorée. Sans cela, ce registre deviendrait un moyen
+ * de déclarer la dérive inexistante en écrivant deux lignes de JSON — l'exact
+ * contraire de ce qu'on cherche.
+ */
+export function resolveConsolidation(
+  entries: readonly ConsolidationEntry[] | null | undefined,
+  repoFiles: readonly string[],
+): {
+  accepted: Map<string, string>;
+  rejected: { applied: string; carriedBy: string; why: string }[];
+} {
+  const present = new Set(repoFiles);
+  const accepted = new Map<string, string>();
+  const rejected: { applied: string; carriedBy: string; why: string }[] = [];
+
+  for (const e of entries ?? []) {
+    const applied = typeof e?.applied === "string" ? e.applied.trim() : "";
+    const carriedBy = typeof e?.carriedBy === "string" ? e.carriedBy.trim() : "";
+    const verifiedBy = typeof e?.verifiedBy === "string" ? e.verifiedBy.trim() : "";
+
+    if (applied === "" || carriedBy === "") {
+      rejected.push({ applied, carriedBy, why: "entree incomplete" });
+      continue;
+    }
+    if (!present.has(carriedBy)) {
+      rejected.push({ applied, carriedBy, why: "le fichier porteur n'existe pas" });
+      continue;
+    }
+    // Un rollback ne porte aucun contenu : il défait. Le désigner comme porteur
+    // serait une façon polie de ne rien versionner du tout.
+    if (declaredMigrationName(carriedBy) === null) {
+      rejected.push({ applied, carriedBy, why: "le fichier porteur ne declare aucune migration" });
+      continue;
+    }
+    if (verifiedBy === "") {
+      rejected.push({ applied, carriedBy, why: "aucune mesure citee dans verifiedBy" });
+      continue;
+    }
+    accepted.set(applied, carriedBy);
+  }
+  return { accepted, rejected };
+}
+
+/**
  * FAIL-CLOSED. Une entrée manquante, une ligne de base absente ou un `cutoff`
  * illisible rendent un verdict d'ARRÊT — jamais « OK faute de mieux ». Ne pas
  * pouvoir mesurer la dérive et ne pas en avoir sont deux choses différentes.
@@ -92,6 +168,8 @@ export function classifyMigrationDrift(input: DriftInput): DriftReport {
       newUnversioned: [],
       newVersioned: [],
       declaredNotApplied: [],
+      consolidatedAccepted: [],
+      consolidatedRejected: [],
       detail:
         "Etat de la base illisible (baseline ou migrations appliquees non fournies). " +
         "Absence de mesure n'est pas absence de derive : ne pas ecrire.",
@@ -105,20 +183,34 @@ export function classifyMigrationDrift(input: DriftInput): DriftReport {
       newUnversioned: [],
       newVersioned: [],
       declaredNotApplied: [],
+      consolidatedAccepted: [],
+      consolidatedRejected: [],
       detail:
         "Aucune ligne de base etablie : impossible de distinguer la dette historique " +
         "d'une derive nouvelle. Appliquer 20260820_hermes_migration_governance_3_baseline.sql.",
     };
   }
 
+  const consolidation = resolveConsolidation(input.consolidated, input.repoFiles ?? []);
+
   const newUnversioned: AppliedMigration[] = [];
   const newVersioned: AppliedMigration[] = [];
+  const consolidatedAccepted: { applied: string; carriedBy: string }[] = [];
   const appliedNames = new Set<string>();
 
   for (const m of input.appliedSinceBaseline) {
     appliedNames.add(m.name);
-    if (declared.has(m.name)) newVersioned.push(m);
-    else newUnversioned.push(m);
+    if (declared.has(m.name)) {
+      newVersioned.push(m);
+      continue;
+    }
+    const carriedBy = consolidation.accepted.get(m.name);
+    if (carriedBy !== undefined) {
+      newVersioned.push(m);
+      consolidatedAccepted.push({ applied: m.name, carriedBy });
+      continue;
+    }
+    newUnversioned.push(m);
   }
 
   const declaredNotApplied = [...declared].filter((n) => !appliedNames.has(n)).sort();
@@ -130,6 +222,8 @@ export function classifyMigrationDrift(input: DriftInput): DriftReport {
       newUnversioned,
       newVersioned,
       declaredNotApplied,
+      consolidatedAccepted,
+      consolidatedRejected: consolidation.rejected,
       detail:
         `${newUnversioned.length} migration(s) appliquee(s) apres la ligne de base ` +
         `sans fichier declarant : ${newUnversioned.map((m) => `${m.version} ${m.name}`).join(", ")}. ` +
@@ -143,8 +237,14 @@ export function classifyMigrationDrift(input: DriftInput): DriftReport {
     newUnversioned,
     newVersioned,
     declaredNotApplied,
+    consolidatedAccepted,
+    consolidatedRejected: consolidation.rejected,
     detail:
       `Aucune derive depuis la ligne de base ${input.baseline.cutoffVersion} ` +
-      `(${newVersioned.length} migration(s) appliquee(s), toutes versionnees).`,
+      `(${newVersioned.length} migration(s) appliquee(s), toutes versionnees` +
+      (consolidatedAccepted.length > 0
+        ? `, dont ${consolidatedAccepted.length} via le registre de consolidation`
+        : "") +
+      ").",
   };
 }

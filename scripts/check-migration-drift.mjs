@@ -20,7 +20,7 @@
  * illisible ou mal formée est un ARRÊT, jamais un laissez-passer. Ne pas pouvoir
  * mesurer la dérive et ne pas en avoir sont deux choses différentes.
  */
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -85,26 +85,69 @@ if (established !== true || typeof cutoff !== "string" || cutoff === "") {
   );
 }
 
-const declared = new Set(
-  readdirSync(MIGRATIONS_DIR)
-    .map(declaredMigrationName)
-    .filter((n) => n !== null),
-);
+const files = readdirSync(MIGRATIONS_DIR);
+const declared = new Set(files.map(declaredMigrationName).filter((n) => n !== null));
 
-const unversioned = since.filter((m) => !declared.has(m.name));
-const versioned = since.filter((m) => declared.has(m.name));
+// Registre de consolidation : noms appliques dont le contenu vit dans un autre
+// fichier. FAIL-CLOSED — une entree qui designe un fichier absent, un rollback,
+// ou qui ne cite aucune mesure est REFUSEE. Sans cela ce registre deviendrait un
+// moyen de declarer la derive inexistante en ecrivant deux lignes de JSON.
+const present = new Set(files);
+const carriedBy = new Map();
+const rejected = [];
+const LEDGER = path.join(MIGRATIONS_DIR, "consolidated-migrations.json");
+if (existsSync(LEDGER)) {
+  let ledger;
+  try {
+    ledger = JSON.parse(readFileSync(LEDGER, "utf8"));
+  } catch (e) {
+    stop(`Registre de consolidation illisible (${LEDGER}) : ${e.message}`);
+  }
+  for (const e of ledger?.entries ?? []) {
+    const applied = typeof e?.applied === "string" ? e.applied.trim() : "";
+    const file = typeof e?.carriedBy === "string" ? e.carriedBy.trim() : "";
+    const verified = typeof e?.verifiedBy === "string" ? e.verifiedBy.trim() : "";
+    if (applied === "" || file === "") rejected.push([applied, "entree incomplete"]);
+    else if (!present.has(file)) rejected.push([applied, `fichier porteur absent : ${file}`]);
+    else if (declaredMigrationName(file) === null)
+      rejected.push([applied, `le fichier porteur ne declare aucune migration : ${file}`]);
+    else if (verified === "") rejected.push([applied, "aucune mesure citee dans verifiedBy"]);
+    else carriedBy.set(applied, file);
+  }
+}
+
+const isDeclared = (m) => declared.has(m.name) || carriedBy.has(m.name);
+const unversioned = since.filter((m) => !isDeclared(m));
+const versioned = since.filter(isDeclared);
 
 if (unversioned.length > 0) {
   stop(
     `${unversioned.length} migration(s) appliquee(s) apres la ligne de base ${cutoff} ` +
       "sans fichier declarant :\n" +
       unversioned.map((m) => `  - ${m.version} ${m.name}`).join("\n") +
+      (rejected.length > 0
+        ? "\n\nEntrees de consolidation REFUSEES :\n" +
+          rejected.map(([a, why]) => `  - ${a} : ${why}`).join("\n")
+        : "") +
       "\n\nRappel : la dette ANTERIEURE a la ligne de base ne bloque pas. " +
       "Celles-ci sont posterieures.\nVersionner ces migrations avant toute nouvelle ecriture.",
   );
 }
 
+if (rejected.length > 0) {
+  stop(
+    "Le registre de consolidation contient des entrees invalides :\n" +
+      rejected.map(([a, why]) => `  - ${a} : ${why}`).join("\n"),
+  );
+}
+
+const viaLedger = versioned.filter((m) => !declared.has(m.name));
 console.log(
   `OK — aucune derive depuis la ligne de base ${cutoff} ` +
-    `(${versioned.length} migration(s) appliquee(s), toutes versionnees).`,
+    `(${versioned.length} migration(s) appliquee(s), toutes versionnees` +
+    (viaLedger.length > 0
+      ? `, dont ${viaLedger.length} via le registre de consolidation : ` +
+        viaLedger.map((m) => `${m.name} -> ${carriedBy.get(m.name)}`).join(", ")
+      : "") +
+    ").",
 );

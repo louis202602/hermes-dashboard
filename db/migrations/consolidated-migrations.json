@@ -1,0 +1,36 @@
+{
+  "$comment": [
+    "REGISTRE DE CONSOLIDATION — noms de migrations appliquees en production dont le",
+    "contenu vit dans un AUTRE fichier de ce repertoire.",
+    "",
+    "Pourquoi ce fichier existe. Une session applique souvent par petits pas : un lot,",
+    "un correctif, un second correctif. Au moment de committer, elle consolide le tout",
+    "dans un fichier unique qui decrit l'etat FINAL — ce qui est la bonne pratique, un",
+    "fichier de migration devant etre rejouable et lisible d'un bloc. Le registre de",
+    "production, lui, garde la trace de chaque pas. Les deux ont raison, et ils ne",
+    "disent pas la meme chose.",
+    "",
+    "Sans ce fichier, le garde-fou de derive n'a que deux lectures possibles : soit il",
+    "refuse la consolidation (et interdit une bonne pratique), soit il rapproche les",
+    "noms de facon approximative (et laisse passer les vraies derives). Ni l'une ni",
+    "l'autre n'est acceptable.",
+    "",
+    "CE FICHIER NE DISPENSE PAS DE PREUVE. Une entree n'est valide que si le fichier",
+    "designe par `carriedBy` existe reellement. Et `verifiedBy` doit nommer la mesure",
+    "qui a etabli que le contenu est bien la — pas une intention, une mesure."
+  ],
+  "entries": [
+    {
+      "applied": "pv3_4_pilot_snapshot",
+      "carriedBy": "20260820_pv3_3_documents_purge.sql",
+      "reason": "Appliquee seule le 2026-08-20 a 06:41:38, puis consolidee dans le fichier ci-dessus au moment du commit (public.get_pv_pilot_snapshot).",
+      "verifiedBy": "PV3_SCHEMA_DRIFT = 0 et PV3_LOGIC_DRIFT = 0 le 2026-08-20 : rejeu des fichiers PV-1/PV-2/PV-3 sur PostgreSQL 16 et comparaison de signature de catalogue avec la production (483 lignes, 42 fonctions, empreintes identiques)."
+    },
+    {
+      "applied": "pv3_3b_purge_grace_comparator",
+      "carriedBy": "20260820_pv3_3_documents_purge.sql",
+      "reason": "Correctif du comparateur de delai de grace, applique le 2026-08-20 a 06:51:33 puis integre au fichier ci-dessus, qui porte donc l'etat final du comparateur.",
+      "verifiedBy": "PV3_SCHEMA_DRIFT = 0 et PV3_LOGIC_DRIFT = 0 le 2026-08-20 : meme mesure. Le corps de list_pv_documents_to_purge du depot est identique a celui de la production apres normalisation."
+    }
+  ]
+}

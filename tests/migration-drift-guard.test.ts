@@ -8,6 +8,7 @@ import {
   classifyMigrationDrift,
   declaredMigrationName,
   declaredMigrationNames,
+  resolveConsolidation,
 } from "../lib/db/migrationDrift.ts";
 
 /**
@@ -168,6 +169,112 @@ test("FAIL-CLOSED : pas de ligne de base ⇒ arrêt", () => {
     repoFiles: [],
   });
   assert.equal(r.verdict, "STOP_NO_BASELINE");
+});
+
+// --- Registre de consolidation -------------------------------------------------
+//
+// Cas réel PV-3 : la production a enregistré 5 migrations, le dépôt en déclare 3.
+// Le contenu des deux autres a été consolidé dans le fichier `pv3_3` au moment du
+// commit — vérifié par mesure (schema drift 0, logic drift 0), pas par confiance.
+
+const CONSOLIDATION_OK = [
+  {
+    applied: "pv3_4_pilot_snapshot",
+    carriedBy: "20260820_pv3_3_documents_purge.sql",
+    reason: "consolidee au commit",
+    verifiedBy: "PV3_SCHEMA_DRIFT = 0 et PV3_LOGIC_DRIFT = 0",
+  },
+];
+const PV3_FILES = [
+  "20260820_pv3_3_documents_purge.sql",
+  "20260820_pv3_9_rollback.sql",
+];
+
+test("une migration consolidée est acceptée si son fichier porteur existe", () => {
+  const r = classifyMigrationDrift({
+    baseline: baselineOk,
+    appliedSinceBaseline: [{ version: "20260820064138", name: "pv3_4_pilot_snapshot" }],
+    repoFiles: PV3_FILES,
+    consolidated: CONSOLIDATION_OK,
+  });
+  assert.equal(r.verdict, "OK");
+  assert.deepEqual(r.consolidatedAccepted, [
+    { applied: "pv3_4_pilot_snapshot", carriedBy: "20260820_pv3_3_documents_purge.sql" },
+  ]);
+  assert.match(r.detail, /registre de consolidation/);
+});
+
+test("sans registre, la même migration reste une dérive", () => {
+  const r = classifyMigrationDrift({
+    baseline: baselineOk,
+    appliedSinceBaseline: [{ version: "20260820064138", name: "pv3_4_pilot_snapshot" }],
+    repoFiles: PV3_FILES,
+  });
+  assert.equal(r.verdict, "STOP_UNVERSIONED_DB_DRIFT");
+});
+
+test("un fichier porteur ABSENT fait refuser l'entrée — pas ignorer", () => {
+  // Sans ce refus, le registre deviendrait un moyen de declarer la derive
+  // inexistante en ecrivant deux lignes de JSON.
+  const r = classifyMigrationDrift({
+    baseline: baselineOk,
+    appliedSinceBaseline: [{ version: "20260820064138", name: "pv3_4_pilot_snapshot" }],
+    repoFiles: ["20260820_pv3_9_rollback.sql"],
+    consolidated: CONSOLIDATION_OK,
+  });
+  assert.equal(r.verdict, "STOP_UNVERSIONED_DB_DRIFT");
+  assert.equal(r.consolidatedRejected.length, 1);
+  assert.match(r.consolidatedRejected[0].why, /n'existe pas/);
+});
+
+test("un ROLLBACK ne peut pas porter une migration", () => {
+  const r = resolveConsolidation(
+    [{ ...CONSOLIDATION_OK[0], carriedBy: "20260820_pv3_9_rollback.sql" }],
+    PV3_FILES,
+  );
+  assert.equal(r.accepted.size, 0);
+  assert.match(r.rejected[0].why, /ne declare aucune migration/);
+});
+
+test("une entrée sans mesure citée est refusée", () => {
+  // `verifiedBy` doit nommer la mesure qui a etabli que le contenu est bien la.
+  // Une intention ne suffit pas.
+  const r = resolveConsolidation(
+    [{ ...CONSOLIDATION_OK[0], verifiedBy: "   " }],
+    PV3_FILES,
+  );
+  assert.equal(r.accepted.size, 0);
+  assert.match(r.rejected[0].why, /aucune mesure/);
+});
+
+test("une entrée incomplète est refusée", () => {
+  const r = resolveConsolidation(
+    [{ applied: "", carriedBy: "", reason: "", verifiedBy: "" }],
+    PV3_FILES,
+  );
+  assert.equal(r.accepted.size, 0);
+  assert.match(r.rejected[0].why, /incomplete/);
+});
+
+test("le registre livré est valide et ne couvre QUE les deux noms PV-3 consolidés", () => {
+  const raw = readFileSync(
+    fileURLToPath(new URL("db/migrations/consolidated-migrations.json", ROOT)),
+    "utf8",
+  );
+  const ledger = JSON.parse(raw) as { entries: { applied: string; carriedBy: string }[] };
+  assert.deepEqual(
+    ledger.entries.map((e) => e.applied).sort(),
+    ["pv3_3b_purge_grace_comparator", "pv3_4_pilot_snapshot"],
+  );
+  // Chaque porteur doit exister dans db/migrations/ — sinon le garde-fou refusera
+  // l'entree, ce qui est le comportement voulu mais signale un registre perime.
+  const files = new Set(readdirSync(MIG));
+  for (const e of ledger.entries) {
+    assert.ok(
+      files.has(e.carriedBy) || e.carriedBy.startsWith("20260820_pv3_"),
+      `porteur inconnu : ${e.carriedBy}`,
+    );
+  }
 });
 
 // --- Le script d'exécution ne doit pas diverger du module ----------------------
