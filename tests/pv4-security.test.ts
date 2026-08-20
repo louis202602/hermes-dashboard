@@ -395,8 +395,18 @@ test("42 — le PDF est produit SANS nouvelle dépendance", () => {
   for (const heavy of ["pdfkit", "jspdf", "pdf-lib", "puppeteer", "playwright"]) {
     assert.ok(!deps.includes(heavy), `dépendance PDF lourde ajoutée : ${heavy}`);
   }
-  const pdfModule = tsCode(read("../lib/pv/studyPdf.ts"));
-  assert.equal(/^import .*from "(?!node:)/m.test(pdfModule), false, "aucun import externe");
+  // Les modules PDF n'importent que des modules internes (`@/`) ou Node : jamais
+  // un paquet tiers. C'est la propriété qui compte, pas « zéro import ».
+  for (const f of ["../lib/pv/pdfEngine.ts", "../lib/pv/studyPdf.ts"]) {
+    const mod = tsCode(read(f));
+    const imports = [...mod.matchAll(/^import [\s\S]*?from "([^"]+)";/gm)].map((m) => m[1]);
+    for (const spec of imports) {
+      assert.ok(
+        spec.startsWith("@/") || spec.startsWith("./") || spec.startsWith("node:"),
+        `${f} importe le paquet tiers « ${spec} »`,
+      );
+    }
+  }
 });
 
 test("43 — aucun rollback du dépôt ne supprime storage.objects ou storage.buckets", () => {

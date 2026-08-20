@@ -3,6 +3,8 @@ import "server-only";
 import { logEvent } from "@/lib/observability/log";
 import { buildPvDealPdfModel } from "@/lib/pv/dealPdfModel";
 import { resolvePvReadiness } from "@/lib/pv/readiness";
+import { buildPvQuotePdf } from "@/lib/pv/quotePdf";
+import { buildPvQuotePdfModel } from "@/lib/pv/quotePdfModel";
 import { buildPvStudyPdf } from "@/lib/pv/studyPdf";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
@@ -25,6 +27,10 @@ import type {
   PvStudy,
   PvStudyAssumptions,
   PvWriteOutcome,
+  PvQuoteDetail,
+  PvQuoteLine,
+  PvQuoteOutcome,
+  PvQuoteSummary,
 } from "@/types/pv";
 
 /**
@@ -1345,6 +1351,380 @@ export async function generatePvStudySummary(input: {
       documentId: null,
       stage: null,
       reason: str(registered?.reason),
+    };
+  }
+  return {
+    ok: true,
+    code: String(registered.code ?? "GENERATED"),
+    documentId: str(registered.document_id),
+    stage,
+    reason: null,
+  };
+}
+
+// --- PV-5 : le devis --------------------------------------------------------
+
+/** Refus d'écriture sur un devis : le code ET les raisons sont rendus. */
+function quoteOutcome(payload: Record<string, unknown> | null): PvQuoteOutcome {
+  if (!payload) {
+    return { ok: false, code: "RPC_ERROR", quoteId: null, quoteNumber: null, version: null, missingRequirements: [] };
+  }
+  const missing = payload.missing_requirements;
+  return {
+    ok: Boolean(payload.ok),
+    code: String(payload.code ?? "UNKNOWN"),
+    quoteId: str(payload.quote_id),
+    quoteNumber: str(payload.quote_number),
+    version: numOrNull(payload.version),
+    missingRequirements: Array.isArray(missing) ? missing.map((m) => String(m)) : [],
+  };
+}
+
+function mapQuoteLine(x: Record<string, unknown>): PvQuoteLine {
+  return {
+    id: String(x.id ?? ""),
+    quoteId: String(x.quote_id ?? ""),
+    position: num(x.position),
+    category: String(x.category ?? "AUTRE"),
+    designation: String(x.designation ?? ""),
+    description: str(x.description),
+    quantity: num(x.quantity),
+    unit: String(x.unit ?? "U"),
+    unitPriceHtEur: num(x.unit_price_ht_eur),
+    vatRatePct: num(x.vat_rate_pct),
+    discountPct: num(x.discount_pct),
+    lineTotalHtEur: num(x.line_total_ht_eur),
+  };
+}
+
+export async function getPvQuotes(prospectId: string | null): Promise<PvQuoteSummary[]> {
+  const payload = await callRpc("get_pv_quotes", { p_prospect_id: prospectId, p_limit: 50 });
+  if (!payload || !payload.ok) return [];
+  return rows(payload).map((q) => ({
+    id: String(q.id ?? ""),
+    quoteNumber: String(q.quote_number ?? ""),
+    version: num(q.version, 1),
+    status: String(q.status ?? "DRAFT"),
+    totalHtEur: num(q.total_ht_eur),
+    totalVatEur: num(q.total_vat_eur),
+    totalTtcEur: num(q.total_ttc_eur),
+    currency: String(q.currency ?? "EUR"),
+    issuedOn: str(q.issued_on),
+    validUntil: str(q.valid_until),
+    acceptedOn: str(q.accepted_on),
+    createdAt: String(q.created_at ?? ""),
+    isExpired: Boolean(q.is_expired),
+  }));
+}
+
+export async function getPvQuote(quoteId: string): Promise<PvQuoteDetail | null> {
+  const payload = await callRpc("get_pv_quote", { p_quote_id: quoteId });
+  if (!payload || !payload.ok) return null;
+
+  const q = asRecord(payload.quote);
+  const linesRaw = Array.isArray(payload.lines) ? (payload.lines as Record<string, unknown>[]) : [];
+  const p = payload.prospect === null ? null : asRecord(payload.prospect);
+  const s = payload.site === null ? null : asRecord(payload.site);
+  const st = payload.study === null ? null : asRecord(payload.study);
+  const blockers = Array.isArray(payload.blockers) ? payload.blockers.map((b) => String(b)) : [];
+
+  return {
+    quote: {
+      id: String(q.id ?? ""),
+      prospectId: String(q.prospect_id ?? ""),
+      siteId: String(q.site_id ?? ""),
+      studyId: String(q.study_id ?? ""),
+      economicsId: str(q.economics_id),
+      quoteNumber: String(q.quote_number ?? ""),
+      version: num(q.version, 1),
+      supersedesQuoteId: str(q.supersedes_quote_id),
+      status: String(q.status ?? "DRAFT"),
+      currency: String(q.currency ?? "EUR"),
+      discountPct: num(q.discount_pct),
+      subtotalHtEur: num(q.subtotal_ht_eur),
+      discountAmountEur: num(q.discount_amount_eur),
+      totalHtEur: num(q.total_ht_eur),
+      totalVatEur: num(q.total_vat_eur),
+      totalTtcEur: num(q.total_ttc_eur),
+      issuedOn: str(q.issued_on),
+      validUntil: str(q.valid_until),
+      observations: str(q.observations),
+      terms: str(q.terms),
+      sentBy: str(q.sent_by),
+      sentAt: str(q.sent_at),
+      acceptedBy: str(q.accepted_by),
+      acceptedAt: str(q.accepted_at),
+      acceptedOn: str(q.accepted_on),
+      acceptanceReference: str(q.acceptance_reference),
+      refusedAt: str(q.refused_at),
+      refusalReason: str(q.refusal_reason),
+      expiredAt: str(q.expired_at),
+      cancelledAt: str(q.cancelled_at),
+      createdAt: String(q.created_at ?? ""),
+      updatedAt: String(q.updated_at ?? ""),
+    },
+    lines: linesRaw.map(mapQuoteLine),
+    prospect:
+      p === null
+        ? null
+        : {
+            id: String(p.id ?? ""),
+            prospectType: String(p.prospect_type ?? "PARTICULIER"),
+            firstName: str(p.first_name),
+            lastName: str(p.last_name),
+            companyName: str(p.company_name),
+            phone: str(p.phone),
+            email: str(p.email),
+            source: String(p.source ?? "MANUAL"),
+            ownerUserId: str(p.owner_user_id),
+            contactConsent: Boolean(p.contact_consent),
+            contactConsentAt: str(p.contact_consent_at),
+            optedOut: Boolean(p.opted_out),
+            status: String(p.status ?? "NEW"),
+          },
+    site:
+      s === null
+        ? null
+        : {
+            id: String(s.id ?? ""),
+            label: str(s.label),
+            addressLine1: str(s.address_line1),
+            postalCode: str(s.postal_code),
+            city: str(s.city),
+            buildingType: str(s.building_type),
+            buildingUse: str(s.building_use),
+            occupancy: str(s.occupancy),
+            roofType: str(s.roof_type),
+            roofMaterial: str(s.roof_material),
+            roofCondition: str(s.roof_condition),
+            roofAreaTotalM2: numOrNull(s.roof_area_total_m2),
+            roofAreaUsableM2: numOrNull(s.roof_area_usable_m2),
+            azimuthDeg: numOrNull(s.azimuth_deg),
+            tiltDeg: numOrNull(s.tilt_deg),
+            shadingLevel: str(s.shading_level),
+            accessDifficulty: str(s.access_difficulty),
+          },
+    study:
+      st === null
+        ? null
+        : {
+            id: String(st.id ?? ""),
+            version: num(st.version, 1),
+            status: (st.status ?? "DRAFT") as PvStudy["status"],
+            targetPowerKwc: numOrNull(st.target_power_kwc),
+            panelCount: numOrNull(st.panel_count),
+            panelUnitPowerW: numOrNull(st.panel_unit_power_w),
+            panelBrand: str(st.panel_brand),
+            inverterType: str(st.inverter_type),
+            inverterBrand: str(st.inverter_brand),
+            hasBattery: Boolean(st.has_battery),
+            batteryCapacityKwh: numOrNull(st.battery_capacity_kwh),
+            annualProductionKwh: numOrNull(st.annual_production_kwh),
+            specificYieldKwhKwc: numOrNull(st.specific_yield_kwh_kwc),
+            selfConsumptionRatePct: numOrNull(st.self_consumption_rate_pct),
+            selfProductionRatePct: numOrNull(st.self_production_rate_pct),
+            surplusKwh: numOrNull(st.surplus_kwh),
+            systemLossesPct: numOrNull(st.system_losses_pct),
+            source: String(st.source ?? "MANUAL"),
+            preparedBy: String(st.prepared_by ?? "MANUAL"),
+            validatedAt: str(st.validated_at),
+            calculatedAt: str(st.calculated_at),
+            createdAt: str(st.created_at),
+          },
+    blockers,
+    isExpired: Boolean(payload.is_expired),
+  };
+}
+
+export async function createPvQuote(prospectId: string): Promise<PvQuoteOutcome> {
+  return quoteOutcome(await callRpc("create_pv_quote", { p_prospect_id: prospectId }));
+}
+
+export async function upsertPvQuoteLine(input: {
+  lineId: string | null;
+  quoteId: string;
+  category: string;
+  designation: string;
+  quantity: number;
+  unit: string;
+  unitPriceHtEur: number;
+  vatRatePct: number;
+  discountPct: number;
+  description: string | null;
+}): Promise<PvWriteOutcome> {
+  return outcome(
+    await callRpc("upsert_pv_quote_line", {
+      p_line_id: input.lineId,
+      p_quote_id: input.quoteId,
+      p_category: input.category,
+      p_designation: input.designation,
+      p_quantity: input.quantity,
+      p_unit: input.unit,
+      p_unit_price_ht_eur: input.unitPriceHtEur,
+      p_vat_rate_pct: input.vatRatePct,
+      p_discount_pct: input.discountPct,
+      p_description: input.description,
+      p_position: null,
+    }),
+    "line_id",
+  );
+}
+
+export async function deletePvQuoteLine(lineId: string): Promise<PvWriteOutcome> {
+  return outcome(await callRpc("delete_pv_quote_line", { p_line_id: lineId }), "line_id");
+}
+
+export async function updatePvQuote(input: {
+  quoteId: string;
+  discountPct: number | null;
+  validUntil: string | null;
+  observations: string | null;
+  terms: string | null;
+}): Promise<PvWriteOutcome> {
+  return outcome(
+    await callRpc("update_pv_quote", {
+      p_quote_id: input.quoteId,
+      p_discount_pct: input.discountPct,
+      p_valid_until: input.validUntil,
+      p_observations: input.observations,
+      p_terms: input.terms,
+    }),
+    "quote_id",
+  );
+}
+
+export async function setPvQuoteReady(quoteId: string): Promise<PvQuoteOutcome> {
+  return quoteOutcome(await callRpc("set_pv_quote_ready", { p_quote_id: quoteId }));
+}
+
+/**
+ * « Marquer comme envoyé » enregistre un GESTE HUMAIN. PV-5 n'expédie aucun
+ * courriel : présenter ce bouton comme une preuve d'envoi serait un mensonge sur
+ * ce que le système sait réellement.
+ */
+export async function sendPvQuote(quoteId: string, issuedOn: string | null): Promise<PvQuoteOutcome> {
+  return quoteOutcome(await callRpc("send_pv_quote", { p_quote_id: quoteId, p_issued_on: issuedOn }));
+}
+
+export async function acceptPvQuote(input: {
+  quoteId: string;
+  acceptedOn: string | null;
+  reference: string | null;
+}): Promise<PvQuoteOutcome> {
+  return quoteOutcome(
+    await callRpc("accept_pv_quote", {
+      p_quote_id: input.quoteId,
+      p_accepted_on: input.acceptedOn,
+      p_reference: input.reference,
+    }),
+  );
+}
+
+export async function refusePvQuote(quoteId: string, reason: string | null): Promise<PvQuoteOutcome> {
+  return quoteOutcome(await callRpc("refuse_pv_quote", { p_quote_id: quoteId, p_reason: reason }));
+}
+
+export async function cancelPvQuote(quoteId: string): Promise<PvQuoteOutcome> {
+  return quoteOutcome(await callRpc("cancel_pv_quote", { p_quote_id: quoteId }));
+}
+
+export async function revisePvQuote(quoteId: string): Promise<PvQuoteOutcome> {
+  return quoteOutcome(await callRpc("revise_pv_quote", { p_quote_id: quoteId }));
+}
+
+/** Péremption appliquée à la demande. AUCUN cron, AUCUN scheduler. */
+export async function expirePvQuotes(): Promise<{ ok: boolean; code: string; expired: number }> {
+  const payload = await callRpc("expire_pv_quotes", {});
+  if (!payload) return { ok: false, code: "RPC_ERROR", expired: 0 };
+  return {
+    ok: Boolean(payload.ok),
+    code: String(payload.code ?? "UNKNOWN"),
+    expired: num(payload.expired),
+  };
+}
+
+/**
+ * GÉNÈRE le PDF du devis, le dépose dans le bucket PRIVÉ et l'enregistre.
+ *
+ * Le stade est DÉCIDÉ ICI à partir de l'état réel, jamais reçu du client, et la
+ * base le revérifie de son côté (`QUOTE_PDF_NOT_READY` avec ses raisons). Deux
+ * gardes indépendantes sur ce qui engage un prix.
+ */
+export async function generatePvQuotePdf(input: {
+  quoteId: string;
+  requestId: string;
+  wantFinal: boolean;
+  company: string;
+  generatedOn: string;
+}): Promise<PvPdfOutcome> {
+  const detail = await getPvQuote(input.quoteId);
+  if (detail === null) {
+    return { ok: false, code: "NOT_FOUND", documentId: null, stage: null, reason: null };
+  }
+
+  const canFinal = detail.blockers.length === 0 && detail.quote.status !== "DRAFT";
+  if (input.wantFinal && !canFinal) {
+    return {
+      ok: false,
+      code: "QUOTE_PDF_NOT_READY",
+      documentId: null,
+      stage: null,
+      reason: detail.blockers[0] ?? "QUOTE_NOT_READY",
+    };
+  }
+
+  const stage: "DRAFT" | "FINAL" = input.wantFinal ? "FINAL" : "DRAFT";
+  const dbStage = stage === "FINAL" ? "QUOTE_FINAL" : "QUOTE_DRAFT";
+
+  const pdf = buildPvQuotePdf(
+    buildPvQuotePdfModel({
+      detail,
+      stage,
+      company: input.company,
+      generatedOn: input.generatedOn,
+    }),
+  );
+
+  const digest = await crypto.subtle.digest("SHA-256", pdf.slice().buffer as ArrayBuffer);
+  const sha256 = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+  // Le tenant n'est jamais reconstruit côté application : on demande son
+  // emplacement à la base, exactement comme pour un dépôt.
+  const slot = await preparePvDocument({
+    siteId: detail.quote.siteId,
+    docType: "AUTRE",
+    filename: `devis-${input.requestId}.pdf`,
+  });
+  if (!slot.ok || slot.path === null) {
+    return { ok: false, code: slot.code, documentId: null, stage: null, reason: null };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.storage
+    .from(PV_DOCUMENT_BUCKET)
+    .upload(slot.path, pdf, { contentType: "application/pdf", upsert: true });
+  if (error) {
+    logEvent("error", "pv.quote_pdf_upload_failed", { code: error.name });
+    return { ok: false, code: "UPLOAD_FAILED", documentId: null, stage: null, reason: null };
+  }
+
+  const registered = await callRpc("register_pv_quote_pdf", {
+    p_request_id: input.requestId,
+    p_quote_id: detail.quote.id,
+    p_stage: dbStage,
+    p_path: slot.path,
+    p_bytes: pdf.byteLength,
+    p_sha256: sha256,
+  });
+
+  if (!registered || !registered.ok) {
+    const missing = registered?.missing_requirements;
+    return {
+      ok: false,
+      code: String(registered?.code ?? "RPC_ERROR"),
+      documentId: null,
+      stage: null,
+      reason: Array.isArray(missing) && missing.length > 0 ? String(missing[0]) : null,
     };
   }
   return {

@@ -324,12 +324,30 @@ test("PV-3 — le rollback retire tout le lot, et rien d'autre", () => {
 // --- Périmètre -----------------------------------------------------------------
 
 test("PV-3 — périmètre tenu : rien de ce qui est reporté n'apparaît", () => {
-  const surface = ALL_PV3 + SERVICE + ACTIONS;
+  // Portée 1 — les MIGRATIONS DE PV-3. C'est là que le périmètre du lot se juge.
+  // (Les fichiers partagés `services/hermes/pv.ts` et `app/actions/pv.ts` sont
+  // communs à tout le Pack PV : y interdire le vocabulaire d'un lot futur
+  // reviendrait à interdire au code de grandir.)
   for (const forbidden of [
     "consuel", "enedis", "pv_quotes", "pv_invoices", "pv_payments", "pv_contracts",
     "pv_orders", "pv_stock", "pvgis", "opensolar", "retell", "sendEmail", "twilio",
   ]) {
-    assert.equal(new RegExp(forbidden, "i").test(surface), false, `hors périmètre PV-3: ${forbidden}`);
+    assert.equal(
+      new RegExp(forbidden, "i").test(ALL_PV3),
+      false,
+      `hors périmètre des migrations PV-3 : ${forbidden}`,
+    );
+  }
+
+  // Portée 2 — ce qui reste interdit PARTOUT : aucune intégration externe, aucun
+  // envoi de message, dans aucun lot du Pack PV.
+  const shared = SERVICE + ACTIONS;
+  for (const forbidden of ["consuel", "enedis", "pvgis", "opensolar", "retell", "twilio", "sendEmail"]) {
+    assert.equal(
+      new RegExp(forbidden, "i").test(shared),
+      false,
+      `intégration externe détectée dans le code partagé : ${forbidden}`,
+    );
   }
   // Aucune activation de capacité ni de consumer dans tout le lot.
   assert.equal(/enabled\s*=\s*true/i.test(ALL_PV3), false, "aucune activation dans le lot");

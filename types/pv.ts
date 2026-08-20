@@ -436,3 +436,119 @@ export type PvPdfOutcome = {
   /** Motif précis du refus d'un FINAL, quand il y en a un. */
   reason: string | null;
 };
+
+// --- PV-5 : le devis --------------------------------------------------------
+
+/** Catégories de ligne proposées. La liste est CLOSE côté base (contrainte CHECK). */
+export const PV_QUOTE_LINE_CATEGORIES = [
+  "PANNEAUX",
+  "ONDULEUR",
+  "BATTERIE",
+  "STRUCTURE",
+  "PROTECTIONS",
+  "CABLAGE",
+  "POSE",
+  "MISE_EN_SERVICE",
+  "ETUDES_ADMINISTRATIF",
+  "OPTION",
+  "AUTRE",
+] as const;
+
+export type PvQuoteLineCategory = (typeof PV_QUOTE_LINE_CATEGORIES)[number];
+
+export type PvQuoteLine = {
+  id: string;
+  quoteId: string;
+  position: number;
+  category: string;
+  designation: string;
+  description: string | null;
+  quantity: number;
+  unit: string;
+  unitPriceHtEur: number;
+  vatRatePct: number;
+  discountPct: number;
+  /** Colonne GÉNÉRÉE en base. Jamais envoyée par le navigateur. */
+  lineTotalHtEur: number;
+};
+
+/**
+ * LE DEVIS. `quoteNumber` est la référence COMMERCIALE — stable à travers les
+ * versions ; `version` distingue les révisions successives de cette même offre.
+ *
+ * Tous les totaux sont RECALCULÉS en base. Les champs ci-dessous sont des
+ * lectures, jamais des entrées : aucune façade n'accepte de total.
+ */
+export type PvQuote = {
+  id: string;
+  prospectId: string;
+  siteId: string;
+  studyId: string;
+  economicsId: string | null;
+  quoteNumber: string;
+  version: number;
+  supersedesQuoteId: string | null;
+  status: string;
+  currency: string;
+  discountPct: number;
+  subtotalHtEur: number;
+  discountAmountEur: number;
+  totalHtEur: number;
+  totalVatEur: number;
+  totalTtcEur: number;
+  issuedOn: string | null;
+  validUntil: string | null;
+  observations: string | null;
+  terms: string | null;
+  sentBy: string | null;
+  sentAt: string | null;
+  acceptedBy: string | null;
+  acceptedAt: string | null;
+  acceptedOn: string | null;
+  acceptanceReference: string | null;
+  refusedAt: string | null;
+  refusalReason: string | null;
+  expiredAt: string | null;
+  cancelledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Le devis, ses lignes, et CE QUI LUI MANQUE — des raisons, pas un booléen. */
+export type PvQuoteDetail = {
+  quote: PvQuote;
+  lines: PvQuoteLine[];
+  prospect: PvDealProspect | null;
+  site: PvDealSite | null;
+  study: PvStudy | null;
+  blockers: string[];
+  /** Péremption CALCULÉE à la lecture : visible sans passage de `expire_pv_quotes()`. */
+  isExpired: boolean;
+};
+
+/** Ligne de liste — assez pour un tableau, pas plus. */
+export type PvQuoteSummary = {
+  id: string;
+  quoteNumber: string;
+  version: number;
+  status: string;
+  totalHtEur: number;
+  totalVatEur: number;
+  totalTtcEur: number;
+  currency: string;
+  issuedOn: string | null;
+  validUntil: string | null;
+  acceptedOn: string | null;
+  createdAt: string;
+  isExpired: boolean;
+};
+
+/** Résultat d'une écriture sur un devis : le refus porte ses raisons. */
+export type PvQuoteOutcome = {
+  ok: boolean;
+  code: string;
+  quoteId: string | null;
+  quoteNumber: string | null;
+  version: number | null;
+  missingRequirements: string[];
+};

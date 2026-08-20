@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
 
 import PvDealPanel from "@/components/dashboard/PvDealPanel";
+import PvQuotesPanel from "@/components/dashboard/PvQuotesPanel";
 import PvStudySummaryForm from "@/components/dashboard/PvStudySummaryForm";
 import { requireRoute } from "@/lib/dashboard/routeGuard";
 import { resolvePvReadiness } from "@/lib/pv/readiness";
-import { getPvDeal } from "@/services/hermes/pv";
+import { getPvDeal, getPvQuotes } from "@/services/hermes/pv";
 import { getActiveTenantIdentity } from "@/services/hermes/tenantIdentity";
 
 export const metadata = { title: "Affaire photovoltaïque — Hermès" };
@@ -28,7 +29,11 @@ export default async function PvDealPage({
   await requireRoute("/etudes");
 
   const { prospectId } = await params;
-  const [deal, tenant] = await Promise.all([getPvDeal(prospectId), getActiveTenantIdentity()]);
+  const [deal, tenant, quotes] = await Promise.all([
+    getPvDeal(prospectId),
+    getActiveTenantIdentity(),
+    getPvQuotes(prospectId),
+  ]);
   if (deal === null) notFound();
 
   const readiness = resolvePvReadiness({
@@ -55,6 +60,12 @@ export default async function PvDealPage({
         // une nouvelle version d'étude, elle, produit bien une nouvelle synthèse.
         requestId={`${deal.prospect.id}-v${deal.retainedStudy?.version ?? deal.latestStudy?.version ?? 0}`}
         company={company}
+      />
+      {/* PV-5 — le devis consomme enfin l'état READY_FOR_OFFER produit par PV-4. */}
+      <PvQuotesPanel
+        prospectId={deal.prospect.id}
+        quotes={quotes}
+        canQuote={readiness.state === "READY_FOR_OFFER"}
       />
     </div>
   );
