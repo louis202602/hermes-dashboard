@@ -180,7 +180,7 @@ begin
 
   -- Idempotence AVANT tout : une demande déjà servie ne refait rien.
   select d.id into v_existing from hermes_os.pv_documents d
-   where d.tenant_id = v_t and d.generation_request_id = p_request_id;
+   where d.tenant_id = v_t and d.generation_request_id = btrim(p_request_id);
   if v_existing is not null then
     return jsonb_build_object('ok', true, 'code', 'ALREADY_GENERATED', 'document_id', v_existing);
   end if;
