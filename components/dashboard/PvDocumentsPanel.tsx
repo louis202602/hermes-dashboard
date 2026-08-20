@@ -4,7 +4,7 @@ import { useActionState } from "react";
 
 import {
   deletePvDocumentAction,
-  purgePvDocumentsAction,
+  purgePvDocumentsConfirmedAction,
   PV_INITIAL_STATE,
   uploadPvDocumentAction,
 } from "@/app/actions/pv";
@@ -56,7 +56,7 @@ export default function PvDocumentsPanel({
   );
   const [deleteState, deleteAction] = useActionState(deletePvDocumentAction, PV_INITIAL_STATE);
   const [purgeState, purgeAction, purging] = useActionState(
-    purgePvDocumentsAction,
+    purgePvDocumentsConfirmedAction,
     PV_INITIAL_STATE,
   );
 
@@ -168,17 +168,36 @@ export default function PvDocumentsPanel({
         </p>
       ) : null}
 
-      <form action={purgeAction} className="pv-inline-form">
-        <input type="hidden" name="site_id" value={siteId} />
-        <button type="submit" className="card-secondary-button" disabled={purging}>
-          {purging ? "Purge…" : "Purger les documents retirés"}
-        </button>
-      </form>
-      <p className="photo-note">
-        La purge efface DÉFINITIVEMENT les octets des documents retirés depuis plus de 7
-        jours. La ligne d’inventaire, elle, survit : un document purgé reste traçable.
-        Rejouer la purge est sans effet.
-      </p>
+      <div className="pv-danger-zone">
+        <p className="panel-eyebrow">Purge définitive</p>
+        <p className="pv-warning" role="note">
+          Cette action supprimera définitivement le fichier après le délai de grâce.
+          <strong> Cette opération est irréversible.</strong>
+        </p>
+        <p className="photo-note">
+          « Retirer » est une suppression <strong>logique</strong> : le fichier reste
+          récupérable administrativement pendant 7 jours. « Purger définitivement » efface
+          les octets. La ligne d’inventaire survit dans les deux cas — un document purgé
+          reste traçable dans le journal. Rejouer la purge est sans effet.
+        </p>
+        <form action={purgeAction} className="agent-action-form">
+          <input type="hidden" name="site_id" value={siteId} />
+          <label className="agent-field pv-checkbox">
+            <input type="checkbox" name="confirm" value="PURGER" required />
+            <span>
+              Je comprends que cette opération est <strong>irréversible</strong> et je
+              confirme la suppression définitive des fichiers retirés depuis plus de 7 jours.
+            </span>
+          </label>
+          <button type="submit" className="card-secondary-button" disabled={purging}>
+            {purging ? "Purge en cours…" : "Purger définitivement"}
+          </button>
+        </form>
+        <p className="photo-note">
+          Réservé aux administrateurs du tenant. Le serveur reste l’autorité : contourner
+          cet écran ne permet pas de purger.
+        </p>
+      </div>
       {purgeState.message ? (
         <p
           className="photo-session-meta"

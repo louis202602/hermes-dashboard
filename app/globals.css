@@ -6280,3 +6280,16 @@ html[data-reduce-transparency="1"] .notif-panel {
 .pv-pilot-count { font-size: 26px; line-height: 1.1; color: var(--text-primary); }
 .pv-pilot-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .pv-pilot-list strong { font-size: 13px; color: var(--text-primary); }
+
+/* --- PV-4 : zone dangereuse, blocages, widgets de grille. Préfixe `pv-`. --- */
+.pv-danger-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border-strong);
+}
+.pv-blockers { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.pv-widget { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.pv-widget-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }

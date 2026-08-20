@@ -46,9 +46,14 @@ export default function PvProspectDetailPanel({ prospect }: { prospect: PvProspe
             <span className="panel-eyebrow">PHOTOVOLTAÏQUE</span>
             <h3>{pvProspectName(prospect)}</h3>
           </div>
-          <span className="photo-badge">
-            {PV_PROSPECT_STATUS_LABELS[prospect.status] ?? prospect.status}
-          </span>
+          <div className="photo-session-side">
+            <Link href={`/etudes/affaires/${prospect.id}`} className="photo-badge">
+              Voir l’affaire
+            </Link>
+            <span className="photo-badge">
+              {PV_PROSPECT_STATUS_LABELS[prospect.status] ?? prospect.status}
+            </span>
+          </div>
         </div>
 
         <dl className="pv-facts">
