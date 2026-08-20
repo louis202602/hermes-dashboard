@@ -1138,6 +1138,11 @@ supprime cette cécité mutuelle.
 | `20260820_hermes_migration_governance_3_baseline.sql` | `hermes_migration_governance_3_baseline` | photo de la dette + `migrations_since_baseline()` |
 | `20260820_hermes_migration_governance_9_rollback.sql` | — | démontage complet |
 
+**APPLIQUÉE le 2026-08-20** — `hermes_migration_governance_1_lock` (06:37:08),
+`_2_functions` (06:37:40), `_3_baseline` (06:38:07). Verrou testé sur la production :
+16/16 assertions, verrou laissé `FREE`, historique nettoyé de ses lignes de test.
+Ligne de base : `cutoff_version = 20260820063740`, **205 migrations en héritage**.
+
 **Mode = COOPÉRATIF.** Pas d'`event trigger` DDL : le verrou rend l'occupation
 visible et opposable, il ne peut pas l'empêcher. C'est un choix assumé, documenté
 dans `docs/hermes-migrations-production.md`.
