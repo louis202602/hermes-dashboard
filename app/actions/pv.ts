@@ -4,6 +4,15 @@ import { revalidatePath } from "next/cache";
 
 import {
   promotePvBillExtraction,
+  purgePvDocuments,
+  setPvEconomicsStatus,
+  setPvStudyStatus,
+  softDeletePvDocument,
+  uploadPvDocument,
+  upsertPvEconomics,
+  upsertPvStudy,
+  upsertPvStudyAssumptions,
+  verifyPvConsumptionProfile,
   registerPvEnergyBill,
   setPvProspectStatus,
   upsertPvConsumptionProfile,
@@ -53,6 +62,18 @@ const ERROR_MESSAGES: Record<string, string> = {
   BAD_DOC_TYPE: "Type de document invalide.",
   DUPLICATE_OBJECT: "Ce document est déjà référencé.",
   RPC_ERROR: "Le service est indisponible. Réessayez plus tard.",
+  // — PV-3 —
+  UPLOAD_FAILED: "Le téléversement a échoué.",
+  MISSING_FILE: "Aucun fichier sélectionné.",
+  MISSING_STUDY: "L’étude est requise.",
+  INVALID_STUDY: "Étude invalide : vérifiez la cohérence batterie / puissances.",
+  INVALID_ASSUMPTIONS: "Hypothèses invalides.",
+  INVALID_ECONOMICS: "Chiffrage invalide : les montants ne peuvent pas être négatifs.",
+  DUPLICATE_VERSION: "Une étude portant cette version existe déjà pour ce site.",
+  USE_VALIDATION_FACADE:
+    "La validation humaine passe par le bouton dédié — pas par un changement de statut.",
+  NOT_DELETED: "Ce document n’a pas été supprimé : il n’est pas purgeable.",
+  ALREADY_PURGED: "Ce document a déjà été purgé.",
 };
 
 export type PvActionState = {
@@ -330,6 +351,283 @@ export async function verifyPvEconomicsAction(
     reject: formData.get("decision") === "reject",
     reason: text(formData, "reason"),
   });
+  if (result.ok && siteId) revalidatePath(`/etudes/sites/${siteId}`);
+  return toState(result);
+}
+
+// --- PV-3 : documents ---------------------------------------------------------
+
+/**
+ * Téléverser un document PV. Les octets passent par le SERVEUR — le navigateur
+ * ne choisit ni le tenant, ni le bucket, ni le chemin final. Le chemin est
+ * attribué par la base et revalidé à la finalisation.
+ */
+export async function uploadPvDocumentAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const siteId = text(formData, "site_id");
+  const docType = text(formData, "doc_type");
+  const file = formData.get("file");
+
+  if (siteId === null) {
+    return { phase: "error", code: "MISSING_SITE", message: ERROR_MESSAGES.MISSING_SITE };
+  }
+  if (!(file instanceof File) || file.size === 0) {
+    return { phase: "error", code: "MISSING_FILE", message: ERROR_MESSAGES.MISSING_FILE };
+  }
+
+  const result = await uploadPvDocument({
+    siteId,
+    docType: docType ?? "AUTRE",
+    filename: file.name,
+    mimeType: file.type,
+    bytes: await file.arrayBuffer(),
+  });
+  if (result.ok) revalidatePath(`/etudes/sites/${siteId}`);
+  return toState(result);
+}
+
+/** Suppression LOGIQUE d'un document. Les octets restent jusqu'à la purge. */
+export async function deletePvDocumentAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const documentId = text(formData, "document_id");
+  const siteId = text(formData, "site_id");
+  if (documentId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await softDeletePvDocument(documentId);
+  if (result.ok && siteId) revalidatePath(`/etudes/sites/${siteId}`);
+  return toState(result);
+}
+
+/**
+ * PURGE des octets des documents supprimés logiquement. Geste APPELABLE, jamais
+ * automatique : aucun worker, aucun scheduler. Idempotente.
+ */
+export async function purgePvDocumentsAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const siteId = text(formData, "site_id");
+  const report = await purgePvDocuments();
+  if (siteId) revalidatePath(`/etudes/sites/${siteId}`);
+  return {
+    phase: report.failed > 0 ? "error" : "ok",
+    code: "PURGE",
+    message:
+      report.failed > 0
+        ? `${report.purged} purgé(s), ${report.failed} en échec sur ${report.examined} examiné(s).`
+        : `${report.purged} document(s) purgé(s) sur ${report.examined} examiné(s).`,
+  };
+}
+
+// --- PV-3 : validations et travail manuel -------------------------------------
+
+/** Vérification HUMAINE d'un profil de consommation. */
+export async function verifyPvConsumptionAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const profileId = text(formData, "profile_id");
+  const siteId = text(formData, "site_id");
+  if (profileId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await verifyPvConsumptionProfile(profileId, {
+    reject: formData.get("decision") === "reject",
+    reason: text(formData, "reason"),
+  });
+  if (result.ok && siteId) revalidatePath(`/etudes/sites/${siteId}`);
+  return toState(result);
+}
+
+/** Créer une étude À LA MAIN. Elle naît en DRAFT — jamais autrement. */
+export async function createPvStudyAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const siteId = text(formData, "site_id");
+  if (siteId === null) {
+    return { phase: "error", code: "MISSING_SITE", message: ERROR_MESSAGES.MISSING_SITE };
+  }
+  const result = await upsertPvStudy({
+    siteId,
+    targetPowerKwc: decimal(formData, "target_power_kwc"),
+    panelCount: decimal(formData, "panel_count"),
+    panelUnitPowerW: decimal(formData, "panel_unit_power_w"),
+    panelBrand: text(formData, "panel_brand"),
+    panelReference: text(formData, "panel_reference"),
+    inverterType: text(formData, "inverter_type"),
+    inverterBrand: text(formData, "inverter_brand"),
+    inverterReference: text(formData, "inverter_reference"),
+    microinverterCount: decimal(formData, "microinverter_count"),
+    hasBattery: formData.get("has_battery") === "on",
+    batteryCapacityKwh: decimal(formData, "battery_capacity_kwh"),
+    batteryPowerKw: decimal(formData, "battery_power_kw"),
+    annualProductionKwh: decimal(formData, "annual_production_kwh"),
+    specificYieldKwhKwc: decimal(formData, "specific_yield_kwh_kwc"),
+    selfConsumptionRatePct: decimal(formData, "self_consumption_rate_pct"),
+    selfProductionRatePct: decimal(formData, "self_production_rate_pct"),
+    surplusKwh: decimal(formData, "surplus_kwh"),
+    systemLossesPct: decimal(formData, "system_losses_pct"),
+    calculationMethod: text(formData, "calculation_method"),
+    source: text(formData, "source"),
+    sourceReference: text(formData, "source_reference"),
+    notes: text(formData, "notes"),
+  });
+  if (result.ok) revalidatePath(`/etudes/sites/${siteId}`);
+  return toState(result);
+}
+
+/** Modifier une étude existante. Le statut n'est PAS touché ici. */
+export async function updatePvStudyAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const studyId = text(formData, "study_id");
+  const siteId = text(formData, "site_id");
+  if (studyId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await upsertPvStudy({
+    studyId,
+    targetPowerKwc: decimal(formData, "target_power_kwc"),
+    panelCount: decimal(formData, "panel_count"),
+    panelUnitPowerW: decimal(formData, "panel_unit_power_w"),
+    panelBrand: text(formData, "panel_brand"),
+    inverterType: text(formData, "inverter_type"),
+    inverterBrand: text(formData, "inverter_brand"),
+    hasBattery: formData.get("has_battery") === "on",
+    batteryCapacityKwh: decimal(formData, "battery_capacity_kwh"),
+    batteryPowerKw: decimal(formData, "battery_power_kw"),
+    annualProductionKwh: decimal(formData, "annual_production_kwh"),
+    specificYieldKwhKwc: decimal(formData, "specific_yield_kwh_kwc"),
+    selfConsumptionRatePct: decimal(formData, "self_consumption_rate_pct"),
+    selfProductionRatePct: decimal(formData, "self_production_rate_pct"),
+    surplusKwh: decimal(formData, "surplus_kwh"),
+    systemLossesPct: decimal(formData, "system_losses_pct"),
+    calculationMethod: text(formData, "calculation_method"),
+    source: text(formData, "source"),
+    notes: text(formData, "notes"),
+  });
+  if (result.ok && siteId) revalidatePath(`/etudes/sites/${siteId}`);
+  return toState(result);
+}
+
+/** Enregistrer les hypothèses d'une étude — colonnes typées, pas un blob. */
+export async function savePvAssumptionsAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const studyId = text(formData, "study_id");
+  const siteId = text(formData, "site_id");
+  if (studyId === null) {
+    return { phase: "error", code: "MISSING_STUDY", message: ERROR_MESSAGES.MISSING_STUDY };
+  }
+  const result = await upsertPvStudyAssumptions({
+    studyId,
+    energyPriceEurKwh: decimal(formData, "energy_price_eur_kwh"),
+    energyPriceInflationPct: decimal(formData, "energy_price_inflation_pct"),
+    analysisHorizonYears: decimal(formData, "analysis_horizon_years"),
+    discountRatePct: decimal(formData, "discount_rate_pct"),
+    panelDegradationPctYear: decimal(formData, "panel_degradation_pct_year"),
+    systemLossesPct: decimal(formData, "system_losses_pct"),
+    surplusSalePriceEurKwh: decimal(formData, "surplus_sale_price_eur_kwh"),
+    subsidyTotalEur: decimal(formData, "subsidy_total_eur"),
+    subsidyScheme: text(formData, "subsidy_scheme"),
+    vatRatePct: decimal(formData, "vat_rate_pct"),
+  });
+  if (result.ok && siteId) revalidatePath(`/etudes/sites/${siteId}`);
+  return toState(result);
+}
+
+/** Avancer le statut d'une étude, via la machine à états. Jamais VALIDATED. */
+export async function setPvStudyStatusAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const studyId = text(formData, "study_id");
+  const siteId = text(formData, "site_id");
+  const status = text(formData, "status");
+  if (studyId === null || status === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await setPvStudyStatus(studyId, status);
+  if (result.ok && siteId) revalidatePath(`/etudes/sites/${siteId}`);
+  return toState(result);
+}
+
+/** Créer un chiffrage À LA MAIN. Il naît en DRAFT. */
+export async function createPvEconomicsAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const studyId = text(formData, "study_id");
+  const siteId = text(formData, "site_id");
+  if (studyId === null) {
+    return { phase: "error", code: "MISSING_STUDY", message: ERROR_MESSAGES.MISSING_STUDY };
+  }
+  const result = await upsertPvEconomics({
+    studyId,
+    investmentHtEur: decimal(formData, "investment_ht_eur"),
+    investmentTtcEur: decimal(formData, "investment_ttc_eur"),
+    subsidyTotalEur: decimal(formData, "subsidy_total_eur"),
+    netCostEur: decimal(formData, "net_cost_eur"),
+    year1SavingsEur: decimal(formData, "year1_savings_eur"),
+    surplusRevenueEur: decimal(formData, "surplus_revenue_eur"),
+    annualGainEur: decimal(formData, "annual_gain_eur"),
+    simpleRoiPct: decimal(formData, "simple_roi_pct"),
+    paybackYears: decimal(formData, "payback_years"),
+    npvEur: decimal(formData, "npv_eur"),
+    irrPct: decimal(formData, "irr_pct"),
+  });
+  if (result.ok && siteId) revalidatePath(`/etudes/sites/${siteId}`);
+  return toState(result);
+}
+
+/** Modifier un chiffrage existant. */
+export async function updatePvEconomicsAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const economicsId = text(formData, "economics_id");
+  const siteId = text(formData, "site_id");
+  if (economicsId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await upsertPvEconomics({
+    economicsId,
+    investmentHtEur: decimal(formData, "investment_ht_eur"),
+    investmentTtcEur: decimal(formData, "investment_ttc_eur"),
+    subsidyTotalEur: decimal(formData, "subsidy_total_eur"),
+    netCostEur: decimal(formData, "net_cost_eur"),
+    year1SavingsEur: decimal(formData, "year1_savings_eur"),
+    surplusRevenueEur: decimal(formData, "surplus_revenue_eur"),
+    annualGainEur: decimal(formData, "annual_gain_eur"),
+    simpleRoiPct: decimal(formData, "simple_roi_pct"),
+    paybackYears: decimal(formData, "payback_years"),
+    npvEur: decimal(formData, "npv_eur"),
+    irrPct: decimal(formData, "irr_pct"),
+  });
+  if (result.ok && siteId) revalidatePath(`/etudes/sites/${siteId}`);
+  return toState(result);
+}
+
+/** Avancer le statut d'un chiffrage. Jamais VERIFIED. */
+export async function setPvEconomicsStatusAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const economicsId = text(formData, "economics_id");
+  const siteId = text(formData, "site_id");
+  const status = text(formData, "status");
+  if (economicsId === null || status === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await setPvEconomicsStatus(economicsId, status);
   if (result.ok && siteId) revalidatePath(`/etudes/sites/${siteId}`);
   return toState(result);
 }

@@ -28,6 +28,7 @@ export const WIDGET_CATEGORIES = [
   "btp",
   "immobilier",
   "photo",
+  "solaire",
 ] as const;
 export type WidgetCategory = (typeof WIDGET_CATEGORIES)[number];
 
@@ -47,6 +48,21 @@ export type WidgetDef = {
    * vertical-specific widgets vanish for tenants of another vertical. Absent ⇒ no gate.
    */
   requiredCapabilityPrefix?: string;
+  /**
+   * PV-3 — portillon par MODULE (moteur de verticales), et non par capacité.
+   *
+   * Pourquoi ce champ existe alors que `requiredCapabilityPrefix` existait déjà :
+   * un préfixe de capacité exige une capacité ACTIVE au catalogue. Les trois
+   * capacités `pv.*` sont volontairement `enabled = false` — un widget gardé par
+   * `"pv."` ne serait donc JAMAIS visible, y compris chez un tenant solaire.
+   * Le bon portillon est le MODULE : `solar.studies` est accordé par la
+   * conjonction `quotes + worksites`, indépendamment de toute activation d'IA.
+   *
+   * FAIL-CLOSED : quand ce champ est renseigné, le widget est indisponible tant
+   * que l'appelant n'a pas fourni la liste des modules accordés. Un appelant qui
+   * l'ignore ferme donc le widget, il ne l'ouvre pas.
+   */
+  requiredModule?: string;
   /** Shared snapshots this widget reads (doc + no-extra-fetch contract). */
   snapshotKeys: string[];
   /** Hidden by default (opt-in via the gallery) — e.g. heavy/self-fetching widgets. */
@@ -89,6 +105,13 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: "photo-today", label: "Studio — aujourd’hui", category: "photo", supportedSizes: ["medium", "large"], defaultSize: "large", span: "full", snapshotKeys: ["photoToday"], requiredCapabilityPrefix: "photo." },
   { id: "photo-sessions", label: "Studio — séances", category: "photo", supportedSizes: ["medium", "large"], defaultSize: "large", span: "full", snapshotKeys: ["photoToday"], requiredCapabilityPrefix: "photo." },
   { id: "photo-culling-queue", label: "Studio — photos à trier", category: "photo", supportedSizes: ["small", "medium"], defaultSize: "medium", span: "half", snapshotKeys: ["photoToday"], requiredCapabilityPrefix: "photo." },
+
+  // --- verticale solaire (PV-3) : 3 widgets de PILOTAGE, gardés par le MODULE.
+  // Ils lisent UN seul instantané partagé (`pvPilot`) : trois widgets ne font
+  // jamais trois lectures — même contrat COST-FIRST que la verticale photo.
+  { id: "pv-studies-to-validate", label: "Études à valider", category: "solaire", supportedSizes: ["small", "medium"], defaultSize: "medium", span: "half", snapshotKeys: ["pvPilot"], requiredModule: "solar.studies" },
+  { id: "pv-bills-to-verify", label: "Factures énergie à vérifier", category: "solaire", supportedSizes: ["small", "medium"], defaultSize: "medium", span: "half", snapshotKeys: ["pvPilot"], requiredModule: "solar.studies" },
+  { id: "pv-prospects-without-site", label: "Prospects sans site", category: "solaire", supportedSizes: ["small", "medium"], defaultSize: "medium", span: "half", snapshotKeys: ["pvPilot"], requiredModule: "solar.studies" },
 ];
 
 export const LAYOUT_SCHEMA_VERSION = 1;
@@ -177,15 +200,27 @@ export function clampWidgetSize(def: WidgetDef, size: unknown): WidgetSize {
 }
 
 /** Ids available to this tenant = capability satisfied (or no capability required). */
-export function availableWidgetIds(capabilityKeys: Set<string>): Set<string> {
+export function availableWidgetIds(
+  capabilityKeys: Set<string>,
+  grantedModules?: Iterable<string>,
+): Set<string> {
   const keys = [...capabilityKeys];
+  // FAIL-CLOSED : appelant sans liste de modules ⇒ ensemble VIDE, donc tout
+  // widget gardé par un module reste fermé. L'oubli ferme, il n'ouvre pas.
+  const modules =
+    grantedModules === undefined
+      ? new Set<string>()
+      : grantedModules instanceof Set
+        ? (grantedModules as Set<string>)
+        : new Set<string>(grantedModules);
   const out = new Set<string>();
   for (const w of WIDGET_REGISTRY) {
     const exactOk = !w.requiredCapability || capabilityKeys.has(w.requiredCapability);
     const prefixOk =
       !w.requiredCapabilityPrefix ||
       keys.some((k) => k.startsWith(w.requiredCapabilityPrefix as string));
-    if (exactOk && prefixOk) out.add(w.id);
+    const moduleOk = !w.requiredModule || modules.has(w.requiredModule);
+    if (exactOk && prefixOk && moduleOk) out.add(w.id);
   }
   return out;
 }

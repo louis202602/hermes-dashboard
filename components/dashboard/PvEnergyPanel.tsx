@@ -8,6 +8,7 @@ import {
   registerPvBillAction,
   savePvConsumptionAction,
   verifyPvBillAction,
+  verifyPvConsumptionAction,
 } from "@/app/actions/pv";
 import { pvBadge, pvToneClass } from "@/lib/pv/status";
 import type { PvBillExtraction, PvConsumptionProfile, PvEnergyBill } from "@/types/pv";
@@ -45,6 +46,10 @@ export default function PvEnergyPanel({
     PV_INITIAL_STATE,
   );
   const [verifyState, verifyAction] = useActionState(verifyPvBillAction, PV_INITIAL_STATE);
+  const [consVerifyState, consVerifyAction] = useActionState(
+    verifyPvConsumptionAction,
+    PV_INITIAL_STATE,
+  );
   const [promoteState, promoteAction] = useActionState(
     promotePvExtractionAction,
     PV_INITIAL_STATE,
@@ -128,6 +133,30 @@ export default function PvEnergyPanel({
         {consumptionState.phase === "error" ? (
           <p className="photo-session-meta" role="alert">
             {consumptionState.message}
+          </p>
+        ) : null}
+
+        {current && current.verificationStatus !== "VERIFIED" ? (
+          <>
+            <form action={consVerifyAction} className="pv-inline-form">
+              <input type="hidden" name="profile_id" value={current.id} />
+              <input type="hidden" name="site_id" value={siteId} />
+              <button type="submit" name="decision" value="verify" className="card-secondary-button">
+                Vérifier la consommation (geste humain)
+              </button>
+              <button type="submit" name="decision" value="reject" className="card-secondary-button">
+                Rejeter
+              </button>
+            </form>
+            <p className="photo-note">
+              Une consommation vérifiée porte le nom de l’utilisateur qui l’a vérifiée. Un
+              runner sans identité authentifiée ne peut pas produire cet état.
+            </p>
+          </>
+        ) : null}
+        {consVerifyState.phase === "error" ? (
+          <p className="photo-session-meta" role="alert">
+            {consVerifyState.message}
           </p>
         ) : null}
       </section>

@@ -10,9 +10,28 @@
 --     pièces jointes du chat et reste utilisée par ses policies. Ce lot l'a
 --     seulement RÉUTILISÉE.
 --   * le bucket `hermes-chat-attachments` et ses policies.
+--   * le BUCKET `hermes-photo-proxies` lui-même — voir ci-dessous.
 --
--- Le bucket `hermes-photo-proxies` doit être VIDÉ hors bande avant ce rollback :
--- Postgres refuse de supprimer un bucket non vide.
+-- ⚠️ CORRECTIF PV-3 (2026-08-20). Ce fichier contenait
+-- `delete from storage.buckets where id = 'hermes-photo-proxies';`.
+-- MESURÉ sur ce projet, Postgres REFUSE toute suppression directe dans les
+-- tables `storage.*` :
+--     ERROR 42501: Direct deletion from storage tables is not allowed.
+--                  Use the Storage API instead.
+--     HINT:  This prevents accidental data loss from orphaned objects.
+--     CONTEXT: PL/pgSQL function storage.protect_delete()
+-- Cette instruction faisait donc ÉCHOUER L'INTÉGRALITÉ de ce rollback — y
+-- compris les parties qui, elles, fonctionnent. Elle est retirée.
+--
+-- PROCÉDURE CORRECTE pour retirer le bucket, APRÈS ce rollback :
+--     supabase storage rm --recursive ss:///hermes-photo-proxies
+--     puis suppression du bucket depuis le dashboard Supabase (API Storage)
+--
+-- Conséquence assumée et dite franchement : après ce rollback SQL, le bucket
+-- SUBSISTE — mais il est PRIVÉ et n'a plus AUCUNE policy, donc plus aucun accès
+-- depuis le navigateur. Il est inerte, pas dangereux.
+--
+-- Aucune autre modification n'est apportée au Pack Photo par ce correctif.
 
 begin;
 
@@ -47,7 +66,8 @@ drop policy if exists "hermes_photo_proxy_update_tenant" on storage.objects;
 drop policy if exists "hermes_photo_proxy_select_tenant" on storage.objects;
 drop policy if exists "hermes_photo_proxy_insert_tenant" on storage.objects;
 
-delete from storage.buckets where id = 'hermes-photo-proxies';
+-- Le bucket N'EST PAS supprimé ici — voir l'en-tête (correctif PV-3).
+-- Ses policies viennent d'être retirées : il devient inerte.
 
 -- --- Lot 3 : façades -------------------------------------------------------
 drop function if exists public.record_photo_consent(uuid, text[], text[], text, text, boolean, boolean, text, uuid, timestamptz);

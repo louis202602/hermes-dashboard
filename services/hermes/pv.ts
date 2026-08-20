@@ -4,6 +4,9 @@ import { logEvent } from "@/lib/observability/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   PvBillExtraction,
+  PvPilotSnapshot,
+  PvPurgeCandidate,
+  PvPurgeReport,
   PvConsumptionProfile,
   PvDocument,
   PvEconomics,
@@ -33,6 +36,15 @@ import type {
 export const PV_DOCUMENT_BUCKET = "hermes-pv-documents";
 /** TTL des URLs signées (secondes). Court : le temps d'ouvrir un document. */
 const SIGNED_URL_TTL_SECONDS = 300;
+/** Plafond du bucket, redit ici pour refuser AVANT d'envoyer le moindre octet. */
+export const PV_DOCUMENT_MAX_BYTES = 26_214_400;
+/** Allowlist MIME du bucket, même raison. La base reste l'arbitre final. */
+export const PV_DOCUMENT_ALLOWED_MIME = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+] as const;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return (value ?? {}) as Record<string, unknown>;
@@ -577,4 +589,382 @@ export async function verifyPvEconomics(
 export async function softDeletePvDocument(documentId: string): Promise<PvWriteOutcome> {
   const payload = await callRpc("soft_delete_pv_document", { p_document_id: documentId });
   return outcome(payload, "document_id");
+}
+
+// --- PV-3 : documents réels ---------------------------------------------------
+
+/**
+ * Emplacement réservé PAR LA BASE avant téléversement.
+ *
+ * Le navigateur ne choisit ni le tenant, ni le bucket, ni le chemin : la façade
+ * `prepare_pv_document` attribue l'identifiant du document ET construit le chemin
+ * `<tenant>/<site>/<document>/<fichier assaini>`. C'est ce qui rend le contrôle
+ * de périmètre à la finalisation non contournable.
+ */
+export async function preparePvDocument(input: {
+  siteId: string;
+  docType: string;
+  filename?: string | null;
+}): Promise<{
+  ok: boolean;
+  code: string;
+  documentId: string | null;
+  bucket: string;
+  path: string | null;
+  maxBytes: number;
+  allowedMime: string[];
+}> {
+  const payload = await callRpc("prepare_pv_document", {
+    p_site_id: input.siteId,
+    p_doc_type: input.docType,
+    p_filename: input.filename ?? null,
+  });
+  if (!payload || !payload.ok) {
+    return {
+      ok: false,
+      code: String(payload?.code ?? "RPC_ERROR"),
+      documentId: null,
+      bucket: PV_DOCUMENT_BUCKET,
+      path: null,
+      maxBytes: PV_DOCUMENT_MAX_BYTES,
+      allowedMime: [...PV_DOCUMENT_ALLOWED_MIME],
+    };
+  }
+  return {
+    ok: true,
+    code: "OK",
+    documentId: str(payload.document_id),
+    bucket: String(payload.bucket ?? PV_DOCUMENT_BUCKET),
+    path: str(payload.path),
+    maxBytes: num(payload.max_bytes, PV_DOCUMENT_MAX_BYTES),
+    allowedMime: Array.isArray(payload.allowed_mime)
+      ? (payload.allowed_mime as string[])
+      : [...PV_DOCUMENT_ALLOWED_MIME],
+  };
+}
+
+/**
+ * Téléversement COMPLET : prepare → upload serveur → finalize.
+ *
+ * Les octets transitent par le serveur — compromis assumé, hérité du patron des
+ * proxies photo. Un envoi direct navigateur → Storage serait plus rapide mais
+ * imposerait d'exposer le tenant au client, ce que toute la chaîne PV refuse.
+ *
+ * Trois refus AVANT le moindre octet écrit : MIME hors allowlist, taille
+ * au-delà du plafond, site hors du tenant. Et si l'upload réussit mais que la
+ * finalisation refuse le chemin, l'objet reste ORPHELIN et non référencé —
+ * jamais rattaché à une donnée métier.
+ */
+export async function uploadPvDocument(input: {
+  siteId: string;
+  docType: string;
+  filename: string;
+  mimeType: string;
+  bytes: ArrayBuffer;
+}): Promise<PvWriteOutcome> {
+  if (!PV_DOCUMENT_ALLOWED_MIME.includes(input.mimeType as never)) {
+    return { ok: false, code: "BAD_MIME", id: null };
+  }
+  if (input.bytes.byteLength <= 0 || input.bytes.byteLength > PV_DOCUMENT_MAX_BYTES) {
+    return { ok: false, code: "BAD_SIZE", id: null };
+  }
+
+  const slot = await preparePvDocument({
+    siteId: input.siteId,
+    docType: input.docType,
+    filename: input.filename,
+  });
+  if (!slot.ok || slot.documentId === null || slot.path === null) {
+    return { ok: false, code: slot.code, id: null };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.storage
+    .from(PV_DOCUMENT_BUCKET)
+    .upload(slot.path, input.bytes, { contentType: input.mimeType, upsert: false });
+  if (error) {
+    logEvent("error", "pv.document_upload_failed", { code: error.name });
+    return { ok: false, code: "UPLOAD_FAILED", id: null };
+  }
+
+  // SHA-256 du contenu, calculé côté serveur sur les octets réellement reçus.
+  // Empreinte d'INTÉGRITÉ, pas de sécurité : elle permet de constater qu'un
+  // document a changé, elle n'authentifie personne.
+  const digest = await crypto.subtle.digest("SHA-256", input.bytes);
+  const sha256 = [...new Uint8Array(digest)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  const finalized = await callRpc("finalize_pv_document", {
+    p_document_id: slot.documentId,
+    p_site_id: input.siteId,
+    p_doc_type: input.docType,
+    p_path: slot.path,
+    p_mime: input.mimeType,
+    p_bytes: input.bytes.byteLength,
+    p_sha256: sha256,
+    p_filename: input.filename,
+  });
+  return outcome(finalized, "document_id");
+}
+
+/** Documents purgeables : supprimés logiquement, hors délai de grâce, encore présents. */
+export async function listPvDocumentsToPurge(
+  olderThan = "7 days",
+  limit = 100,
+): Promise<PvPurgeCandidate[]> {
+  const payload = await callRpc("list_pv_documents_to_purge", {
+    p_older_than: olderThan,
+    p_limit: limit,
+  });
+  return rows(payload).map((d) => ({
+    documentId: String(d.document_id ?? ""),
+    bucket: String(d.bucket ?? PV_DOCUMENT_BUCKET),
+    path: String(d.path ?? ""),
+    deletedAt: str(d.deleted_at),
+  }));
+}
+
+/**
+ * PURGE RÉELLE des octets. Ordre NON interchangeable :
+ *   1. lister · 2. supprimer via l'API Storage · 3. enregistrer.
+ *
+ * Marquer avant d'effacer rendrait l'objet définitivement orphelin : plus aucune
+ * ligne ne porterait son chemin, donc plus personne ne saurait qu'il existe.
+ *
+ * IDEMPOTENTE : rejouée, elle ne trouve plus rien à faire. Un document déjà
+ * purgé répond `ALREADY_PURGED`, jamais une erreur. Et elle ne peut PAS sortir
+ * du tenant : la liste vient d'une façade tenant-scopée, et chaque chemin est
+ * re-vérifié contre le préfixe du tenant avant suppression.
+ */
+export async function purgePvDocuments(options: {
+  olderThan?: string;
+  limit?: number;
+  tenantPrefix?: string;
+} = {}): Promise<PvPurgeReport> {
+  const candidates = await listPvDocumentsToPurge(options.olderThan ?? "7 days", options.limit ?? 100);
+  const report: PvPurgeReport = { examined: candidates.length, purged: 0, skipped: 0, failed: 0 };
+  if (candidates.length === 0) return report;
+
+  const supabase = await createSupabaseServerClient();
+  for (const c of candidates) {
+    // Défense en profondeur : le bucket doit être CELUI du lot, et le chemin doit
+    // rester dans l'arborescence du tenant. La façade borne déjà ; on ne délègue
+    // pas une suppression irréversible à une seule couche.
+    const prefixOk =
+      options.tenantPrefix === undefined || c.path.startsWith(`${options.tenantPrefix}/`);
+    if (c.bucket !== PV_DOCUMENT_BUCKET || c.path.length === 0 || !prefixOk) {
+      report.skipped += 1;
+      continue;
+    }
+
+    const { error } = await supabase.storage.from(PV_DOCUMENT_BUCKET).remove([c.path]);
+    if (error) {
+      logEvent("error", "pv.document_purge_failed", { code: error.name });
+      report.failed += 1;
+      continue;
+    }
+
+    const marked = await callRpc("mark_pv_document_purged", { p_document_id: c.documentId });
+    if (marked?.ok) report.purged += 1;
+    else report.failed += 1;
+  }
+  return report;
+}
+
+// --- PV-3 : travail manuel ----------------------------------------------------
+
+export async function verifyPvConsumptionProfile(
+  profileId: string,
+  opts: { reject?: boolean; reason?: string | null } = {},
+): Promise<PvWriteOutcome> {
+  const payload = await callRpc("verify_pv_consumption_profile", {
+    p_profile_id: profileId,
+    p_reject: opts.reject ?? false,
+    p_reason: opts.reason ?? null,
+  });
+  return outcome(payload, "profile_id");
+}
+
+export async function upsertPvStudy(input: {
+  studyId?: string | null;
+  siteId?: string | null;
+  targetPowerKwc?: number | null;
+  panelCount?: number | null;
+  panelUnitPowerW?: number | null;
+  panelBrand?: string | null;
+  panelReference?: string | null;
+  inverterType?: string | null;
+  inverterBrand?: string | null;
+  inverterReference?: string | null;
+  microinverterCount?: number | null;
+  hasBattery?: boolean | null;
+  batteryCapacityKwh?: number | null;
+  batteryPowerKw?: number | null;
+  annualProductionKwh?: number | null;
+  specificYieldKwhKwc?: number | null;
+  selfConsumptionRatePct?: number | null;
+  selfProductionRatePct?: number | null;
+  surplusKwh?: number | null;
+  systemLossesPct?: number | null;
+  calculationMethod?: string | null;
+  source?: string | null;
+  sourceReference?: string | null;
+  notes?: string | null;
+}): Promise<PvWriteOutcome> {
+  const payload = await callRpc("upsert_pv_study", {
+    p_study_id: input.studyId ?? null,
+    p_site_id: input.siteId ?? null,
+    p_target_power_kwc: input.targetPowerKwc ?? null,
+    p_panel_count: input.panelCount ?? null,
+    p_panel_unit_power_w: input.panelUnitPowerW ?? null,
+    p_panel_brand: input.panelBrand ?? null,
+    p_panel_reference: input.panelReference ?? null,
+    p_inverter_type: input.inverterType ?? null,
+    p_inverter_brand: input.inverterBrand ?? null,
+    p_inverter_reference: input.inverterReference ?? null,
+    p_microinverter_count: input.microinverterCount ?? null,
+    p_has_battery: input.hasBattery ?? null,
+    p_battery_capacity_kwh: input.batteryCapacityKwh ?? null,
+    p_battery_power_kw: input.batteryPowerKw ?? null,
+    p_annual_production_kwh: input.annualProductionKwh ?? null,
+    p_specific_yield_kwh_kwc: input.specificYieldKwhKwc ?? null,
+    p_self_consumption_rate_pct: input.selfConsumptionRatePct ?? null,
+    p_self_production_rate_pct: input.selfProductionRatePct ?? null,
+    p_surplus_kwh: input.surplusKwh ?? null,
+    p_system_losses_pct: input.systemLossesPct ?? null,
+    p_calculation_method: input.calculationMethod ?? null,
+    p_source: input.source ?? null,
+    p_source_reference: input.sourceReference ?? null,
+    p_notes: input.notes ?? null,
+  });
+  return outcome(payload, "study_id");
+}
+
+export async function upsertPvStudyAssumptions(input: {
+  studyId: string;
+  energyPriceEurKwh?: number | null;
+  energyPriceInflationPct?: number | null;
+  analysisHorizonYears?: number | null;
+  discountRatePct?: number | null;
+  panelDegradationPctYear?: number | null;
+  systemLossesPct?: number | null;
+  surplusSalePriceEurKwh?: number | null;
+  subsidyTotalEur?: number | null;
+  subsidyScheme?: string | null;
+  vatRatePct?: number | null;
+}): Promise<PvWriteOutcome> {
+  const payload = await callRpc("upsert_pv_study_assumptions", {
+    p_study_id: input.studyId,
+    p_energy_price_eur_kwh: input.energyPriceEurKwh ?? null,
+    p_energy_price_inflation_pct: input.energyPriceInflationPct ?? null,
+    p_analysis_horizon_years: input.analysisHorizonYears ?? null,
+    p_discount_rate_pct: input.discountRatePct ?? null,
+    p_panel_degradation_pct_year: input.panelDegradationPctYear ?? null,
+    p_system_losses_pct: input.systemLossesPct ?? null,
+    p_surplus_sale_price_eur_kwh: input.surplusSalePriceEurKwh ?? null,
+    p_subsidy_total_eur: input.subsidyTotalEur ?? null,
+    p_subsidy_scheme: input.subsidyScheme ?? null,
+    p_vat_rate_pct: input.vatRatePct ?? null,
+  });
+  return outcome(payload, "study_id");
+}
+
+export async function setPvStudyStatus(studyId: string, status: string): Promise<PvWriteOutcome> {
+  const payload = await callRpc("set_pv_study_status", {
+    p_study_id: studyId,
+    p_status: status,
+  });
+  return { ...outcome(payload, "study_id"), id: studyId };
+}
+
+export async function upsertPvEconomics(input: {
+  economicsId?: string | null;
+  studyId?: string | null;
+  investmentHtEur?: number | null;
+  investmentTtcEur?: number | null;
+  subsidyTotalEur?: number | null;
+  netCostEur?: number | null;
+  year1SavingsEur?: number | null;
+  surplusRevenueEur?: number | null;
+  annualGainEur?: number | null;
+  simpleRoiPct?: number | null;
+  paybackYears?: number | null;
+  npvEur?: number | null;
+  irrPct?: number | null;
+}): Promise<PvWriteOutcome> {
+  const payload = await callRpc("upsert_pv_economics", {
+    p_economics_id: input.economicsId ?? null,
+    p_study_id: input.studyId ?? null,
+    p_investment_ht_eur: input.investmentHtEur ?? null,
+    p_investment_ttc_eur: input.investmentTtcEur ?? null,
+    p_subsidy_total_eur: input.subsidyTotalEur ?? null,
+    p_net_cost_eur: input.netCostEur ?? null,
+    p_year1_savings_eur: input.year1SavingsEur ?? null,
+    p_surplus_revenue_eur: input.surplusRevenueEur ?? null,
+    p_annual_gain_eur: input.annualGainEur ?? null,
+    p_simple_roi_pct: input.simpleRoiPct ?? null,
+    p_payback_years: input.paybackYears ?? null,
+    p_npv_eur: input.npvEur ?? null,
+    p_irr_pct: input.irrPct ?? null,
+  });
+  return outcome(payload, "economics_id");
+}
+
+export async function setPvEconomicsStatus(
+  economicsId: string,
+  status: string,
+): Promise<PvWriteOutcome> {
+  const payload = await callRpc("set_pv_economics_status", {
+    p_economics_id: economicsId,
+    p_status: status,
+  });
+  return { ...outcome(payload, "economics_id"), id: economicsId };
+}
+
+/** Instantané de pilotage — UN appel pour les trois widgets PV. */
+export async function getPvPilotSnapshot(limit = 5): Promise<PvPilotSnapshot> {
+  const payload = await callRpc("get_pv_pilot_snapshot", { p_limit: limit });
+  const empty: PvPilotSnapshot = {
+    ok: false,
+    studiesToValidate: 0,
+    billsToVerify: 0,
+    prospectsWithoutSite: 0,
+    studies: [],
+    bills: [],
+    prospects: [],
+  };
+  if (!payload || !payload.ok) return empty;
+
+  const list = (key: string): Record<string, unknown>[] =>
+    Array.isArray(payload[key]) ? (payload[key] as Record<string, unknown>[]) : [];
+
+  return {
+    ok: true,
+    studiesToValidate: num(payload.studies_to_validate),
+    billsToVerify: num(payload.bills_to_verify),
+    prospectsWithoutSite: num(payload.prospects_without_site),
+    studies: list("studies").map((s) => ({
+      id: String(s.id ?? ""),
+      siteId: String(s.site_id ?? ""),
+      version: num(s.version, 1),
+      status: String(s.status ?? "DRAFT"),
+      preparedBy: String(s.prepared_by ?? "MANUAL"),
+      targetPowerKwc: numOrNull(s.target_power_kwc),
+    })),
+    bills: list("bills").map((b) => ({
+      id: String(b.id ?? ""),
+      siteId: String(b.site_id ?? ""),
+      supplier: str(b.supplier),
+      status: String(b.status ?? "RECEIVED"),
+      consumptionKwh: numOrNull(b.consumption_kwh),
+    })),
+    prospects: list("prospects").map((p) => ({
+      id: String(p.id ?? ""),
+      firstName: str(p.first_name),
+      lastName: str(p.last_name),
+      companyName: str(p.company_name),
+      status: String(p.status ?? "NEW"),
+    })),
+  };
 }

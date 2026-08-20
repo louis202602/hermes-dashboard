@@ -25,10 +25,10 @@
 --     Conséquence assumée et dite franchement : après ce rollback, le bucket
 --     SUBSISTE — mais il est PRIVÉ et n'a plus AUCUNE policy, donc plus aucun
 --     accès depuis le navigateur. Il est inerte, pas dangereux.
---     ⚠️ Le rollback du lot photo (`20260818_photo_studio_9_rollback.sql`)
---     contient la même instruction `delete from storage.buckets` et échouerait
---     aujourd'hui pour cette raison. Constaté, non corrigé ici : hors périmètre
---     de PV-2 — signalé dans le rapport.
+--     ⚠️ Les rollbacks du lot photo et des pièces jointes du chat portaient la
+--     même instruction. CORRIGÉS depuis, au lot PV-3 : plus aucun fichier
+--     `*_rollback.sql` du dépôt ne contient `delete from storage.buckets`, et
+--     un test structurel l'interdit désormais.
 
 begin;
 
