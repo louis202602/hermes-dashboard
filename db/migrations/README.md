@@ -1123,3 +1123,55 @@ couvrant les 12 tests exigés + audit + promotion + RLS, dont le rollback réel 
 
 `tests/pv1-schema-migrations.test.ts` — 22 assertions de contrat sur le diff SQL.
 Vérifié par mutation : remplacer une FK composite par une FK simple fait échouer un test.
+
+## 2026-08-20 — GOUVERNANCE DES MIGRATIONS PRODUCTION — **NON APPLIQUÉE**
+
+Le 2026-08-19, deux sessions Claude ont écrit sur la même base à quelques minutes
+d'intervalle (PV-1 à 13:22, PV-2 à 16:10–16:14) pendant qu'une troisième mission
+auditait cette même base. Aucune n'a mal agi ; aucune ne pouvait savoir. Ce lot
+supprime cette cécité mutuelle.
+
+| Fichier | Migration à appliquer | Objet |
+|------|-------------------|---------|
+| `20260820_hermes_migration_governance_1_lock.sql` | `hermes_migration_governance_1_lock` | `production_migration_lock` (singleton structurel) + `…_lock_history` |
+| `20260820_hermes_migration_governance_2_functions.sql` | `hermes_migration_governance_2_functions` | `acquire_…` / `release_…` / `…_status` |
+| `20260820_hermes_migration_governance_3_baseline.sql` | `hermes_migration_governance_3_baseline` | photo de la dette + `migrations_since_baseline()` |
+| `20260820_hermes_migration_governance_9_rollback.sql` | — | démontage complet |
+
+**Mode = COOPÉRATIF.** Pas d'`event trigger` DDL : le verrou rend l'occupation
+visible et opposable, il ne peut pas l'empêcher. C'est un choix assumé, documenté
+dans `docs/hermes-migrations-production.md`.
+
+### Garanties structurelles
+
+* `ONE_ACTIVE_LOCK_MAX` — `primary key (lock_id)` + `check (lock_id = 'PRODUCTION')`.
+  La table **ne peut pas** contenir deux lignes ; ce n'est pas une convention.
+* `TTL_REQUIRED` — borné des deux côtés en base (`> acquired_at`, `<= +2 heures`),
+  et en fonction (1 à 120 minutes). Un verrou éternel est un interblocage différé.
+* `EXPIRED_LOCK_CAN_BE_RECLAIMED` — la reprise archive le détenteur périmé
+  **avant** de supprimer sa ligne, et renvoie un avertissement : un verrou expiré
+  signale une migration qui n'a jamais dit qu'elle était finie.
+* `base_sha ~ '^[0-9a-f]{40}$'` — on ne verrouille pas en déclarant « main ».
+* RLS deny-all, `revoke all … from public, anon, authenticated`, aucune façade
+  `public` : ce n'est pas une capacité métier.
+
+### Dette historique
+
+Sur ~203 migrations appliquées, la grande majorité n'a aucun fichier ici. Une règle
+« toute migration sans fichier = STOP » bloquerait Hermès et serait désactivée le
+lendemain. `migration_baseline` photographie donc l'existant : **`LEGACY_BASELINE`**
+ne bloque rien, **`NEW_UNVERSIONED_DRIFT`** (appliqué après la frontière, sans
+fichier) rend `STOP_UNVERSIONED_DB_DRIFT`.
+
+### Preuves
+
+* **25 assertions sur PostgreSQL réel** — acquisition, contention, réentrance,
+  refus de libération par un tiers, TTL invalides, SHA invalide, identité vide,
+  reprise après expiration, singleton (deux `insert` refusés par la base),
+  `update` direct au-delà de 2 h refusé, non-reprise de la photo de base.
+* `tests/migration-drift-guard.test.ts` — 26 assertions de contrat.
+  Vérifié par mutation (7 mutations) : neutraliser le singleton, exposer une
+  fonction à `authenticated`, rendre le rapprochement de noms approximatif dans un
+  sens **ou dans l'autre**, oublier une table dans le rollback, faire diverger le
+  script du module, ou neutraliser son contrôle de ligne de base — chacune fait
+  échouer au moins un test.
