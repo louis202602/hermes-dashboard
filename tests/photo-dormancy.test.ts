@@ -166,7 +166,11 @@ test("EXISTING_TENANT_BEHAVIOR_CHANGED=NO : les points d'extension sont optionne
   // comportement à l'identique.
   assert.ok(read("../lib/dashboard/homeProfile.ts").includes("photoModuleEnabled = false"));
   const css = read("../app/globals.css");
-  const block = css.slice(css.indexOf("PHOTO-P0 — Verticale Hermès Studio"));
+  // Même borne que dans `photo-registry.test.ts` : la garde porte sur le BLOC
+  // photo, pas sur tout ce que le fichier contiendra un jour après lui.
+  const start = css.indexOf("PHOTO-P0 — Verticale Hermès Studio");
+  const next = css.indexOf("PACK PHOTOVOLTAÏQUE — LOT PV-2.");
+  const block = css.slice(start, next > start ? next : undefined);
   const selectors = [...block.matchAll(/^\.([a-z0-9-]+)/gm)].map((m) => m[1]);
   assert.ok(selectors.every((sel) => sel.startsWith("photo-")), "sélecteur non préfixé");
 });

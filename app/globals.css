@@ -6182,3 +6182,82 @@ html[data-reduce-transparency="1"] .notif-panel {
 .photo-stat { display: flex; flex-direction: column; gap: 2px; min-width: 120px; }
 .photo-stat-value { font-size: 20px; font-weight: 600; color: var(--text-primary); }
 .photo-stat-label { font-size: 11.5px; color: var(--text-secondary); }
+
+/* ---------------------------------------------------------------------------
+   PACK PHOTOVOLTAÏQUE — LOT PV-2.
+   Réutilise les tokens existants (aucune nouvelle variable de thème). Les tons
+   de badge portent la distinction structurelle de PV-1 : ce qu'une machine a
+   produit n'a JAMAIS l'apparence de ce qu'un humain a certifié. La couleur ne
+   porte jamais l'information seule — le libellé le dit aussi en toutes lettres.
+--------------------------------------------------------------------------- */
+.pv-card { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.pv-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: flex-end;
+}
+.pv-filters .agent-field { flex: 1 1 180px; min-width: 0; }
+
+.pv-inline-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+
+.pv-checkbox { flex-direction: row; align-items: center; gap: 8px; }
+
+.pv-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+.pv-facts div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pv-facts dt { font-size: 11.5px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+.pv-facts dd { margin: 0; font-size: 13.5px; color: var(--text-primary); }
+
+.pv-badge {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.pv-badge-certified { background: var(--accent-soft); border-color: var(--accent); color: var(--text-primary); }
+.pv-badge-pending { background: var(--surface-soft); border-style: dashed; color: var(--text-secondary); }
+.pv-badge-draft { background: transparent; color: var(--text-secondary); }
+.pv-badge-rejected { background: transparent; border-style: dotted; color: var(--text-secondary); text-decoration: line-through; }
+.pv-badge-neutral { background: transparent; color: var(--text-secondary); }
+
+.pv-warning {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border-strong);
+  background: var(--surface-soft);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.pv-bill-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.pv-bill {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+.pv-bill-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.pv-bill-head strong { font-size: 14px; color: var(--text-primary); display: block; }
+
+.pv-extractions,
+.pv-assumptions,
+.pv-economics {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.pv-economics-block { display: flex; flex-direction: column; gap: 8px; }

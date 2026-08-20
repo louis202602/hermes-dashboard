@@ -445,10 +445,21 @@ export const MODULE_REGISTRY: ModuleDef[] = [
     // n'existe que là où elle débouche sur un chantier.
     capabilityTokens: ["quotes"],
     requiresAllTokens: ["quotes", "worksites"],
-    route: null,
+    // PV-2 : la page existe désormais. `/etudes` est la RACINE de la verticale
+    // photovoltaïque — prospects PV, sites, énergie, études, chiffrage vivent
+    // sous ce préfixe, donc sous CE module. Aucune entrée de menu parallèle
+    // n'est créée : le menu, la garde serveur et le filtre de widgets
+    // continuent de lire la même table de modules.
+    route: "/etudes",
     ownedRoutes: ["/etudes"],
     widgets: [],
-    actionPrefixes: ["btp.qualification."],
+    // `pv.*` — les trois capacités PV (`pv.bill.extract`, `pv.study.prepare`,
+    // `pv.economics.compute`) sont rattachées ici. Sans ce rattachement,
+    // `isActionAllowed` les refuserait (elle est fail-closed) ; avec lui, elles
+    // restent malgré tout INEXÉCUTABLES tant que le catalogue les garde
+    // `enabled = false`. Le rattachement dit à QUI l'action appartiendrait,
+    // il n'active rien.
+    actionPrefixes: ["btp.qualification.", "pv."],
   },
   {
     id: "worksites",
