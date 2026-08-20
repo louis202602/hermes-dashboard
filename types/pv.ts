@@ -294,6 +294,11 @@ export type PvPurgeReport = {
   purged: number;
   skipped: number;
   failed: number;
+  /**
+   * PV-4 — code de la façade de listage. `NOT_ADMIN` doit être distingué d'un
+   * `OK` sans candidat : un refus de droits n'est pas « rien à purger ».
+   */
+  code: string;
 };
 
 export type PvPilotStudy = {
@@ -333,4 +338,101 @@ export type PvPilotSnapshot = {
   studies: PvPilotStudy[];
   bills: PvPilotBill[];
   prospects: PvPilotProspect[];
+};
+
+// --- PV-4 ---------------------------------------------------------------------
+
+/** Entrée du journal de purge — jointure `pv_documents` × `entity_audit_log`. */
+export type PvPurgeJournalEntry = {
+  documentId: string;
+  siteId: string;
+  docType: string;
+  originalFilename: string | null;
+  sizeBytes: number;
+  deletedAt: string | null;
+  deletedBy: string | null;
+  purgedAt: string | null;
+  purgedPath: string | null;
+  purgedBy: string | null;
+  outcome: string;
+};
+
+export type PvDealProspect = {
+  id: string;
+  prospectType: string;
+  firstName: string | null;
+  lastName: string | null;
+  companyName: string | null;
+  phone: string | null;
+  email: string | null;
+  source: string;
+  ownerUserId: string | null;
+  contactConsent: boolean;
+  contactConsentAt: string | null;
+  optedOut: boolean;
+  status: string;
+};
+
+export type PvDealSite = {
+  id: string;
+  label: string | null;
+  addressLine1: string | null;
+  postalCode: string | null;
+  city: string | null;
+  buildingType: string | null;
+  buildingUse: string | null;
+  occupancy: string | null;
+  roofType: string | null;
+  roofMaterial: string | null;
+  roofCondition: string | null;
+  roofAreaTotalM2: number | null;
+  roofAreaUsableM2: number | null;
+  azimuthDeg: number | null;
+  tiltDeg: number | null;
+  shadingLevel: string | null;
+  accessDifficulty: string | null;
+};
+
+export type PvDealDocument = {
+  id: string;
+  docType: string;
+  documentStage: string;
+  originalFilename: string | null;
+  mimeType: string;
+  sizeBytes: number;
+  status: string;
+  storagePath: string | null;
+  uploadedAt: string | null;
+  signedUrl: string | null;
+};
+
+/**
+ * L'AFFAIRE — agrégat de lecture, jamais une source de vérité.
+ *
+ * `retainedStudy` et `retainedEconomics` suivent la règle déterministe de la
+ * façade : étude VALIDATED de plus haut numéro de version, puis chiffrage
+ * VERIFIED le plus récent de CETTE étude. Un brouillon n'est jamais retenu, même
+ * s'il est le plus récent.
+ */
+export type PvDeal = {
+  prospect: PvDealProspect;
+  site: PvDealSite | null;
+  consumption: PvConsumptionProfile | null;
+  verifiedBill: PvEnergyBill | null;
+  retainedStudy: PvStudy | null;
+  latestStudy: PvStudy | null;
+  retainedAssumptions: PvStudyAssumptions | null;
+  retainedEconomics: PvEconomics | null;
+  studies: { id: string; version: number; status: string; preparedBy: string; targetPowerKwc: number | null }[];
+  documents: PvDealDocument[];
+};
+
+/** Résultat d'une génération de synthèse PDF. */
+export type PvPdfOutcome = {
+  ok: boolean;
+  code: string;
+  documentId: string | null;
+  stage: "DRAFT" | "FINAL" | null;
+  /** Motif précis du refus d'un FINAL, quand il y en a un. */
+  reason: string | null;
 };

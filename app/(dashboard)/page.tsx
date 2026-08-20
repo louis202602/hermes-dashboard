@@ -1,4 +1,10 @@
 import CommandCenter from "@/components/dashboard/CommandCenter";
+import DashboardWidgetBoard from "@/components/dashboard/DashboardWidgetBoard";
+import {
+  PvBillsToVerifyWidget,
+  PvProspectsWithoutSiteWidget,
+  PvStudiesToValidateWidget,
+} from "@/components/dashboard/PvWidgets";
 import {
   actionableAlertCount,
   nextEventForBar,
@@ -34,6 +40,8 @@ import {
   getPlatformHealth,
 } from "@/services/hermes/panels";
 import { getDashboardUserPreferences } from "@/services/hermes/preferences";
+import { resolvePageContext } from "@/lib/dashboard/pageContext";
+import { getPvPilotSnapshot } from "@/services/hermes/pv";
 import { classifyPlatformHealth } from "@/lib/dashboard/systemActivity";
 import { getActiveTenantIdentity } from "@/services/hermes/tenantIdentity";
 
@@ -165,19 +173,50 @@ export default async function CommandCenterPage() {
     showSeconds,
   });
 
+  // PV-4 — LA GRILLE DE WIDGETS, enfin branchée.
+  //
+  // `EditableWidgetGrid` existait depuis DASH-4C mais n'était rendue nulle part :
+  // le catalogue de widgets était une déclaration sans effet. On la branche ici,
+  // sous le cockpit, en réutilisant la composition de verticale — donc SANS
+  // grille spécifique à un métier.
+  //
+  // COÛT : la composition est déjà calculée par `resolvePageContext` (mise en
+  // cache par requête), et l'instantané PV n'est lu QUE si le tenant possède
+  // réellement un widget solaire. Un tenant photo ne déclenche aucune lecture PV.
+  const pageContext = await resolvePageContext();
+  const composedWidgets = pageContext.composition.widgets;
+  const needsPvSnapshot = composedWidgets.some((id) => id.startsWith("pv-"));
+  const pvSnapshot = needsPvSnapshot ? await getPvPilotSnapshot() : null;
+
+  const widgetSlots = pvSnapshot
+    ? {
+        "pv-studies-to-validate": <PvStudiesToValidateWidget snapshot={pvSnapshot} />,
+        "pv-bills-to-verify": <PvBillsToVerifyWidget snapshot={pvSnapshot} />,
+        "pv-prospects-without-site": <PvProspectsWithoutSiteWidget snapshot={pvSnapshot} />,
+      }
+    : {};
+
   return (
-    <CommandCenter
-      contextBar={contextBar}
-      initialClock={initialClock}
-      contextSegments={contextSegments}
-      tenant={tenant}
-      heroStatus={heroStatus}
-      alertCount={alertCount}
-      alertTone={alertTone}
-      priorities={priorities}
-      kpis={kpis}
-      capabilities={capabilities}
-      quickActions={prefs.behavior.quickActions}
-    />
+    <>
+      <CommandCenter
+        contextBar={contextBar}
+        initialClock={initialClock}
+        contextSegments={contextSegments}
+        tenant={tenant}
+        heroStatus={heroStatus}
+        alertCount={alertCount}
+        alertTone={alertTone}
+        priorities={priorities}
+        kpis={kpis}
+        capabilities={capabilities}
+        quickActions={prefs.behavior.quickActions}
+      />
+      <DashboardWidgetBoard
+        available={composedWidgets}
+        initialLayout={prefs.layout}
+        version={prefs.version}
+        slots={widgetSlots}
+      />
+    </>
   );
 }

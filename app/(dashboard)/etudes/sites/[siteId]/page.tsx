@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import PvDocumentsPanel from "@/components/dashboard/PvDocumentsPanel";
+import PvPurgeJournalPanel from "@/components/dashboard/PvPurgeJournalPanel";
 import PvEnergyPanel from "@/components/dashboard/PvEnergyPanel";
 import PvSiteDetailPanel from "@/components/dashboard/PvSiteDetailPanel";
 import { PvNewStudyForm, PvStudyEditor } from "@/components/dashboard/PvStudyEditor";
@@ -10,6 +11,7 @@ import {
   getPvBillExtractions,
   getPvConsumptionProfiles,
   getPvDocuments,
+  getPvPurgeJournal,
   getPvEconomics,
   getPvEnergyBills,
   getPvSite,
@@ -34,11 +36,12 @@ export default async function PvSitePage({ params }: { params: Promise<{ siteId:
   const site = await getPvSite(siteId);
   if (site === null) notFound();
 
-  const [profiles, bills, studies, documents] = await Promise.all([
+  const [profiles, bills, studies, documents, purgeJournal] = await Promise.all([
     getPvConsumptionProfiles(siteId),
     getPvEnergyBills(siteId),
     getPvStudies(siteId),
     getPvDocuments(siteId),
+    getPvPurgeJournal(50),
   ]);
 
   // Extractions : une lecture par facture QUI EN A. Une facture sans extraction
@@ -85,6 +88,7 @@ export default async function PvSitePage({ params }: { params: Promise<{ siteId:
       ))}
       <PvNewStudyForm siteId={siteId} />
       <PvDocumentsPanel siteId={siteId} documents={documents} />
+      <PvPurgeJournalPanel entries={purgeJournal} />
     </div>
   );
 }

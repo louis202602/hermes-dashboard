@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 
+import { randomUUID } from "node:crypto";
+
 import {
+  generatePvStudySummary,
   promotePvBillExtraction,
   purgePvDocuments,
   setPvEconomicsStatus,
@@ -74,6 +77,20 @@ const ERROR_MESSAGES: Record<string, string> = {
     "La validation humaine passe par le bouton dédié — pas par un changement de statut.",
   NOT_DELETED: "Ce document n’a pas été supprimé : il n’est pas purgeable.",
   ALREADY_PURGED: "Ce document a déjà été purgé.",
+  // — PV-4 —
+  NOT_ADMIN:
+    "Seul un administrateur du tenant peut purger définitivement des documents. Demandez à un administrateur.",
+  GRACE_PERIOD:
+    "Ce document est encore dans son délai de grâce de 7 jours : il n’est pas purgeable.",
+  CONFIRMATION_REQUIRED:
+    "Confirmation requise : cochez la case avant de purger définitivement.",
+  PDF_FINAL_NOT_READY:
+    "Synthèse définitive impossible : l’étude doit être validée et le chiffrage vérifié.",
+  NO_STUDY: "Aucune étude n’est rattachée à ce dossier.",
+  BAD_REQUEST_ID: "Demande de génération invalide.",
+  BAD_STAGE: "Stade de document invalide.",
+  BAD_HASH: "Empreinte du document invalide.",
+  ECONOMICS_NOT_FOUND: "Le chiffrage indiqué n’appartient pas à cette étude.",
 };
 
 export type PvActionState = {
@@ -630,4 +647,99 @@ export async function setPvEconomicsStatusAction(
   const result = await setPvEconomicsStatus(economicsId, status);
   if (result.ok && siteId) revalidatePath(`/etudes/sites/${siteId}`);
   return toState(result);
+}
+
+// --- PV-4 : purge confirmée ---------------------------------------------------
+
+/**
+ * Purge DÉFINITIVE — le seul geste irréversible du Pack PV.
+ *
+ * Deux verrous indépendants, et c'est délibéré :
+ *   1. l'écran EXIGE une confirmation explicite (case à cocher) — protection
+ *      contre l'erreur humaine ;
+ *   2. la BASE exige la permission `tenant.admin` — protection contre le
+ *      contournement. Sauter l'écran ne permet à personne de purger.
+ *
+ * Le premier sans le second serait décoratif ; le second sans le premier
+ * laisserait un administrateur détruire des fichiers d'un clic.
+ */
+export async function purgePvDocumentsConfirmedAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const siteId = text(formData, "site_id");
+  if (formData.get("confirm") !== "PURGER") {
+    return {
+      phase: "error",
+      code: "CONFIRMATION_REQUIRED",
+      message: ERROR_MESSAGES.CONFIRMATION_REQUIRED,
+    };
+  }
+
+  const report = await purgePvDocuments();
+  if (siteId) revalidatePath(`/etudes/sites/${siteId}`);
+
+  if (report.code !== "OK") {
+    return {
+      phase: "error",
+      code: report.code,
+      message: ERROR_MESSAGES[report.code] ?? "Purge refusée.",
+    };
+  }
+  return {
+    phase: report.failed > 0 ? "error" : "ok",
+    code: "PURGE",
+    message:
+      report.failed > 0
+        ? `${report.purged} purgé(s), ${report.failed} en échec sur ${report.examined} examiné(s).`
+        : `${report.purged} document(s) purgé(s) définitivement sur ${report.examined} examiné(s).`,
+  };
+}
+
+// --- PV-4 : synthèse d'étude PDF ----------------------------------------------
+
+/**
+ * Génère la synthèse d'étude. Le stade est décidé par le SERVEUR à partir de
+ * l'état réel du dossier : un FINAL demandé sur un dossier qui ne l'est pas est
+ * refusé, avec le motif précis.
+ *
+ * `request_id` porte l'idempotence. Le formulaire en fournit un ; s'il est
+ * absent, on en fabrique un — mais alors chaque envoi produit un document, ce
+ * qui est le comportement attendu d'une génération explicitement répétée.
+ */
+export async function generatePvStudySummaryAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const prospectId = text(formData, "prospect_id");
+  if (prospectId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+
+  const result = await generatePvStudySummary({
+    prospectId,
+    requestId: text(formData, "request_id") ?? randomUUID(),
+    wantFinal: formData.get("stage") === "FINAL",
+    company: text(formData, "company") ?? "Hermès OS",
+    generatedOn: new Date().toISOString().slice(0, 10),
+  });
+
+  if (result.ok) revalidatePath(`/etudes/affaires/${prospectId}`);
+  if (!result.ok) {
+    const base = ERROR_MESSAGES[result.code] ?? "Génération refusée.";
+    return {
+      phase: "error",
+      code: result.code,
+      message: result.reason ? `${base} (${result.reason})` : base,
+    };
+  }
+  return {
+    phase: "ok",
+    code: result.code,
+    id: result.documentId ?? undefined,
+    message:
+      result.code === "ALREADY_GENERATED"
+        ? "Cette synthèse avait déjà été générée : le document existant est réutilisé."
+        : `Synthèse ${result.stage === "FINAL" ? "définitive" : "brouillon"} générée.`,
+  };
 }
