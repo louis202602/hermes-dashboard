@@ -40,15 +40,18 @@ export default async function RootLayout({
   // so the first paint on ANY device is already correct (no default-theme flash).
   // The read is cache()-shared with the page, so this costs no extra DB round-trip.
   const { appearance, behavior } = await resolveInitialAppearance();
-  const htmlAttrs = appearanceToHtmlAttrs(
-    effectiveAppearance(appearance, behavior),
-  );
+  const eff = effectiveAppearance(appearance, behavior);
+  const htmlAttrs = appearanceToHtmlAttrs(eff);
+  // Liquid Glass level as a numeric CSS var, stamped pre-paint (the glass rules read it
+  // via calc(); harmless when the mode is off).
+  const htmlStyle = { "--glass-level": String(eff.glassLevel) } as React.CSSProperties;
 
   return (
     <html
       lang="fr"
       suppressHydrationWarning
       {...htmlAttrs}
+      style={htmlStyle}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">

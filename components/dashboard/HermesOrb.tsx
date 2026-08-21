@@ -1,10 +1,14 @@
 import type { CSSProperties } from "react";
 
+/** The star/sphere reacts to the system's real Hermès state (no extra AI call). */
+export type OrbState = "idle" | "processing" | "responding" | "success" | "error";
+
 type Props = {
   /** Diameter in px. */
   size?: number;
-  /** "idle" = very slow breathing; "thinking" = brighter, livelier illumination. */
-  state?: "idle" | "thinking";
+  /** idle = calm; processing = pulse + rotation; responding = glow; success = brief
+   *  éclat; error = discreet red signal. */
+  state?: OrbState;
   className?: string;
 };
 

@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import ContextBar from "@/components/dashboard/ContextBar";
-import HermesOrb from "@/components/dashboard/HermesOrb";
+import HermesOrb, { type OrbState } from "@/components/dashboard/HermesOrb";
 import HermesPanel from "@/components/dashboard/HermesPanel";
 import QuickActions from "@/components/dashboard/QuickActions";
 import TenantBadge from "@/components/dashboard/TenantBadge";
@@ -58,8 +58,9 @@ export default function CommandCenter({
   quickActions,
 }: CommandCenterProps) {
   const { t } = useI18n();
-  // Hermès thinking → the identity orb's star comes alive (reported by the hero composer).
-  const [thinking, setThinking] = useState(false);
+  // Hermès real state (processing / responding / success / error) → the identity orb's
+  // star reacts, reported by the hero composer from already-known signals.
+  const [orbState, setOrbState] = useState<OrbState>("idle");
 
   // Real Hermès/platform état (never a fabricated green "operational").
   const heroTone =
@@ -92,11 +93,7 @@ export default function CommandCenter({
       {/* Z2 — poste de commande : identité Hermès + « Demander à Hermès ». */}
       <section className="cc-hero" aria-label={t("home.hero.title")}>
         <div className="cc-hero-head">
-          <HermesOrb
-            size={46}
-            state={thinking ? "thinking" : "idle"}
-            className="cc-hero-orb"
-          />
+          <HermesOrb size={46} state={orbState} className="cc-hero-orb" />
           <div className="cc-hero-copy">
             <TenantBadge identity={tenant} />
             <h1 className="cc-hero-title">{t("home.hero.title")}</h1>
@@ -107,7 +104,7 @@ export default function CommandCenter({
           </div>
         </div>
         <div id="hermes-command" className="cc-hero-ask">
-          <HermesPanel variant="hero" onThinkingChange={setThinking} />
+          <HermesPanel variant="hero" onStateChange={setOrbState} />
         </div>
       </section>
 

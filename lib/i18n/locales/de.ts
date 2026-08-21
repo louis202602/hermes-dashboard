@@ -78,6 +78,8 @@ export const de: Messages = {
   "settings.row.highContrast": "Hoher Kontrast",
   "settings.row.reduceMotion": "Bewegung reduzieren",
   "settings.row.reduceTransparency": "Transparenz reduzieren",
+  "settings.row.liquidGlass": "Liquid Glass",
+  "settings.row.glassLevel": "Glas-Transparenz",
   "settings.row.comfortableDensity": "Komfortable Dichte",
   "settings.row.sidebarCollapsed": "Seitenleiste eingeklappt",
   "settings.row.animations": "Animationen",

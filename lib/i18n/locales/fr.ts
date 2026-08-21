@@ -88,6 +88,8 @@ export const fr = {
   "settings.row.highContrast": "Contraste renforcé",
   "settings.row.reduceMotion": "Réduire les animations",
   "settings.row.reduceTransparency": "Réduire la transparence",
+  "settings.row.liquidGlass": "Liquid Glass",
+  "settings.row.glassLevel": "Transparence du verre",
   "settings.row.comfortableDensity": "Densité confortable",
   "settings.row.sidebarCollapsed": "Sidebar réduite",
   "settings.row.animations": "Animations",

@@ -29,6 +29,8 @@ const MANAGED_KEYS = [
   "density",
   "reduceMotion",
   "reduceTransparency",
+  "liquidGlass",
+  "glasslevel",
 ];
 
 /** Resolve `theme:auto` to light/dark against the OS preference (client-only). */
@@ -53,6 +55,9 @@ export function applyAppearance(a: Appearance): void {
   for (const [k, v] of Object.entries(next)) {
     ds[k] = k === "theme" ? resolveThemeAttr(v) : v;
   }
+  // Liquid Glass level → a numeric CSS custom property the glass rules read via calc()
+  // (a data-* attribute can't feed calc()). Harmless when the mode is off.
+  document.documentElement.style.setProperty("--glass-level", String(a.glassLevel));
 }
 
 /**
