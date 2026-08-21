@@ -38,6 +38,13 @@ import type {
   PvSiteSurveySummary,
   PvSurveyFinding,
   PvSurveyOutcome,
+  PvMaterial,
+  PvMaterialBalanceRow,
+  PvMaterialOutcome,
+  PvMaterialPlan,
+  PvPurchaseOrderDetail,
+  PvSupplier,
+  PvSupplierPrice,
 } from "@/types/pv";
 
 /**
@@ -1250,6 +1257,9 @@ export async function getPvDeal(prospectId: string): Promise<PvDeal | null> {
     // lot ne renvoie pas la clé : on retombe alors sur « aucune visite », ce
     // qui est vrai tant que PV-6 n'est pas appliqué.
     surveyGate: (payload.survey_gate ?? "NONE") as PvDeal["surveyGate"],
+    // PV-7 — lue en base. Une façade antérieure au lot ne renvoie pas la clé :
+    // on retombe alors sur « approvisionnement non engagé », ce qui est vrai.
+    materialReadiness: (payload.material_readiness ?? "NOT_READY") as PvDeal["materialReadiness"],
   };
 }
 
@@ -2177,5 +2187,550 @@ export async function generatePvSurveyReport(input: {
     // opposable au client. On le dit plutôt que de réutiliser FINAL par défaut.
     stage: "DRAFT",
     reason: null,
+  };
+}
+
+// --- PV-7 : approvisionnement matériel ---------------------------------------
+
+/**
+ * Résultat générique d'une façade d'écriture PV-7. Les blocages de commande
+ * remontent TELS QUELS : l'écran doit pouvoir dire pourquoi, pas seulement que.
+ */
+function materialOutcome(payload: Record<string, unknown> | null, idKey: string): PvMaterialOutcome {
+  if (!payload) return { ok: false, code: "RPC_ERROR", id: null, blockers: [] };
+  const missing = payload.missing_requirements;
+  return {
+    ok: Boolean(payload.ok),
+    code: String(payload.code ?? "UNKNOWN"),
+    id: str(payload[idKey]),
+    blockers: Array.isArray(missing) ? missing.map((x) => String(x)) : [],
+  };
+}
+
+function mapMaterial(row: Record<string, unknown>): PvMaterial {
+  return {
+    id: String(row.id ?? ""),
+    category: String(row.category ?? "AUTRE"),
+    subcategory: str(row.subcategory),
+    sku: String(row.sku ?? ""),
+    brand: str(row.brand),
+    manufacturerRef: str(row.manufacturer_ref),
+    designation: String(row.designation ?? ""),
+    description: str(row.description),
+    unit: String(row.unit ?? "U"),
+    isActive: Boolean(row.is_active),
+    unitCostHtEur: numOrNull(row.unit_cost_ht_eur),
+    preferredSupplierId: str(row.preferred_supplier_id),
+    notes: str(row.notes),
+  };
+}
+
+function mapSupplier(row: Record<string, unknown>): PvSupplier {
+  return {
+    id: String(row.id ?? ""),
+    name: String(row.name ?? ""),
+    contactName: str(row.contact_name),
+    email: str(row.email),
+    phone: str(row.phone),
+    addressLine1: str(row.address_line1),
+    postalCode: str(row.postal_code),
+    city: str(row.city),
+    isActive: Boolean(row.is_active),
+    leadTimeDays: numOrNull(row.lead_time_days),
+    paymentTerms: str(row.payment_terms),
+    freeShippingHtEur: numOrNull(row.free_shipping_ht_eur),
+    notes: str(row.notes),
+  };
+}
+
+export async function getPvMaterials(
+  includeInactive = false,
+  category: string | null = null,
+): Promise<PvMaterial[]> {
+  const payload = await callRpc("get_pv_materials", {
+    p_include_inactive: includeInactive,
+    p_category: category,
+  });
+  if (!payload || !payload.ok || !Array.isArray(payload.items)) return [];
+  return (payload.items as Record<string, unknown>[]).map(mapMaterial);
+}
+
+export async function upsertPvMaterial(input: {
+  id?: string | null;
+  category?: string | null;
+  sku?: string | null;
+  designation?: string | null;
+  subcategory?: string | null;
+  brand?: string | null;
+  manufacturerRef?: string | null;
+  description?: string | null;
+  unit?: string | null;
+  unitCostHtEur?: number | null;
+  preferredSupplierId?: string | null;
+  notes?: string | null;
+}): Promise<PvMaterialOutcome> {
+  const payload = await callRpc("upsert_pv_material", {
+    p_id: input.id ?? null,
+    p_category: input.category ?? null,
+    p_sku: input.sku ?? null,
+    p_designation: input.designation ?? null,
+    p_subcategory: input.subcategory ?? null,
+    p_brand: input.brand ?? null,
+    p_manufacturer_ref: input.manufacturerRef ?? null,
+    p_description: input.description ?? null,
+    p_unit: input.unit ?? "U",
+    p_unit_cost_ht_eur: input.unitCostHtEur ?? null,
+    p_preferred_supplier_id: input.preferredSupplierId ?? null,
+    p_notes: input.notes ?? null,
+  });
+  return materialOutcome(payload, "material_id");
+}
+
+export async function setPvMaterialActive(materialId: string, active: boolean): Promise<PvMaterialOutcome> {
+  return materialOutcome(
+    await callRpc("set_pv_material_active", { p_material_id: materialId, p_active: active }),
+    "material_id",
+  );
+}
+
+export async function getPvSuppliers(includeInactive = false): Promise<PvSupplier[]> {
+  const payload = await callRpc("get_pv_suppliers", { p_include_inactive: includeInactive });
+  if (!payload || !payload.ok || !Array.isArray(payload.items)) return [];
+  return (payload.items as Record<string, unknown>[]).map(mapSupplier);
+}
+
+export async function upsertPvSupplier(input: {
+  id?: string | null;
+  name?: string | null;
+  contactName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  addressLine1?: string | null;
+  postalCode?: string | null;
+  city?: string | null;
+  leadTimeDays?: number | null;
+  paymentTerms?: string | null;
+  freeShippingHtEur?: number | null;
+  isActive?: boolean | null;
+  notes?: string | null;
+}): Promise<PvMaterialOutcome> {
+  const payload = await callRpc("upsert_pv_supplier", {
+    p_id: input.id ?? null,
+    p_name: input.name ?? null,
+    p_contact_name: input.contactName ?? null,
+    p_email: input.email ?? null,
+    p_phone: input.phone ?? null,
+    p_address_line1: input.addressLine1 ?? null,
+    p_postal_code: input.postalCode ?? null,
+    p_city: input.city ?? null,
+    p_lead_time_days: input.leadTimeDays ?? null,
+    p_payment_terms: input.paymentTerms ?? null,
+    p_free_shipping_ht_eur: input.freeShippingHtEur ?? null,
+    p_is_active: input.isActive ?? null,
+    p_notes: input.notes ?? null,
+  });
+  return materialOutcome(payload, "supplier_id");
+}
+
+export async function getPvSupplierPrices(materialId: string): Promise<PvSupplierPrice[]> {
+  const payload = await callRpc("get_pv_supplier_prices", { p_material_id: materialId });
+  if (!payload || !payload.ok || !Array.isArray(payload.items)) return [];
+  return (payload.items as Record<string, unknown>[]).map((r) => ({
+    id: String(r.id ?? ""),
+    supplierId: String(r.supplier_id ?? ""),
+    supplierName: String(r.supplier_name ?? ""),
+    supplierRef: str(r.supplier_ref),
+    priceHtEur: num(r.price_ht_eur),
+    minQuantity: num(r.min_quantity),
+    packSize: numOrNull(r.pack_size),
+    validFrom: String(r.valid_from ?? ""),
+    validUntil: str(r.valid_until),
+    leadTimeDays: numOrNull(r.lead_time_days),
+    availability: str(r.availability),
+    source: String(r.source ?? "MANUAL"),
+    lastCheckedAt: str(r.last_checked_at),
+    isCurrent: Boolean(r.is_current),
+  }));
+}
+
+export async function upsertPvSupplierPrice(input: {
+  materialId: string;
+  supplierId: string;
+  priceHtEur: number;
+  validFrom?: string | null;
+  supplierRef?: string | null;
+  minQuantity?: number | null;
+  packSize?: number | null;
+  leadTimeDays?: number | null;
+  availability?: string | null;
+  source?: string | null;
+  notes?: string | null;
+}): Promise<PvMaterialOutcome> {
+  const payload = await callRpc("upsert_pv_supplier_price", {
+    p_material_id: input.materialId,
+    p_supplier_id: input.supplierId,
+    p_price_ht_eur: input.priceHtEur,
+    p_valid_from: input.validFrom ?? null,
+    p_supplier_ref: input.supplierRef ?? null,
+    p_min_quantity: input.minQuantity ?? 1,
+    p_pack_size: input.packSize ?? null,
+    p_lead_time_days: input.leadTimeDays ?? null,
+    p_availability: input.availability ?? null,
+    p_source: input.source ?? "MANUAL",
+    p_notes: input.notes ?? null,
+  });
+  return materialOutcome(payload, "price_id");
+}
+
+export async function getPvMaterialPlan(prospectId: string): Promise<PvMaterialPlan | null> {
+  const payload = await callRpc("get_pv_material_plan", { p_prospect_id: prospectId });
+  if (!payload || !payload.ok) return null;
+
+  const arr = (k: string): Record<string, unknown>[] =>
+    Array.isArray(payload[k]) ? (payload[k] as Record<string, unknown>[]) : [];
+  const costs = (payload.costs ?? {}) as Record<string, unknown>;
+
+  return {
+    siteId: str(payload.site_id),
+    requirements: arr("requirements").map((r) => ({
+      id: String(r.id ?? ""),
+      materialId: str(r.material_id),
+      designation: str(r.designation),
+      sku: str(r.sku),
+      quantityRequired: num(r.quantity_required),
+      unit: String(r.unit ?? "U"),
+      origin: String(r.origin ?? "MANUAL"),
+      sourceEntityId: str(r.source_entity_id),
+      isMandatory: Boolean(r.is_mandatory),
+      needsConfirmation: Boolean(r.needs_confirmation),
+      confirmedAt: str(r.confirmed_at),
+      status: String(r.status ?? "ACTIVE"),
+      dismissalReason: str(r.dismissal_reason),
+      comment: str(r.comment),
+    })),
+    balance: arr("balance").map((b) => ({
+      materialId: str(b.material_id),
+      designation: str(b.designation),
+      unit: String(b.unit ?? "U"),
+      qtyRequired: num(b.qty_required),
+      qtyOrdered: num(b.qty_ordered),
+      qtyReceived: num(b.qty_received),
+      qtyOpen: num(b.qty_open),
+      gap: num(b.gap),
+      status: String(b.status ?? "NOT_ORDERED") as PvMaterialBalanceRow["status"],
+      isMandatory: Boolean(b.is_mandatory),
+      needsConfirmation: Boolean(b.needs_confirmation),
+      origins: Array.isArray(b.origins) ? b.origins.map((x) => String(x)) : [],
+    })),
+    orders: arr("orders").map((o) => ({
+      id: String(o.id ?? ""),
+      orderNumber: String(o.order_number ?? ""),
+      status: String(o.status ?? "DRAFT"),
+      supplierId: String(o.supplier_id ?? ""),
+      supplierName: String(o.supplier_name ?? ""),
+      subtotalHtEur: num(o.subtotal_ht_eur),
+      totalTtcEur: num(o.total_ttc_eur),
+      orderedOn: str(o.ordered_on),
+      expectedDeliveryOn: str(o.expected_delivery_on),
+      receivedOn: str(o.received_on),
+      lineCount: num(o.line_count),
+    })),
+    readiness: (payload.readiness ?? "NOT_READY") as PvMaterialPlan["readiness"],
+    costs: {
+      plannedCostHtEur: num(costs.planned_cost_ht_eur),
+      orderedCostHtEur: num(costs.ordered_cost_ht_eur),
+      receivedCostHtEur: num(costs.received_cost_ht_eur),
+      quoteTotalHtEur: numOrNull(costs.quote_total_ht_eur),
+      materialsWithoutCost: num(costs.materials_without_cost),
+      requirementsPendingConfirmation: num(costs.requirements_pending_confirmation),
+      marginReliable: Boolean(costs.margin_reliable),
+      indicativeMaterialMarginHtEur: numOrNull(costs.indicative_material_margin_ht_eur),
+    },
+  };
+}
+
+export async function addPvMaterialRequirement(input: {
+  prospectId: string;
+  quantity: number;
+  materialId?: string | null;
+  freeDesignation?: string | null;
+  unit?: string | null;
+  isMandatory?: boolean;
+  comment?: string | null;
+}): Promise<PvMaterialOutcome> {
+  return materialOutcome(
+    await callRpc("add_pv_material_requirement", {
+      p_prospect_id: input.prospectId,
+      p_quantity: input.quantity,
+      p_material_id: input.materialId ?? null,
+      p_free_designation: input.freeDesignation ?? null,
+      p_unit: input.unit ?? "U",
+      p_is_mandatory: input.isMandatory ?? true,
+      p_comment: input.comment ?? null,
+    }),
+    "requirement_id",
+  );
+}
+
+export async function derivePvMaterialRequirements(
+  prospectId: string,
+): Promise<{ ok: boolean; code: string; fromQuote: number; fromSurvey: number }> {
+  const payload = await callRpc("derive_pv_material_requirements", { p_prospect_id: prospectId });
+  if (!payload) return { ok: false, code: "RPC_ERROR", fromQuote: 0, fromSurvey: 0 };
+  return {
+    ok: Boolean(payload.ok),
+    code: String(payload.code ?? "UNKNOWN"),
+    fromQuote: num(payload.from_quote),
+    fromSurvey: num(payload.from_survey),
+  };
+}
+
+export async function confirmPvMaterialRequirement(input: {
+  requirementId: string;
+  materialId?: string | null;
+  quantity?: number | null;
+}): Promise<PvMaterialOutcome> {
+  return materialOutcome(
+    await callRpc("confirm_pv_material_requirement", {
+      p_requirement_id: input.requirementId,
+      p_material_id: input.materialId ?? null,
+      p_quantity: input.quantity ?? null,
+    }),
+    "requirement_id",
+  );
+}
+
+export async function dismissPvMaterialRequirement(
+  requirementId: string,
+  reason: string,
+): Promise<PvMaterialOutcome> {
+  return materialOutcome(
+    await callRpc("dismiss_pv_material_requirement", {
+      p_requirement_id: requirementId,
+      p_reason: reason,
+    }),
+    "requirement_id",
+  );
+}
+
+export async function createPvPurchaseOrder(input: {
+  prospectId: string;
+  supplierId: string;
+  expectedDeliveryOn?: string | null;
+}): Promise<PvMaterialOutcome> {
+  return materialOutcome(
+    await callRpc("create_pv_purchase_order", {
+      p_prospect_id: input.prospectId,
+      p_supplier_id: input.supplierId,
+      p_expected_delivery_on: input.expectedDeliveryOn ?? null,
+    }),
+    "order_id",
+  );
+}
+
+export async function upsertPvPurchaseOrderLine(input: {
+  lineId?: string | null;
+  orderId: string;
+  designation: string;
+  quantity: number;
+  unit?: string | null;
+  unitPriceHtEur?: number | null;
+  vatRatePct?: number | null;
+  materialId?: string | null;
+  supplierRef?: string | null;
+  expectedDeliveryOn?: string | null;
+  requirementId?: string | null;
+}): Promise<PvMaterialOutcome> {
+  return materialOutcome(
+    await callRpc("upsert_pv_purchase_order_line", {
+      p_line_id: input.lineId ?? null,
+      p_order_id: input.orderId,
+      p_designation: input.designation,
+      p_quantity: input.quantity,
+      p_unit: input.unit ?? "U",
+      p_unit_price_ht_eur: input.unitPriceHtEur ?? 0,
+      p_vat_rate_pct: input.vatRatePct ?? 20,
+      p_material_id: input.materialId ?? null,
+      p_supplier_ref: input.supplierRef ?? null,
+      p_expected_delivery_on: input.expectedDeliveryOn ?? null,
+      p_requirement_id: input.requirementId ?? null,
+      p_position: null,
+    }),
+    "line_id",
+  );
+}
+
+export async function deletePvPurchaseOrderLine(lineId: string): Promise<PvMaterialOutcome> {
+  return materialOutcome(
+    await callRpc("delete_pv_purchase_order_line", { p_line_id: lineId }),
+    "line_id",
+  );
+}
+
+export async function setPvPurchaseOrderReady(orderId: string): Promise<PvMaterialOutcome> {
+  return materialOutcome(
+    await callRpc("set_pv_purchase_order_ready", { p_order_id: orderId }),
+    "order_id",
+  );
+}
+
+/** ⚠️ N'ENVOIE RIEN chez le fournisseur : enregistre une déclaration humaine. */
+export async function markPvPurchaseOrderOrdered(input: {
+  orderId: string;
+  orderedOn?: string | null;
+}): Promise<PvMaterialOutcome> {
+  return materialOutcome(
+    await callRpc("mark_pv_purchase_order_ordered", {
+      p_order_id: input.orderId,
+      p_ordered_on: input.orderedOn ?? null,
+    }),
+    "order_id",
+  );
+}
+
+export async function cancelPvPurchaseOrder(
+  orderId: string,
+  reason: string,
+): Promise<PvMaterialOutcome> {
+  return materialOutcome(
+    await callRpc("cancel_pv_purchase_order", { p_order_id: orderId, p_reason: reason }),
+    "order_id",
+  );
+}
+
+export async function recordPvPurchaseReceipt(input: {
+  lineId: string;
+  quantity: number;
+  receivedOn?: string | null;
+  deliveryNoteRef?: string | null;
+  condition?: string | null;
+  comment?: string | null;
+}): Promise<{
+  ok: boolean;
+  code: string;
+  lineReceived: number;
+  lineOrdered: number;
+  lineMissing: number;
+  orderStatus: string | null;
+}> {
+  const payload = await callRpc("record_pv_purchase_receipt", {
+    p_line_id: input.lineId,
+    p_quantity: input.quantity,
+    p_received_on: input.receivedOn ?? null,
+    p_delivery_note_ref: input.deliveryNoteRef ?? null,
+    p_condition: input.condition ?? "CONFORME",
+    p_comment: input.comment ?? null,
+  });
+  if (!payload) {
+    return { ok: false, code: "RPC_ERROR", lineReceived: 0, lineOrdered: 0, lineMissing: 0, orderStatus: null };
+  }
+  return {
+    ok: Boolean(payload.ok),
+    code: String(payload.code ?? "UNKNOWN"),
+    lineReceived: num(payload.line_received),
+    lineOrdered: num(payload.line_ordered),
+    lineMissing: num(payload.line_missing),
+    orderStatus: str(payload.order_status),
+  };
+}
+
+export async function getPvPurchaseOrder(orderId: string): Promise<PvPurchaseOrderDetail | null> {
+  const payload = await callRpc("get_pv_purchase_order", { p_order_id: orderId });
+  if (!payload || !payload.ok) return null;
+
+  const o = (payload.order ?? {}) as Record<string, unknown>;
+  const sup = payload.supplier as Record<string, unknown> | null;
+  const pro = payload.prospect as Record<string, unknown> | null;
+  const arr = (k: string): Record<string, unknown>[] =>
+    Array.isArray(payload[k]) ? (payload[k] as Record<string, unknown>[]) : [];
+
+  // Les documents fournisseurs sont PRIVÉS : jamais de chemin brut, seulement une
+  // URL signée courte, produite à la demande. Même contrat qu'en PV-2 à PV-6.
+  const docsRaw = arr("documents");
+  const paths = docsRaw.map((d) => str(d.storage_path)).filter((x): x is string => x !== null);
+  const signedByPath = new Map<string, string>();
+  if (paths.length > 0) {
+    const supabase = await createSupabaseServerClient();
+    const { data: signed } = await supabase.storage
+      .from(PV_DOCUMENT_BUCKET)
+      .createSignedUrls(paths, SIGNED_URL_TTL_SECONDS);
+    for (const entry of signed ?? []) {
+      if (entry.path && entry.signedUrl) signedByPath.set(entry.path, entry.signedUrl);
+    }
+  }
+
+  return {
+    order: {
+      id: String(o.id ?? ""),
+      orderNumber: String(o.order_number ?? ""),
+      status: String(o.status ?? "DRAFT"),
+      supplierId: String(o.supplier_id ?? ""),
+      prospectId: String(o.prospect_id ?? ""),
+      siteId: String(o.site_id ?? ""),
+      currency: String(o.currency ?? "EUR"),
+      subtotalHtEur: num(o.subtotal_ht_eur),
+      totalVatEur: num(o.total_vat_eur),
+      totalTtcEur: num(o.total_ttc_eur),
+      expectedDeliveryOn: str(o.expected_delivery_on),
+      orderedOn: str(o.ordered_on),
+      receivedOn: str(o.received_on),
+      approvedAt: str(o.approved_at),
+      orderedAt: str(o.ordered_at),
+      cancelledAt: str(o.cancelled_at),
+      cancellationReason: str(o.cancellation_reason),
+      notes: str(o.notes),
+    },
+    supplier: sup === null ? null : mapSupplier(sup),
+    prospect:
+      pro === null
+        ? null
+        : {
+            firstName: str(pro.first_name),
+            lastName: str(pro.last_name),
+            companyName: str(pro.company_name),
+          },
+    lines: arr("lines").map((l) => ({
+      id: String(l.id ?? ""),
+      position: num(l.position),
+      materialId: str(l.material_id),
+      sku: str(l.sku),
+      designation: String(l.designation ?? ""),
+      supplierRef: str(l.supplier_ref),
+      quantity: num(l.quantity),
+      unit: String(l.unit ?? "U"),
+      unitPriceHtEur: num(l.unit_price_ht_eur),
+      vatRatePct: num(l.vat_rate_pct),
+      lineTotalHtEur: num(l.line_total_ht_eur),
+      quantityReceived: num(l.quantity_received),
+      quantityMissing: num(l.quantity_missing),
+      expectedDeliveryOn: str(l.expected_delivery_on),
+      requirementId: str(l.requirement_id),
+    })),
+    receipts: arr("receipts").map((r) => ({
+      id: String(r.id ?? ""),
+      lineId: String(r.line_id ?? ""),
+      quantityReceived: num(r.quantity_received),
+      receivedOn: String(r.received_on ?? ""),
+      deliveryNoteRef: str(r.delivery_note_ref),
+      condition: String(r.condition ?? "CONFORME"),
+      comment: str(r.comment),
+      createdAt: String(r.created_at ?? ""),
+    })),
+    documents: docsRaw.map((d) => ({
+      id: String(d.id ?? ""),
+      docType: String(d.doc_type ?? "AUTRE"),
+      documentStage: String(d.document_stage ?? "SOURCE"),
+      originalFilename: str(d.original_filename),
+      mimeType: String(d.mime_type ?? ""),
+      sizeBytes: num(d.size_bytes),
+      status: "LINKED",
+      storagePath: str(d.storage_path),
+      uploadedAt: str(d.uploaded_at),
+      signedUrl: signedByPath.get(str(d.storage_path) ?? "") ?? null,
+    })),
+    nextStatuses: Array.isArray(payload.next_statuses)
+      ? payload.next_statuses.map((x) => String(x))
+      : [],
+    blockers: Array.isArray(payload.blockers) ? payload.blockers.map((x) => String(x)) : [],
   };
 }

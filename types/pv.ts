@@ -432,6 +432,13 @@ export type PvDeal = {
    * se devine.
    */
   surveyGate: "NONE" | "NOT_VALIDATED" | "BLOCKING" | "OK";
+  /**
+   * PV-7 — état de l'approvisionnement du site, tel que la base le calcule
+   * (`hermes_os.pv_material_readiness`). Volontairement HORS de
+   * `resolvePvReadiness` : celle-ci répond « peut-on proposer ? », celle-ci
+   * répond « peut-on poser ? ». Deux questions, deux moments, deux indicateurs.
+   */
+  materialReadiness: "NOT_READY" | "PARTIAL" | "READY";
 };
 
 /** Résultat d'une génération de synthèse PDF. */
@@ -756,3 +763,238 @@ export const PV_SURVEY_EARTHING_STATES = ["PRESENTE", "ABSENTE", "NON_VERIFIABLE
 export const PV_SURVEY_MANUAL_STATUSES = [
   "IN_PROGRESS", "DONE", "NEEDS_REVIEW", "BLOCKING", "PLANNED", "CANCELLED",
 ] as const;
+
+// --- PV-7 : approvisionnement matériel ---------------------------------------
+
+/** Catégories du catalogue. Liste CLOSE, identique au `CHECK` de la base. */
+export const PV_MATERIAL_CATEGORIES = [
+  "PANNEAU", "ONDULEUR", "MICRO_ONDULEUR", "BATTERIE",
+  "STRUCTURE", "RAIL", "CROCHET", "BAC_LESTE",
+  "PROTECTION_DC", "PROTECTION_AC", "CABLE_DC", "CABLE_AC",
+  "CONNECTIQUE", "COFFRET", "MONITORING", "MISE_A_LA_TERRE",
+  "CONSOMMABLE", "ACCES_SECURITE", "AUTRE",
+] as const;
+export type PvMaterialCategory = (typeof PV_MATERIAL_CATEGORIES)[number];
+
+export const PV_MATERIAL_UNITS = ["U", "M", "ML", "M2", "KG", "L", "LOT", "H", "FORFAIT"] as const;
+
+/** D'où vient un besoin. Conservé tel quel : c'est ce qui rend l'écart lisible. */
+export const PV_REQUIREMENT_ORIGINS = ["QUOTE", "STUDY", "SURVEY", "MANUAL"] as const;
+export type PvRequirementOrigin = (typeof PV_REQUIREMENT_ORIGINS)[number];
+
+/** Écart matériel — le vocabulaire du moteur `pv_material_balance`. */
+export const PV_MATERIAL_GAP_STATUSES = [
+  "NOT_ORDERED", "PARTIALLY_ORDERED", "ORDERED",
+  "PARTIALLY_RECEIVED", "RECEIVED", "OVER_ORDERED", "SHORTAGE",
+] as const;
+export type PvMaterialGapStatus = (typeof PV_MATERIAL_GAP_STATUSES)[number];
+
+export const PV_PURCHASE_ORDER_STATUSES = [
+  "DRAFT", "READY", "ORDERED", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED",
+] as const;
+export type PvPurchaseOrderStatus = (typeof PV_PURCHASE_ORDER_STATUSES)[number];
+
+export const PV_RECEIPT_CONDITIONS = ["CONFORME", "ENDOMMAGE", "NON_CONFORME", "INCOMPLET"] as const;
+
+export const PV_SUPPLIER_AVAILABILITY = ["EN_STOCK", "SUR_COMMANDE", "RUPTURE", "INCONNU"] as const;
+export const PV_SUPPLIER_PRICE_SOURCES = ["MANUAL", "SUPPLIER_QUOTE", "CATALOG", "INVOICE"] as const;
+
+/** Readiness MATÉRIEL — miroir de `hermes_os.pv_material_readiness`. */
+export type PvMaterialReadiness = "NOT_READY" | "PARTIAL" | "READY";
+
+export type PvMaterial = {
+  id: string;
+  category: string;
+  subcategory: string | null;
+  sku: string;
+  brand: string | null;
+  manufacturerRef: string | null;
+  designation: string;
+  description: string | null;
+  unit: string;
+  isActive: boolean;
+  /** Coût INDICATIF. Le prix qui engage est celui du tarif fournisseur daté. */
+  unitCostHtEur: number | null;
+  preferredSupplierId: string | null;
+  notes: string | null;
+};
+
+export type PvSupplier = {
+  id: string;
+  name: string;
+  contactName: string | null;
+  email: string | null;
+  phone: string | null;
+  addressLine1: string | null;
+  postalCode: string | null;
+  city: string | null;
+  isActive: boolean;
+  /** INDICATIF, saisi à la main — jamais un engagement du fournisseur. */
+  leadTimeDays: number | null;
+  paymentTerms: string | null;
+  freeShippingHtEur: number | null;
+  notes: string | null;
+};
+
+/** Un tarif fournisseur est une donnée DATÉE : la période fait partie du prix. */
+export type PvSupplierPrice = {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  supplierRef: string | null;
+  priceHtEur: number;
+  minQuantity: number;
+  packSize: number | null;
+  validFrom: string;
+  validUntil: string | null;
+  leadTimeDays: number | null;
+  availability: string | null;
+  source: string;
+  lastCheckedAt: string | null;
+  isCurrent: boolean;
+};
+
+export type PvMaterialRequirement = {
+  id: string;
+  materialId: string | null;
+  designation: string | null;
+  sku: string | null;
+  quantityRequired: number;
+  unit: string;
+  origin: string;
+  sourceEntityId: string | null;
+  isMandatory: boolean;
+  /** Vrai tant qu'un besoin issu de TEXTE LIBRE n'a pas été confirmé. */
+  needsConfirmation: boolean;
+  confirmedAt: string | null;
+  status: string;
+  dismissalReason: string | null;
+  comment: string | null;
+};
+
+/** Une ligne de l'écart matériel : besoin, commandé, reçu — jamais confondus. */
+export type PvMaterialBalanceRow = {
+  materialId: string | null;
+  designation: string | null;
+  unit: string;
+  qtyRequired: number;
+  qtyOrdered: number;
+  qtyReceived: number;
+  /** Quantité encore attendue sur des commandes ouvertes. */
+  qtyOpen: number;
+  gap: number;
+  status: PvMaterialGapStatus;
+  isMandatory: boolean;
+  needsConfirmation: boolean;
+  origins: string[];
+};
+
+/**
+ * Coûts matériels. `marginReliable` faux ⇒ l'écran n'a PAS le droit d'afficher
+ * la marge : elle serait calculée sur des coûts inconnus ou des besoins non
+ * confirmés. Et c'est une marge MATÉRIELLE, pas une marge d'affaire — la
+ * main-d'œuvre n'est pas séparée dans les lignes de devis.
+ */
+export type PvMaterialCosts = {
+  plannedCostHtEur: number;
+  orderedCostHtEur: number;
+  receivedCostHtEur: number;
+  quoteTotalHtEur: number | null;
+  materialsWithoutCost: number;
+  requirementsPendingConfirmation: number;
+  marginReliable: boolean;
+  indicativeMaterialMarginHtEur: number | null;
+};
+
+export type PvPurchaseOrderSummary = {
+  id: string;
+  orderNumber: string;
+  status: string;
+  supplierId: string;
+  supplierName: string;
+  subtotalHtEur: number;
+  totalTtcEur: number;
+  orderedOn: string | null;
+  expectedDeliveryOn: string | null;
+  receivedOn: string | null;
+  lineCount: number;
+};
+
+export type PvPurchaseOrderLine = {
+  id: string;
+  position: number;
+  materialId: string | null;
+  sku: string | null;
+  designation: string;
+  supplierRef: string | null;
+  quantity: number;
+  unit: string;
+  unitPriceHtEur: number;
+  vatRatePct: number;
+  lineTotalHtEur: number;
+  quantityReceived: number;
+  quantityMissing: number;
+  expectedDeliveryOn: string | null;
+  requirementId: string | null;
+};
+
+export type PvPurchaseReceipt = {
+  id: string;
+  lineId: string;
+  quantityReceived: number;
+  receivedOn: string;
+  deliveryNoteRef: string | null;
+  condition: string;
+  comment: string | null;
+  createdAt: string;
+};
+
+export type PvPurchaseOrderDetail = {
+  order: {
+    id: string;
+    orderNumber: string;
+    status: string;
+    supplierId: string;
+    prospectId: string;
+    siteId: string;
+    currency: string;
+    subtotalHtEur: number;
+    totalVatEur: number;
+    totalTtcEur: number;
+    expectedDeliveryOn: string | null;
+    orderedOn: string | null;
+    receivedOn: string | null;
+    approvedAt: string | null;
+    orderedAt: string | null;
+    cancelledAt: string | null;
+    cancellationReason: string | null;
+    notes: string | null;
+  };
+  supplier: PvSupplier | null;
+  prospect: { firstName: string | null; lastName: string | null; companyName: string | null } | null;
+  lines: PvPurchaseOrderLine[];
+  receipts: PvPurchaseReceipt[];
+  documents: PvDealDocument[];
+  /** Lues dans `pv_purchase_order_transitions` : l'écran ne redéclare rien. */
+  nextStatuses: string[];
+  /** Ce qui empêche READY/ORDERED, tel que la base le calcule. */
+  blockers: string[];
+};
+
+export type PvMaterialPlan = {
+  siteId: string | null;
+  requirements: PvMaterialRequirement[];
+  balance: PvMaterialBalanceRow[];
+  orders: PvPurchaseOrderSummary[];
+  readiness: PvMaterialReadiness;
+  costs: PvMaterialCosts;
+};
+
+/** Résultat générique des façades PV-7 (écriture). */
+export type PvMaterialOutcome = {
+  ok: boolean;
+  code: string;
+  id: string | null;
+  /** Ce qui bloque, quand la base refuse un READY / ORDERED. */
+  blockers: string[];
+};
