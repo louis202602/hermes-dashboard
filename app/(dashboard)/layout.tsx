@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
-
 import DashboardChrome from "@/components/dashboard/DashboardChrome";
 import {
   DEFAULT_CONTEXT_SETTINGS,
@@ -11,12 +9,15 @@ import {
   profileWallpaperFields,
 } from "@/lib/dashboard/profiles";
 import {
-  getAuthedUser,
   getCapabilitiesCached,
   getDashboardContextSettingsCached,
+  getPhotoModuleStateCached,
   getUnifiedAlertsCached,
+  requireAuthedUser,
 } from "@/lib/dashboard/requestScope";
 import { isUserWallpaperRef, resolveWallpaper } from "@/lib/dashboard/wallpapers";
+import { photoGateKeys } from "@/lib/dashboard/photoAccess";
+import { resolveTenantComposition } from "@/lib/verticals/composition";
 import { getCatalog, getLanguageDef, resolveLanguage } from "@/lib/i18n";
 import { I18nProvider } from "@/lib/i18n/I18nProvider";
 import { getDashboardUserPreferences } from "@/services/hermes/preferences";
@@ -33,18 +34,19 @@ import { signUserWallpapers } from "@/services/hermes/wallpapers";
 export default async function DashboardGroupLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const user = await getAuthedUser();
-  if (!user) {
-    redirect("/login");
-  }
+  // Auth boundary. NOTE: Next renders this layout and the page CONCURRENTLY, so this
+  // redirect does not by itself stop a page's reads — every page that fans out data
+  // resolves the same guard itself (directly or via `resolvePageContext`).
+  const user = await requireAuthedUser();
 
   // Chrome-scoped reads (all cache()-shared with the page).
-  const [preferencesResult, capabilities, alerts, contextSettingsResult] =
+  const [preferencesResult, capabilities, alerts, contextSettingsResult, photoModule] =
     await Promise.all([
       getDashboardUserPreferences(),
       getCapabilitiesCached(),
       getUnifiedAlertsCached(),
       getDashboardContextSettingsCached(),
+      getPhotoModuleStateCached(),
     ]);
 
   const prefs = preferencesResult.ok
@@ -68,7 +70,20 @@ export default async function DashboardGroupLayout({
   const { profiles, offeredProfiles, activeProfile } = resolveHomeProfileContext(
     prefs,
     capabilities,
+    photoModule.enabled,
   );
+
+  // LE MENU. Composé à partir des MÊMES clés de capacité que les widgets et la
+  // garde de route — aucune lecture supplémentaire n'est faite ici. La sidebar
+  // ne décide plus de rien : elle rend cette liste.
+  const composition = resolveTenantComposition({
+    capabilityKeys: photoGateKeys(
+      capabilities.ok ? capabilities.data.capabilities.map((c) => c.actionKey) : [],
+      photoModule.enabled,
+    ),
+    permissions:
+      capabilities.ok && capabilities.data.resolutionStatus === "OK" ? ["tenant.member"] : [],
+  });
 
   // DASH-4E: sign each profile's user-image wallpaper server-side (short-TTL signed URL,
   // ownership re-checked) so switching profiles paints the right fond instantly. Built-in
@@ -97,6 +112,7 @@ export default async function DashboardGroupLayout({
         availableProfiles={offeredProfiles}
         wallpaperUrls={wallpaperUrls}
         alerts={alerts}
+        navigation={composition.navigation}
       >
         {children}
       </DashboardChrome>

@@ -6352,3 +6352,439 @@ html[data-reduce-transparency="1"][data-liquid-glass="1"] .context-bar {
   color: var(--text-secondary);
   font-size: 12px;
 }
+/* ============================================================================
+   PHOTO-P0 — Verticale Hermès Studio (photographe).
+   Classes dédiées, comme .scan-* ou .chantier-map-* : aucun style existant n'est
+   modifié, donc aucune régression visuelle possible sur les pages actuelles.
+   ========================================================================== */
+.photo-card { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.photo-empty,
+.photo-note {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+.photo-note { opacity: 0.85; }
+
+.photo-session-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.photo-session-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+}
+.photo-session-item:hover { background: var(--surface-hover); }
+.photo-session-main { display: flex; flex-direction: column; gap: 2px; text-decoration: none; color: inherit; min-width: 0; }
+.photo-session-main strong { font-size: 14px; color: var(--text-primary); }
+.photo-session-meta { font-size: 12px; color: var(--text-secondary); }
+.photo-session-side { display: flex; align-items: center; gap: var(--space-3); flex-shrink: 0; }
+
+.photo-progress-track {
+  display: block;
+  width: 84px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-soft);
+  overflow: hidden;
+}
+.photo-progress-fill { display: block; height: 100%; background: var(--accent); }
+
+.photo-badge {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  text-decoration: none;
+}
+
+.photo-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.photo-input {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--radius-input);
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+/* Grille de revue : dense, pensée pour le clavier (G / E / flèches). */
+.photo-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+.photo-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+}
+.photo-cell.is-current { border-color: var(--border-strong); box-shadow: var(--shadow); }
+/* Écartée = mise en retrait visuelle, JAMAIS un fichier supprimé. */
+.photo-cell.is-discarded { opacity: 0.45; }
+
+.photo-cell-media {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  border: 0;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-hover);
+  cursor: pointer;
+}
+.photo-cell-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-cell-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.photo-cell-meta { display: flex; flex-direction: column; gap: 2px; font-size: 11.5px; color: var(--text-secondary); }
+.photo-cell-meta strong { font-size: 12px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.photo-cell-actions { display: flex; gap: 6px; }
+
+.photo-decide {
+  flex: 1;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.photo-decide:hover { background: var(--surface-hover); color: var(--text-primary); }
+.photo-decide.is-active { background: var(--accent-soft); border-color: var(--border-strong); color: var(--text-primary); font-weight: 600; }
+.photo-decide.is-discard.is-active { border-color: var(--danger); }
+
+.photo-stat-row { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.photo-stat { display: flex; flex-direction: column; gap: 2px; min-width: 120px; }
+.photo-stat-value { font-size: 20px; font-weight: 600; color: var(--text-primary); }
+.photo-stat-label { font-size: 11.5px; color: var(--text-secondary); }
+
+/* ---------------------------------------------------------------------------
+   PACK PHOTOVOLTAÏQUE — LOT PV-2.
+   Réutilise les tokens existants (aucune nouvelle variable de thème). Les tons
+   de badge portent la distinction structurelle de PV-1 : ce qu'une machine a
+   produit n'a JAMAIS l'apparence de ce qu'un humain a certifié. La couleur ne
+   porte jamais l'information seule — le libellé le dit aussi en toutes lettres.
+--------------------------------------------------------------------------- */
+.pv-card { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.pv-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: flex-end;
+}
+.pv-filters .agent-field { flex: 1 1 180px; min-width: 0; }
+
+.pv-inline-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+
+.pv-checkbox { flex-direction: row; align-items: center; gap: 8px; }
+
+.pv-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+.pv-facts div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pv-facts dt { font-size: 11.5px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+.pv-facts dd { margin: 0; font-size: 13.5px; color: var(--text-primary); }
+
+.pv-badge {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.pv-badge-certified { background: var(--accent-soft); border-color: var(--accent); color: var(--text-primary); }
+.pv-badge-pending { background: var(--surface-soft); border-style: dashed; color: var(--text-secondary); }
+.pv-badge-draft { background: transparent; color: var(--text-secondary); }
+.pv-badge-rejected { background: transparent; border-style: dotted; color: var(--text-secondary); text-decoration: line-through; }
+.pv-badge-neutral { background: transparent; color: var(--text-secondary); }
+
+.pv-warning {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border-strong);
+  background: var(--surface-soft);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.pv-bill-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.pv-bill {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+.pv-bill-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.pv-bill-head strong { font-size: 14px; color: var(--text-primary); display: block; }
+
+.pv-extractions,
+.pv-assumptions,
+.pv-economics {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.pv-economics-block { display: flex; flex-direction: column; gap: 8px; }
+
+/* --- PV-3 : bandeau de pilotage. Toujours préfixé `pv-`. ------------------- */
+.pv-pilot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3);
+}
+.pv-pilot-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  min-width: 0;
+}
+.pv-pilot-count { font-size: 26px; line-height: 1.1; color: var(--text-primary); }
+.pv-pilot-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pv-pilot-list strong { font-size: 13px; color: var(--text-primary); }
+
+/* --- PV-4 : zone dangereuse, blocages, widgets de grille. Préfixe `pv-`. --- */
+.pv-danger-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border-strong);
+}
+.pv-blockers { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.pv-widget { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.pv-widget-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+
+/* --- PV-5 : devis — liste, tableau de lignes, totaux. Préfixe `pv-`. --- */
+.pv-quote-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pv-quote-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.pv-quote-ref { font-weight: 600; text-decoration: none; }
+.pv-quote-version { font-weight: 400; opacity: 0.7; }
+.pv-quote-total { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; }
+.pv-quote-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.pv-quote-table th, .pv-quote-table td {
+  text-align: left;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+.pv-quote-table th:nth-child(n + 2), .pv-quote-table td:nth-child(n + 2) { text-align: right; }
+.pv-quote-table td:nth-child(n + 2) { font-variant-numeric: tabular-nums; }
+.pv-quote-table td span { display: block; }
+.pv-quote-totals { margin: 12px 0 0; display: flex; flex-direction: column; gap: 4px; }
+.pv-quote-totals > div { display: flex; justify-content: space-between; gap: var(--space-3); }
+.pv-quote-totals dt, .pv-quote-totals dd { margin: 0; }
+.pv-quote-totals dd { font-variant-numeric: tabular-nums; }
+.pv-quote-grand { border-top: 1px solid var(--border-strong); padding-top: 6px; font-weight: 700; font-size: 1.05rem; }
+.pv-line-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-3); align-items: end; }
+.pv-line-delete { margin: 0; }
+
+/* --- PV-6 : visite technique — comparatif déclaré/mesuré, écarts. Préfixe `pv-`. ---
+   Règle d'accessibilité tenue partout dans ce bloc : LA COULEUR NE PORTE JAMAIS
+   L'INFORMATION SEULE. Chaque état affiche son libellé en toutes lettres
+   (« Conforme », « À revoir », « Bloquant », « Non mesuré ») ; les variantes
+   ci-dessous ne font que redire ce qui est déjà écrit — utiles en un coup d'œil,
+   inutiles à la compréhension. */
+.pv-badge.is-ok { border-color: var(--success); color: var(--success); }
+.pv-badge.is-warn { border-color: var(--warning); color: var(--warning); }
+.pv-badge.is-muted { border-style: dotted; color: var(--text-secondary); }
+.pv-badge.is-neutral { color: var(--text-secondary); }
+
+.pv-advisories {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px dotted var(--border-strong);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.pv-survey-plan { display: flex; align-items: end; gap: var(--space-3); flex-wrap: wrap; }
+.pv-survey-gate {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.pv-survey-gate.is-ok { border-color: var(--success); }
+.pv-survey-gate.is-warn { border-color: var(--warning); }
+.pv-survey-gate.is-neutral { border-style: dashed; color: var(--text-secondary); }
+.pv-survey-gate.is-muted { border-style: dotted; color: var(--text-secondary); }
+
+.pv-survey-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pv-survey-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.pv-survey-ref { font-weight: 600; text-decoration: none; }
+
+.pv-survey-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.pv-survey-table th, .pv-survey-table td {
+  text-align: left;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+.pv-survey-table td:nth-child(2), .pv-survey-table td:nth-child(3),
+.pv-survey-table td:nth-child(4) { font-variant-numeric: tabular-nums; }
+.pv-survey-status { font-weight: 600; }
+.pv-survey-status.is-ok { color: var(--success); }
+.pv-survey-status.is-warn { color: var(--warning); }
+.pv-survey-status.is-muted { color: var(--text-secondary); font-weight: 400; font-style: italic; }
+.pv-survey-status.is-neutral { color: var(--text-secondary); }
+
+.pv-survey-apply { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; }
+.pv-survey-apply .pv-checkbox { font-size: 11.5px; color: var(--text-secondary); }
+
+.pv-survey-findings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.pv-survey-finding {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pv-survey-finding.is-warn { border-color: var(--warning); }
+.pv-survey-finding.is-ok { border-color: var(--success); }
+.pv-survey-finding.is-muted { border-style: dotted; }
+.pv-survey-finding-head { margin: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+
+.pv-survey-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3); align-items: end; }
+.pv-survey-form > .photo-note, .pv-survey-form > button { grid-column: 1 / -1; }
+.pv-survey-resolve { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: end; }
+
+.pv-document-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pv-document-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }
+
+/* --- PV-7 : approvisionnement matériel — besoin / commandé / reçu. Préfixe `pv-`. ---
+   Même règle d'accessibilité qu'en PV-6 : LA COULEUR NE PORTE JAMAIS
+   L'INFORMATION SEULE. « Non commandé », « Partiellement reçu », « Manquant »
+   sont écrits en toutes lettres ; les variantes ci-dessous ne font que redire
+   ce qui est déjà lisible. */
+.pv-material-table, .pv-order-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.pv-material-table th, .pv-material-table td,
+.pv-order-table th, .pv-order-table td {
+  text-align: left;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+.pv-material-table td:nth-child(2), .pv-material-table td:nth-child(3),
+.pv-material-table td:nth-child(4), .pv-material-table td:nth-child(5) {
+  font-variant-numeric: tabular-nums;
+}
+.pv-order-table td:nth-child(n + 2) { font-variant-numeric: tabular-nums; }
+.pv-material-status { font-weight: 600; }
+.pv-material-status.is-ok { color: var(--success); }
+.pv-material-status.is-warn { color: var(--warning); }
+.pv-material-status.is-muted { color: var(--text-secondary); font-weight: 400; font-style: italic; }
+.pv-material-status.is-neutral { color: var(--text-secondary); }
+
+.pv-material-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3); align-items: end; }
+.pv-material-form > .photo-note, .pv-material-form > button { grid-column: 1 / -1; }
+
+.pv-material-pending { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.pv-material-pending > li {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pv-material-pending-head { margin: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.pv-material-confirm { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: end; }
+.pv-material-dismiss { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pv-material-dismiss input[type="text"] { flex: 1 1 220px; }
+
+.pv-material-margin {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pv-order-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pv-order-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.pv-order-ref { font-weight: 600; text-decoration: none; }
+.pv-order-total { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+.pv-order-line-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--space-3); align-items: end; }
+.pv-order-line-form > button { grid-column: 1 / -1; }
+
+.pv-receipt-block {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pv-receipt-head { margin: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.pv-receipt-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--space-3); align-items: end; }
+.pv-receipt-form > .photo-note, .pv-receipt-form > button { grid-column: 1 / -1; }
+.pv-receipt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pv-receipt-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }

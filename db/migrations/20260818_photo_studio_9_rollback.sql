@@ -1,0 +1,116 @@
+-- PHOTO-P0 / ROLLBACK — annule intégralement les lots 1 → 5.
+-- (project smubxqorirlfldatzmym)
+--
+-- Ordre inverse des dépendances. Après exécution, la base ne porte plus aucune
+-- trace de la verticale photo et retrouve exactement son état antérieur.
+--
+-- NE SUPPRIME PAS, volontairement :
+--   * `hermes_os.is_active_tenant_member(text)` — créée par la migration
+--     `20260813_hermes_chat_attachments_1.sql` ; elle appartient à l'ardoise des
+--     pièces jointes du chat et reste utilisée par ses policies. Ce lot l'a
+--     seulement RÉUTILISÉE.
+--   * le bucket `hermes-chat-attachments` et ses policies.
+--   * le BUCKET `hermes-photo-proxies` lui-même — voir ci-dessous.
+--
+-- ⚠️ CORRECTIF PV-3 (2026-08-20). Ce fichier contenait
+-- `delete from storage.buckets where id = 'hermes-photo-proxies';`.
+-- MESURÉ sur ce projet, Postgres REFUSE toute suppression directe dans les
+-- tables `storage.*` :
+--     ERROR 42501: Direct deletion from storage tables is not allowed.
+--                  Use the Storage API instead.
+--     HINT:  This prevents accidental data loss from orphaned objects.
+--     CONTEXT: PL/pgSQL function storage.protect_delete()
+-- Cette instruction faisait donc ÉCHOUER L'INTÉGRALITÉ de ce rollback — y
+-- compris les parties qui, elles, fonctionnent. Elle est retirée.
+--
+-- PROCÉDURE CORRECTE pour retirer le bucket, APRÈS ce rollback :
+--     supabase storage rm --recursive ss:///hermes-photo-proxies
+--     puis suppression du bucket depuis le dashboard Supabase (API Storage)
+--
+-- Conséquence assumée et dite franchement : après ce rollback SQL, le bucket
+-- SUBSISTE — mais il est PRIVÉ et n'a plus AUCUNE policy, donc plus aucun accès
+-- depuis le navigateur. Il est inerte, pas dangereux.
+--
+-- Aucune autre modification n'est apportée au Pack Photo par ce correctif.
+
+begin;
+
+-- --- Lot 5 : registres dormants -------------------------------------------
+delete from hermes_os.sw23_tenant_budget_config where tenant_id = 'photo-pilote';
+
+delete from hermes_os.sw19_metric_definitions
+ where metric_key in ('PHOTO_CULL_MINUTES_PER_100', 'PHOTO_DELIVERY_LEAD_TIME',
+                      'PHOTO_UPSELL_ACCEPT_RATE', 'PHOTO_CLIENT_RESPONSE_HOURS');
+
+delete from hermes_os.sw20_subscribers where subscriber_name like 'PHOTO — %';
+
+delete from hermes_os.sw15_policies where action_pattern like 'photo.%';
+
+delete from hermes_os.resolver_runtime_config where action_key like 'photo.%';
+
+-- Fail-soft : une action déjà référencée par une requête de passerelle (ce qui
+-- ne peut arriver qu'après un go-live) n'est pas supprimée — la FK protège
+-- l'historique d'audit plutôt que de le casser.
+delete from hermes_os.agent_action_catalog c
+ where c.action_key like 'photo.%'
+   and not exists (select 1 from hermes_os.agent_action_requests r
+                    where r.action_key = c.action_key);
+
+-- --- Lot 4 : stockage des proxies -----------------------------------------
+drop function if exists public.mark_photo_proxy_purged(uuid);
+drop function if exists public.list_expired_photo_proxies(integer);
+drop function if exists public.mark_photo_proxy_failed(uuid);
+drop function if exists public.finalize_photo_proxy(uuid, text, text, bigint);
+
+drop policy if exists "hermes_photo_proxy_update_tenant" on storage.objects;
+drop policy if exists "hermes_photo_proxy_select_tenant" on storage.objects;
+drop policy if exists "hermes_photo_proxy_insert_tenant" on storage.objects;
+
+-- Le bucket N'EST PAS supprimé ici — voir l'en-tête (correctif PV-3).
+-- Ses policies viennent d'être retirées : il devient inerte.
+
+-- --- Lot 3 : façades -------------------------------------------------------
+drop function if exists public.record_photo_consent(uuid, text[], text[], text, text, boolean, boolean, text, uuid, timestamptz);
+drop function if exists public.record_photo_culling_instruction(uuid, text, text, text);
+drop function if exists public.apply_photo_culling_review(uuid, jsonb, boolean);
+drop function if exists public.record_photo_culling_signals(uuid, jsonb);
+drop function if exists public.register_photo_import(uuid, jsonb);
+drop function if exists public.upsert_photo_session(text, text, timestamptz, text, text, uuid, text);
+drop function if exists public.get_photo_value_snapshot();
+drop function if exists public.get_photo_consent(uuid);
+drop function if exists public.get_photo_clients(integer);
+drop function if exists public.get_photo_culling_review(uuid, integer);
+drop function if exists public.get_photo_session_detail(uuid);
+drop function if exists public.get_photo_sessions(integer);
+drop function if exists public.get_photo_today();
+drop function if exists public.get_photo_module_state();
+drop function if exists hermes_os.photo_guard();
+
+-- --- Lot 2 : services canoniques ------------------------------------------
+-- Le déclencheur d'abord : sa fonction ne peut pas être supprimée tant qu'il
+-- l'utilise, et la table qui le porte n'est supprimée qu'en toute fin.
+drop trigger if exists photo_marketing_publish_guard on hermes_os.photo_marketing_draft;
+drop function if exists hermes_os.photo_marketing_publish_guard();
+drop function if exists hermes_os.derive_photo_culling_verdicts(text, uuid);
+drop function if exists hermes_os.detect_photo_upsell_opportunities(text, date);
+drop function if exists hermes_os.verifier_consentement_photo(text, uuid, text, text, text, timestamptz);
+drop function if exists hermes_os.compute_photo_session_state(text, uuid);
+drop function if exists hermes_os.photo_session_status_rank(text);
+
+-- --- Lot 1 : schéma (ordre inverse des FK) --------------------------------
+drop table if exists hermes_os.photo_marketing_draft;
+drop table if exists hermes_os.photo_media_consent;
+drop table if exists hermes_os.photo_upsell_opportunities;
+drop table if exists hermes_os.photo_galleries;
+drop table if exists hermes_os.photo_edit_jobs;
+drop table if exists hermes_os.photo_style_profiles;
+drop table if exists hermes_os.photo_culling_instructions;
+drop table if exists hermes_os.photo_culling_verdicts;
+drop table if exists hermes_os.photo_culling_signals;
+drop table if exists hermes_os.photo_session_assets;
+drop table if exists hermes_os.photo_sessions;
+drop table if exists hermes_os.photo_client_members;
+drop table if exists hermes_os.photo_clients;
+drop table if exists hermes_os.photo_studio_activation;
+
+commit;

@@ -1,6 +1,7 @@
 import ApprovalsPanel from "@/components/dashboard/ApprovalsPanel";
 import PageHeading from "@/components/dashboard/PageHeading";
 import TasksPanel from "@/components/dashboard/TasksPanel";
+import { requireAuthedUser } from "@/lib/dashboard/requestScope";
 import { getOperationalPriorities } from "@/services/hermes/panels";
 
 export const metadata = { title: "Approbations — Hermès OS" };
@@ -12,6 +13,7 @@ export const metadata = { title: "Approbations — Hermès OS" };
  * contexte « à traiter ».
  */
 export default async function ApprovalsPage() {
+  await requireAuthedUser();
   const priorities = await getOperationalPriorities();
   return (
     <div className="page-stack">

@@ -53,6 +53,7 @@ export const PROFILE_IDS = [
   "finance",
   "marketing",
   "support",
+  "photographe",
   "custom",
 ] as const;
 export type ProfileId = (typeof PROFILE_IDS)[number];
@@ -234,6 +235,27 @@ export const PROFILE_REGISTRY: ProfileDef[] = [
     priority: 110,
   },
   {
+    // PHOTO-P0 — verticale Hermès Studio. Offert UNIQUEMENT au tenant qui détient
+    // le token `photo_studio`, lui-même dérivé de l'activation de la verticale.
+    id: "photographe",
+    labelKey: "profile.photographe",
+    descriptionKey: "profile.photographe.desc",
+    icon: "Camera",
+    kind: "specialized",
+    availability: "capability",
+    requiredCapabilities: ["photo_studio"],
+    optionalCapabilities: ["crm", "quotes", "invoicing", "marketing"],
+    recommendedWidgets: [
+      "photo-today",
+      "photo-culling-queue",
+      "photo-sessions",
+      "agenda",
+      "alerts",
+      "approvals",
+    ],
+    priority: 25,
+  },
+  {
     id: "custom",
     labelKey: "profile.custom",
     descriptionKey: "profile.custom.desc",
@@ -289,6 +311,7 @@ export const CAPABILITY_TOKENS = [
   "inventory", "purchasing", "suppliers", "logistics", "fleet",
   "support", "sav", "tickets", "helpdesk", "marketing", "social", "campaigns", "analytics",
   "appointments", "bookings", "documents", "hr", "recruitment", "properties", "restaurant", "management",
+  "photo_studio",
 ] as const;
 export type CapabilityToken = (typeof CAPABILITY_TOKENS)[number];
 
@@ -324,6 +347,22 @@ export const CAPABILITY_TOKEN_RULES: { prefix: string; tokens: CapabilityToken[]
   { prefix: "sav.", tokens: ["sav", "support"] },
   { prefix: "marketing.", tokens: ["marketing", "social", "campaigns"] },
   { prefix: "hr.", tokens: ["hr", "recruitment"] },
+  // PHOTO-P0 : `photo.studio` est la clé SYNTHÉTIQUE d'activation de la verticale
+  // (cf. lib/dashboard/photoAccess.ts) ; les autres `photo.*` sont les vraies
+  // actions du catalogue, dormantes tant qu'un opérateur ne les active pas.
+  { prefix: "photo.", tokens: ["photo_studio", "projects", "planning", "appointments", "documents"] },
+  // Les deux domaines photo qui portent des capacités TRANSVERSALES : sans elles, un
+  // studio n'obtiendrait ni « Prospects » ni « Campagnes » alors que ce sont
+  // précisément les modules de son acquisition (P1). Règles PLUS SPÉCIFIQUES que
+  // `photo.` — elles s'unionnent, elles ne remplacent rien.
+  { prefix: "photo.lead", tokens: ["leads", "crm"] },
+  { prefix: "photo.marketing", tokens: ["marketing", "campaigns", "social"] },
+  // P2 — commerce du studio. Sans ces règles, une photographe détenant de vraies
+  // actions de devis ou d'encaissement n'obtiendrait ni « Devis & Contrats » ni
+  // « Paiements » : les modules existeraient sans jamais être accordés.
+  { prefix: "photo.quote", tokens: ["quotes", "sales"] },
+  { prefix: "photo.contract", tokens: ["quotes", "documents"] },
+  { prefix: "photo.payment", tokens: ["payments", "invoicing", "finance"] },
 ];
 
 const CAPABILITY_TOKEN_SET = new Set<string>(CAPABILITY_TOKENS);

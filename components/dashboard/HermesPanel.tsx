@@ -52,6 +52,11 @@ import {
 import { TERMINAL_RESULT_STATUSES } from "@/types/agent-actions";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { MessageKey } from "@/lib/i18n/locales/fr";
+import {
+  POLL_BUDGET_MS,
+  attemptsWithinBudget,
+  pollDelayMs,
+} from "@/lib/dashboard/pollSchedule";
 
 type Turn = {
   id: string;
@@ -440,12 +445,16 @@ export default function HermesPanel({
     if (!activeAction) return;
     const { requestId, turnId } = activeAction;
     let attempts = 0;
-    // Longer window so a PENDING_APPROVAL action resumes automatically in the
-    // conversation once it is approved in the Approvals panel (~5 min cap).
-    const max = 200;
-    const timer = setInterval(async () => {
-      attempts += 1;
+    // PHASE 2 — même fenêtre d'attente (~5 min, pour qu'une action approuvée dans
+    // le panneau Approbations reprenne ici), mais recul exponentiel : ~19 requêtes
+    // au lieu de 200. Voir lib/dashboard/pollSchedule.ts.
+    const max = attemptsWithinBudget(POLL_BUDGET_MS.action);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let stopped = false;
+    const tick = async () => {
+      if (stopped) return;
       const r = await pollAgentActionResultAction(requestId);
+      if (stopped) return;
       setTurns((prev) =>
         prev.map((t) =>
           t.id === turnId
@@ -453,15 +462,21 @@ export default function HermesPanel({
             : t,
         ),
       );
+      attempts += 1;
       if (
         TERMINAL_RESULT_STATUSES.has(r.status) ||
         r.status === "TIMEOUT" ||
         attempts >= max
       ) {
-        clearInterval(timer);
+        return;
       }
-    }, 1500);
-    return () => clearInterval(timer);
+      timer = setTimeout(tick, pollDelayMs(attempts));
+    };
+    timer = setTimeout(tick, pollDelayMs(0));
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [activeAction]);
 
   // Poll a semantic-resolution request (read-only) until terminal, then apply
@@ -471,15 +486,24 @@ export default function HermesPanel({
     if (!activeResolve) return;
     const { resolveRequestId, conversationId, turnId } = activeResolve;
     let attempts = 0;
-    const max = 40; // ~60s
+    // PHASE 2 — fenêtre inchangée (~60 s), recul exponentiel : ~7 requêtes au lieu de 40.
+    const max = attemptsWithinBudget(POLL_BUDGET_MS.form);
     let applied = false;
-    const timer = setInterval(async () => {
-      attempts += 1;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let stopped = false;
+    const stop = () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+    const tick = async () => {
+      if (stopped) return;
       const r = await pollAgentActionResultAction(resolveRequestId);
+      if (stopped) return;
+      attempts += 1;
       if (TERMINAL_RESULT_STATUSES.has(r.status)) {
         if (applied) return;
         applied = true;
-        clearInterval(timer);
+        stop();
         const res = await applyHermesResolutionAction(
           conversationId,
           resolveRequestId,
@@ -508,7 +532,7 @@ export default function HermesPanel({
         // The resolved answer is the final reply for this turn — speak it.
         speakReply(res.reply);
       } else if (attempts >= max) {
-        clearInterval(timer);
+        stop();
         setTurns((prev) =>
           prev.map((turn) =>
             turn.id === turnId
@@ -531,9 +555,11 @@ export default function HermesPanel({
         setTurns((prev) =>
           prev.map((t) => (t.id === turnId ? { ...t, lifecycle: r.status } : t)),
         );
+        timer = setTimeout(tick, pollDelayMs(attempts));
       }
-    }, 1500);
-    return () => clearInterval(timer);
+    };
+    timer = setTimeout(tick, pollDelayMs(0));
+    return stop;
   }, [activeResolve, speakReply, t]);
 
   // Keep the newest turn in view after the list changes.

@@ -22,8 +22,12 @@ export type EncodedImage = {
   blob: Blob;
 };
 
-/** Decode a File to something drawable, honouring EXIF orientation when possible. */
-async function decode(
+/**
+ * Decode a File to something drawable, honouring EXIF orientation when possible.
+ * Exported so the photo proxy pipeline reuses this one decoder instead of
+ * shipping a second, divergent copy of the same browser quirks.
+ */
+export async function decodeImageFile(
   file: File,
 ): Promise<{ source: CanvasImageSource; width: number; height: number; cleanup: () => void }> {
   // Preferred path: createImageBitmap applies EXIF orientation with the option.
@@ -72,7 +76,7 @@ export async function encodeImageFileToJpeg(
   maxEdge: number = SCAN_MAX_IMAGE_EDGE,
   quality: number = SCAN_JPEG_QUALITY,
 ): Promise<EncodedImage> {
-  const { source, width, height, cleanup } = await decode(file);
+  const { source, width, height, cleanup } = await decodeImageFile(file);
   try {
     const target = resizeToMaxEdge(width, height, maxEdge);
     if (target.width === 0 || target.height === 0) {

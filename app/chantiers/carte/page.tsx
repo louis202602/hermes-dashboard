@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import ChantierMapWidget from "@/components/dashboard/ChantierMapWidget";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireRoute } from "@/lib/dashboard/routeGuard";
 import { getChantiersMap } from "@/services/hermes/chantierMap";
 
 export const metadata = {
@@ -10,12 +9,12 @@ export const metadata = {
 };
 
 export default async function ChantierMapPage() {
-  // Same server-side auth boundary as the dashboard.
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  // Auth + MODULE. Avant, seule l'authentification était vérifiée : n'importe
+  // quel tenant connecté — y compris un studio photo — atteignait cette page
+  // BTP par URL directe. La carte était vide (les données sont bornées au
+  // tenant), mais la page n'était pas la sienne. `requireRoute` interroge la
+  // MÊME liste de modules que le menu : le module `worksites` ou rien.
+  await requireRoute("/chantiers/carte");
 
   const res = await getChantiersMap();
   const data = res.ok

@@ -1,4 +1,10 @@
 import CommandCenter from "@/components/dashboard/CommandCenter";
+import DashboardWidgetBoard from "@/components/dashboard/DashboardWidgetBoard";
+import {
+  PvBillsToVerifyWidget,
+  PvProspectsWithoutSiteWidget,
+  PvStudiesToValidateWidget,
+} from "@/components/dashboard/PvWidgets";
 import {
   actionableAlertCount,
   nextEventForBar,
@@ -16,7 +22,9 @@ import { effectiveProfileLayout } from "@/lib/dashboard/profiles";
 import {
   getCapabilitiesCached,
   getDashboardContextSettingsCached,
+  getPhotoModuleStateCached,
   getUnifiedAlertsCached,
+  requireAuthedUser,
 } from "@/lib/dashboard/requestScope";
 import {
   contextVisibleSegments,
@@ -32,6 +40,8 @@ import {
   getPlatformHealth,
 } from "@/services/hermes/panels";
 import { getDashboardUserPreferences } from "@/services/hermes/preferences";
+import { resolvePageContext } from "@/lib/dashboard/pageContext";
+import { getPvPilotSnapshot } from "@/services/hermes/pv";
 import { classifyPlatformHealth } from "@/lib/dashboard/systemActivity";
 import { getActiveTenantIdentity } from "@/services/hermes/tenantIdentity";
 
@@ -42,12 +52,16 @@ import { getActiveTenantIdentity } from "@/services/hermes/tenantIdentity";
  * quick chips), no full lists or heavy panels. Compared to the earlier Home it drops the
  * observability/action-stats/resolver reads (detail now lives in the /agents, /activite, …
  * sub-pages) and keeps only a light platform-health read for the hero état — so it loads
- * strictly LESS. The group layout redirects
- * unauthenticated requests to /login; because Next renders layout and page concurrently
- * these reads may still start for a logged-out request, so the real guarantee is that
- * EVERY service RPC enforces auth + tenant server-side (SECURITY DEFINER).
+ * strictly LESS.
+ *
+ * AUTH: Next renders the group layout and this page CONCURRENTLY, so the layout's
+ * redirect cannot stop the fan-out below — this page resolves the boundary itself,
+ * first. Server-side enforcement in every RPC (SECURITY DEFINER) remains the security
+ * guarantee; the guard here is what keeps a logged-out request from issuing them at all.
  */
 export default async function CommandCenterPage() {
+  await requireAuthedUser();
+
   const [
     tenant,
     kpis,
@@ -59,6 +73,7 @@ export default async function CommandCenterPage() {
     capabilities,
     contextSettingsResult,
     preferencesResult,
+    photoModule,
   ] = await Promise.all([
     getActiveTenantIdentity(),
     getPublicKpis(),
@@ -70,6 +85,7 @@ export default async function CommandCenterPage() {
     getCapabilitiesCached(),
     getDashboardContextSettingsCached(),
     getDashboardUserPreferences(),
+    getPhotoModuleStateCached(),
   ]);
 
   const prefs = preferencesResult.ok
@@ -96,6 +112,7 @@ export default async function CommandCenterPage() {
   const { globalLayout, profiles, activeProfile } = resolveHomeProfileContext(
     prefs,
     capabilities,
+    photoModule.enabled,
   );
   const layout = effectiveProfileLayout(profiles, activeProfile, globalLayout);
   const contextConfig = resolveContextConfig(layout.context);
@@ -156,19 +173,50 @@ export default async function CommandCenterPage() {
     showSeconds,
   });
 
+  // PV-4 — LA GRILLE DE WIDGETS, enfin branchée.
+  //
+  // `EditableWidgetGrid` existait depuis DASH-4C mais n'était rendue nulle part :
+  // le catalogue de widgets était une déclaration sans effet. On la branche ici,
+  // sous le cockpit, en réutilisant la composition de verticale — donc SANS
+  // grille spécifique à un métier.
+  //
+  // COÛT : la composition est déjà calculée par `resolvePageContext` (mise en
+  // cache par requête), et l'instantané PV n'est lu QUE si le tenant possède
+  // réellement un widget solaire. Un tenant photo ne déclenche aucune lecture PV.
+  const pageContext = await resolvePageContext();
+  const composedWidgets = pageContext.composition.widgets;
+  const needsPvSnapshot = composedWidgets.some((id) => id.startsWith("pv-"));
+  const pvSnapshot = needsPvSnapshot ? await getPvPilotSnapshot() : null;
+
+  const widgetSlots = pvSnapshot
+    ? {
+        "pv-studies-to-validate": <PvStudiesToValidateWidget snapshot={pvSnapshot} />,
+        "pv-bills-to-verify": <PvBillsToVerifyWidget snapshot={pvSnapshot} />,
+        "pv-prospects-without-site": <PvProspectsWithoutSiteWidget snapshot={pvSnapshot} />,
+      }
+    : {};
+
   return (
-    <CommandCenter
-      contextBar={contextBar}
-      initialClock={initialClock}
-      contextSegments={contextSegments}
-      tenant={tenant}
-      heroStatus={heroStatus}
-      alertCount={alertCount}
-      alertTone={alertTone}
-      priorities={priorities}
-      kpis={kpis}
-      capabilities={capabilities}
-      quickActions={prefs.behavior.quickActions}
-    />
+    <>
+      <CommandCenter
+        contextBar={contextBar}
+        initialClock={initialClock}
+        contextSegments={contextSegments}
+        tenant={tenant}
+        heroStatus={heroStatus}
+        alertCount={alertCount}
+        alertTone={alertTone}
+        priorities={priorities}
+        kpis={kpis}
+        capabilities={capabilities}
+        quickActions={prefs.behavior.quickActions}
+      />
+      <DashboardWidgetBoard
+        available={composedWidgets}
+        initialLayout={prefs.layout}
+        version={prefs.version}
+        slots={widgetSlots}
+      />
+    </>
   );
 }

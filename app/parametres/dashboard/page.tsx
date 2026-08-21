@@ -10,6 +10,7 @@ import {
   profileWallpaperFields,
 } from "@/lib/dashboard/profiles";
 import { availableWidgetIds } from "@/lib/dashboard/widgets";
+import { grantedModules } from "@/lib/verticals/modules";
 import { isUserWallpaperRef, resolveWallpaper } from "@/lib/dashboard/wallpapers";
 import { getCatalog, getLanguageDef, resolveLanguage } from "@/lib/i18n";
 import { I18nProvider } from "@/lib/i18n/I18nProvider";
@@ -42,10 +43,15 @@ export default async function DashboardSettingsPage() {
       ? capabilities.data.capabilities.map((c) => c.actionKey)
       : [],
   );
-  const available = [...availableWidgetIds(capabilityKeys)];
   // DASH-4I: capability-first — derive functional tokens, then the offered profiles.
+  const tokens = deriveCapabilityTokens(capabilityKeys);
+  // PV-3 : la galerie doit refléter la MÊME disponibilité que le dashboard. Les
+  // widgets gardés par un module exigent donc la liste des modules accordés ici
+  // aussi — sinon un tenant photo verrait « Études à valider » proposée dans ses
+  // réglages alors qu'il ne peut pas l'afficher.
+  const available = [...availableWidgetIds(capabilityKeys, grantedModules(tokens))];
   const offeredProfiles = availableProfiles(
-    deriveCapabilityTokens(capabilityKeys),
+    tokens,
     capabilities.ok && capabilities.data.resolutionStatus === "OK",
   );
   // DASH-4E: sign each profile's user-uploaded wallpaper so the settings live preview can

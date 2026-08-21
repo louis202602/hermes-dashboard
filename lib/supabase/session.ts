@@ -1,6 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import type { NextRequest, NextResponse } from "next/server";
 
+import { logEvent } from "@/lib/observability/log";
+
+import { classifyAuthError } from "./authError";
 import { getSupabaseEnv } from "./env";
 
 /**
@@ -31,5 +34,13 @@ export async function refreshSupabaseSession(
     },
   });
 
-  await supabase.auth.getUser();
+  const { error } = await supabase.auth.getUser();
+  if (error) {
+    const { reason, level } = classifyAuthError(error);
+    logEvent(level, "session.proxy_refresh_failed", {
+      reason,
+      code: error.code ?? null,
+      status: error.status ?? null,
+    });
+  }
 }

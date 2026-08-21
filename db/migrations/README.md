@@ -752,3 +752,641 @@ Canonical geographic source for the free (MapLibre + OpenStreetMap) worksite map
   overridable for self-hosted PMTiles/tileserver). MapLibre + the map data load ONLY
   when the opt-in `chantiers-map` widget is added or the `/chantiers/carte` page is
   opened. External routing = an "Ouvrir l'itinéraire" link (no paid API).
+
+## PHOTO-P0 — Verticale Hermès Studio (2026-08-18) — **NON APPLIQUÉE**
+
+Construction préparatoire de la verticale photographe décrite dans
+`docs/hermes-studio-photographe-architecture.md`. **`GO_LIVE = NO` :** ces six
+fichiers ne sont **pas** appliqués — ils constituent le diff à examiner avant
+toute migration réelle.
+
+| Fichier | Contenu |
+|------|---------|
+| `20260818_photo_studio_1_schema.sql` | 14 tables `photo_*` (activation, clients, membres, séances, assets, signaux, verdicts, consignes, profils de style, jobs d'édition, galeries, opportunités, consentement, brouillons marketing). RLS **enabled sans policy** ⇒ deny-all ; accès par façade uniquement. Aucune colonne ne stocke un RAW ni un gabarit biométrique. |
+| `20260818_photo_studio_2_services.sql` | Services métier canoniques : `photo_session_status_rank`, `compute_photo_session_state` (**le « Studio Director » = une projection SQL, pas un second orchestrateur**), `verifier_consentement_photo` (gate fail-closed), `detect_photo_upsell_opportunities` (SQL pur, lecture seule), `derive_photo_culling_verdicts` (**unique implémentation** des seuils de tri). |
+| `20260818_photo_studio_3_facades.sql` | 1 garde partagée + 14 façades `public.*` (8 lectures, 6 écritures). SECURITY DEFINER, `search_path` verrouillé, REVOKE PUBLIC / GRANT `authenticated`, tenant résolu par `resolve_active_tenant` — **aucune n'accepte de `tenant_id` du client**. |
+| `20260818_photo_studio_4_storage_proxies.sql` | Bucket **privé** `hermes-photo-proxies` (6 MiB, jpeg/webp) + RLS `storage.objects` dérivant le tenant de la clé d'objet, **sans policy DELETE**. Façades finalize / failed / purge, bornées et appelables — aucun worker, aucun scheduler. Réutilise `hermes_os.is_active_tenant_member` (ardoise pièces jointes) sans la redéfinir. |
+| `20260818_photo_studio_5_dormant_registry.sql` | 11 actions catalogue **`enabled = false`**, 6 configurations d'exécution `enabled = false`, 11 politiques SW15 `DISABLED`, 5 abonnés SW20 `DISABLED`, 4 définitions de métriques SW19 additives, 1 budget SW23 conditionnel (`on conflict do nothing`). |
+| `20260818_photo_studio_9_rollback.sql` | Teardown intégral, ordre inverse des dépendances. Ne touche PAS aux briques partagées d'une autre ardoise. |
+
+### Invariants (vérifiés mécaniquement par `tests/photo-migrations.test.ts`)
+
+- **Dormance prouvée.** `hermes_os.request_agent_action` filtre
+  `where action_key = … and enabled = true` : une action photo répond donc
+  `UNKNOWN_ACTION` même à un appelant authentifié, membre et autorisé. Par
+  conséquent `get_available_capabilities()` ne la renvoie pas, et **aucun widget,
+  profil, menu ou route photo n'apparaît** tant qu'un opérateur n'a pas activé.
+- **Aucune suppression de photo.** Il n'existe aucun `DELETE` sur
+  `photo_session_assets` ni sur les verdicts. « Écarter » écrit
+  `human_decision = 'DISCARD'` ; la purge de proxy passe le statut à `PURGED` et
+  oublie les chemins, en conservant la ligne d'inventaire. Le fichier d'origine
+  n'a jamais quitté le poste de la photographe.
+- **Protection prioritaire.** Dans `derive_photo_culling_verdicts`, la branche
+  « couverte par une consigne PROTECT » est évaluée **avant** toute branche de
+  rejet, et une décision humaine déjà prise n'est jamais écrasée.
+- **RGPD.** Contrainte de table `photo_consent_minors_need_guardian` (mineurs ⇒
+  consentement du représentant légal obligatoire), `identity_scope` par défaut
+  `NONE`, aucune reconnaissance faciale, aucune lecture GPS des EXIF, minimisation
+  sur `photo_client_members` (prénom + mois/année seulement).
+- **Non-régression assumée.** `component_registry` n'est **pas** alimenté :
+  `get_platform_health()` compte toutes ses lignes sans filtre de visibilité, et y
+  déclarer des agents encore inexistants changerait un chiffre affiché.
+
+### Écarts assumés par rapport au rapport d'architecture
+
+1. **Les écritures déterministes ne passent pas par `request_agent_action`.**
+   `agent_action_catalog` porte `CHECK (target_kind = 'N8N_WORKFLOW')` : une action
+   dont le runner est une fonction Postgres n'y est pas représentable sans modifier
+   une contrainte existante. Ces écritures suivent donc le patron déjà en place
+   (`upsert_dashboard_user_preferences`, `upsert_chantier_geocode`,
+   `finalize_hermes_attachment`) : façade fail-closed pilotée par l'utilisateur. Les
+   actions pilotées par un AGENT restent réservées à la passerelle unique.
+2. **Table d'activation dédiée** plutôt que `tenant_module_activation`, dont la FK
+   vers `component_registry` imposerait précisément l'inflation de KPI écartée
+   ci-dessus.
+3. **Lectures galeries / revenus / marketing non livrées.** Leurs tables ne peuvent
+   être alimentées que par un consumer n8n : livrer des lecteurs sur des tables
+   toujours vides produirait des panneaux décoratifs.
+
+### Ce qui a réellement été vérifié
+
+Le SQL n'a **pas** été appliqué à la production. Il a en revanche été exécuté sur
+un **PostgreSQL 16 local et jetable** (schémas Hermès stubés), ce qui a validé :
+application des 5 lots · **ré-application** des 5 lots (idempotence) · rollback
+complet · seconde application/rollback. Deux défauts réels ont été trouvés par
+cette exécution et corrigés :
+
+1. `derive_photo_culling_verdicts` imbriquait `lag()` dans `sum() over` — interdit
+   par Postgres ; le décalage est désormais matérialisé dans un CTE `base`.
+2. `sw15_policies` / `sw20_subscribers` n'ont aucune contrainte d'unicité :
+   `on conflict do nothing` n'y protégeait de rien et les lignes se dupliquaient à
+   la ré-application ; remplacé par une anti-jointure `where not exists`.
+   `create policy` n'acceptant pas `if not exists`, le lot 4 retire désormais ses
+   policies avant de les recréer.
+
+Les deux régressions sont verrouillées par `tests/photo-migrations.test.ts`.
+
+Comportement vérifié sur ce banc d'essai : portillon d'activation (toutes les
+façades répondent `MODULE_DISABLED` avant activation) · idempotence de la création
+de séance et de l'import · **consigne PROTECT** (contre-épreuve : sans la consigne
+la photo est `REJECTED_SUGGESTION`, avec elle `KEEP_SUGGESTION`) · **aucune
+suppression** (4 assets avant / 4 après avoir tout écarté ; purge de proxy sans
+perte de la ligne) · décision humaine non écrasée par une ré-exécution du tri ·
+verrou mineurs · gate de consentement fail-closed · **isolation cross-tenant avec
+les deux tenants activés** (0 séance, 0 client, `found=false`, écriture croisée
+`NOT_FOUND`) · non authentifié et sans tenant refusés · chemin de stockage forgé
+refusé (`PATH_OUT_OF_SCOPE`).
+
+### Protocole de vérification
+
+`db/tests/photo_studio_isolation.test.sql` — assertions d'isolation, de
+fail-closed, de consentement et de non-suppression, à jouer **au moment** de la
+première migration. Elles n'ont pas encore été exécutées et rien n'est présenté
+ici comme constaté.
+
+### Audit final avant migration (2026-08-18)
+
+Confrontation des migrations au **vrai schéma Supabase en lecture seule**
+(`information_schema`, `pg_proc`, `pg_constraint`, `pg_policies`) puis nouveau cycle
+complet sur PostgreSQL local jetable. **Compatibilité : 12/12 dépendances OK, aucune
+collision de nom, aucune colonne NOT NULL sans défaut non fournie.**
+
+Trois défauts réels ont été trouvés et corrigés :
+
+1. **Moindre privilège (HAUT).** `authenticated` détient `USAGE` sur le schéma
+   `hermes_os` en production, et toutes les fonctions internes existantes y sont
+   explicitement restreintes (`postgres=X`, parfois `service_role=X`). Les 6 nouvelles
+   fonctions internes n'avaient pas de `REVOKE` : `PUBLIC` conservait `EXECUTE` sur des
+   fonctions qui **prennent un tenant en paramètre**, donc sans contrôle d'appelant.
+   `REVOKE ALL … FROM public` ajouté sur les 6 ; ACL vérifiées `postgres=X/postgres`.
+2. **Verrou de publication marketing (MOYEN).** La contrainte de table n'exigeait qu'un
+   `consent_id` NON NUL — un consentement **révoqué ou expiré** la satisfaisait. Un
+   déclencheur `BEFORE INSERT OR UPDATE` revalide désormais **le** consentement référencé
+   au moment du passage à `PUBLISHED` (client, statut, révocation, expiration, usage,
+   mineurs, portée d'identité). Il s'applique à tout écrivain, y compris un `INSERT` SQL
+   direct qui n'appellerait pas la façade — vérifié en contournant délibérément celle-ci.
+3. **Course sur la création de client (MOYEN).** Deux créations simultanées pour un client
+   nouveau pouvaient toutes deux franchir le `SELECT` et provoquer une violation
+   d'unicité. `on conflict do nothing` + relecture + refus fail-closed résiduel.
+
+Deux clarifications d'honnêteté ont aussi été ajoutées : les seuils de tri
+(0.35 / 0.55 / rafale 2 s / `SHARPNESS_REFERENCE`) sont désormais marqués **NON CALIBRÉS**
+dans le SQL **et** affichés comme tels dans l'interface de revue ; l'ordre obligatoire de
+purge (lister → supprimer l'objet → marquer purgé) est documenté, ainsi que le fait que le
+TTL de 90 jours n'est **pas** appliqué automatiquement en Phase 1.
+
+### Décision — passerelle des actions déterministes
+
+`DETERMINISTIC_ACTION_GATEWAY_DECISION = KEEP_DIRECT_SQL` pour la Phase 1.
+
+Fait déterminant relevé en base : **`request_agent_action` ne lit pas `target_kind`**, et
+`claim_agent_action` ne fait que le **recopier** dans son JSONB de retour — aucune fonction
+ne branche dessus. Étendre la contrainte à `POSTGRES_FUNCTION` serait donc un `ALTER` isolé
+et sans effet sur les actions existantes. Mais **aucun dispatcher ne saurait exécuter** une
+action `POSTGRES_FUNCTION` : une requête resterait `QUEUED` indéfiniment tant qu'un runner
+(n8n, indisponible) ou un nouveau composant ne la réclame pas. Faire transiter une écriture
+CRUD synchrone par une file asynchrone transformerait par ailleurs « créer une séance » en
+attente de résultat. La convergence reste possible et documentée ; elle n'a pas sa place
+dans une phase qui doit rester dormante.
+
+---
+
+## 2026-08-19 — PHASE 1 : sécurisation du socle (BLOCKER B2)
+
+Lots `20260819_phase1_security_1..4` + `_9_rollback`. Appliqués au projet
+`smubxqorirlfldatzmym`. **Aucune capacité rendue autonome, aucun runner réveillé,
+aucune table `pv_*`.**
+
+### Le défaut corrigé
+
+`hermes_os.gateway_policy_gate(uuid)` était **FAIL-OPEN** : lorsqu'aucune politique
+SW15 `ACTIVE` ne correspondait, elle appliquait `v_effect := 'PERMIT'`. Or les
+13 politiques en base sont toutes `DISABLED`, et `agent_action_catalog.is_sensitive`
+n'intervenait **pas** dans la décision. Conséquence mesurée avant migration, sur une
+action de fixture `is_sensitive = true` sans politique :
+
+```
+gate_result = PERMIT        -- attendu après correctif : REQUIRE_APPROVAL
+```
+
+Les trois capacités d'écriture métier réellement actives
+(`btp.qualification.create`, `btp.planning.phase.add`, `btp.suivi.progress.report`),
+toutes marquées `is_sensitive = true`, étaient donc exécutables **sans aucune
+approbation humaine**.
+
+### Comportement après
+
+| `is_sensitive` | politique ACTIVE correspondante | décision |
+|---|---|---|
+| `true`  | `DENY`             | `DENY` |
+| `true`  | `REQUIRE_APPROVAL` | `REQUIRE_APPROVAL` |
+| `true`  | `PERMIT`           | `PERMIT`, motif d'audit dédié « PERMIT EXPLICITE » |
+| `true`  | **aucune**         | **`REQUIRE_APPROVAL`** ← le correctif |
+| `false` | selon la politique | effet de la politique |
+| `false` | **aucune**         | `PERMIT` (défaut conservé, décision documentée) |
+
+Le défaut `PERMIT` sur action **non sensible** est assumé : `is_sensitive = false` est
+une déclaration explicite du catalogue, et le catalogue n'est modifiable que par
+migration. Les deux seules actions concernées sont `diag.echo` (aucun effet) et
+`hermes.intent.resolve` (proposition seule — l'action cible repasse par la même
+passerelle avec **sa** sensibilité).
+
+Action absente du catalogue ⇒ traitée comme sensible (`coalesce(is_sensitive, true)`).
+En pratique la FK `agent_action_requests_action_key_fkey` rend le cas impossible : le
+`coalesce` est une ceinture de sécurité, la contrainte est la garantie.
+
+### Limite connue, volontairement non modifiée
+
+La sélection de politique reste scopée `p.tenant_id = v_req.tenant_id`. Les politiques
+à `tenant_id IS NULL` (les 12 lignes photo, toutes `DISABLED`) ne correspondent donc
+jamais. Élargir le matching aux politiques globales **augmenterait** la surface
+d'autonomie — l'inverse de l'objectif de cette phase. À traiter séparément quand les
+verticales concernées sortiront de dormance.
+
+### Autres lots
+
+* **Lot 2** — 3 politiques SW15 `ACTIVE` / `REQUIRE_APPROVAL` pour les capacités BTP,
+  tenant `heliosolar`, marquées `updated_by = 'phase1_security_2'` (le rollback ne
+  supprime que celles-là). Les 13 politiques préexistantes restent `DISABLED`.
+* **Lot 3** — `dashboard_context_settings` : RLS activée (deny-all, 0 politique).
+  C'était la seule table de `hermes_os` sans RLS (1/178). Comportement applicatif
+  inchangé : l'accès passe par `public.get_dashboard_context_settings()`
+  (SECURITY DEFINER). `REVOKE ALL` réaffirmé sur `anon` et `authenticated`.
+* **Lot 4** — `photo_session_status_rank(text)` : `search_path` épinglé. Advisor
+  `function_search_path_mutable` : **1 → 0**.
+
+### `btree_gist` — déplacement REPORTÉ (décision documentée)
+
+L'advisor `extension_in_public` reste ouvert. Évaluation menée en transaction annulée :
+
+1. `alter extension btree_gist set schema extensions` **réussit** techniquement ;
+2. la seule dépendance en base est la contrainte d'exclusion
+   `sw23_model_catalog_no_overlap` (garde-fou anti-chevauchement des prix SW23) ;
+   après déplacement simulé, une insertion chevauchante est **toujours rejetée**
+   (`exclusion_violation`) — l'invariant survit.
+
+Le déplacement est donc *possible*. Il est néanmoins **reporté** : le bénéfice de
+sécurité est nul (les fonctions `gbt_*` exposées prennent des arguments `internal` et
+ne sont pas appelables ; `anon` n'a aucun privilège sur `hermes_os`), tandis que les
+consommateurs n8n — **non inspectables**, instance injoignable — pourraient utiliser
+des opérateurs résolus via `search_path`. Un risque non nul contre un gain nul ne se
+prend pas dans une phase dont la contrainte est « aucune régression ». À reprendre
+quand n8n sera de nouveau auditable, avec en préalable l'ajout de `extensions` au
+`search_path` de toute future migration créant une contrainte d'exclusion GiST.
+
+### Preuves
+
+`db/tests/phase1_gateway_fail_closed.test.sql` — 23 assertions, transaction annulée,
+**23 PASS** (A/B/C/D + PERMIT explicite tracé, défaut non sensible, FK anti-orphelin,
+court-circuit d'approbation humaine, `NOT_FOUND`, politiques BTP, doctrine
+« aucun PERMIT actif sur action sensible », permission insuffisante, isolation tenant,
+`dashboard_context_settings` inaccessible en direct).
+
+`tests/phase1-security-migrations.test.ts` — 18 assertions de contrat sur le diff SQL.
+Vérifiées par mutation : remettre le défaut fail-open fait échouer 2 tests.
+
+Les 11 requêtes réelles en file (`10 × hermes.intent.resolve`,
+`1 × btp.qualification.create`) n'ont été ni lues en écriture, ni claim ées, ni mutées.
+
+---
+
+## 2026-08-19 — PHASE 2 : hygiène du socle
+
+Lots `20260819_phase2_hygiene_1..2` + `_9_rollback`. Appliqués au projet
+`smubxqorirlfldatzmym`. **Aucune ligne métier réelle modifiée.**
+
+### Lot 1 — expiration des requêtes gateway orphelines
+
+11 requêtes `QUEUED` depuis le 10 août (10 × `hermes.intent.resolve`,
+1 × `btp.qualification.create`), toutes `attempts = 0`, sans décision de
+politique ni demande d'approbation : aucun consumer n8n n'est actif et
+`resolver_runtime_config.enabled = false` sur les 7 clés.
+
+La cause racine est **externe** (quota n8n Cloud bloqué) et hors périmètre. Ce
+lot fournit ce qui manquait : une **porte de sortie** pour une file sans
+consumer. `expire_stale_queued_agent_actions(p_older_than, p_action_key,
+p_limit)` marque `FAILED` / `STALE_NO_CONSUMER` les seules requêtes **jamais
+réclamées** et plus vieilles que la limite d'âge. Ligne, `payload`,
+`payload_hash`, `created_at`, `correlation_id` et piste d'audit **conservés** :
+aucune suppression. `service_role` uniquement.
+
+> **La migration n'exécute pas la fonction.** Les 11 requêtes réelles ne sont pas
+> touchées : l'expiration est une décision d'exploitation explicite.
+
+### Lot 2 — intégrité `tenant_id` sur la file du gateway
+
+FK `agent_action_requests.tenant_id → tenants(tenant_id)`, `ON DELETE RESTRICT`.
+Seul écrivain : `request_agent_action`, qui obtient le tenant via
+`resolve_active_tenant` — jamais du client. L'invariant applicatif devient un
+invariant de schéma.
+
+**`execution_logs` n'est délibérément PAS contraint** : il porte 30 lignes sur
+10 tenants inexistants (`tenant-iso-A` ×11, `tenant-hb-test` ×5,
+`tenant-loop-test` ×3, `tenant-monitoring-relapse` ×3, `tenant-execute-test` ×2,
+`tenant-sw12-test-A` ×2, plus 4 unitaires), résidus de campagnes SW12/SW17. Ses
+écrivains sont les modules SW côté n8n, **inspectables par personne** aujourd'hui.
+Poser une FK sur une table écrite par du code non auditable risquerait de faire
+échouer un écrivain légitime. Les 30 lignes ne sont pas supprimées non plus :
+ce serait destructif, et c'est une décision d'exploitation.
+
+### Deux constats de l'audit initial CORRIGÉS après mesure
+
+* **`sw13_event_outbox` — aucun index manquant.** La table porte déjà 3 index
+  (`pkey`, `idx_sw13_outbox_tenant_status`, `uq_sw13_outbox_request_type`) et
+  affiche `idx_scan = 15295` contre `seq_scan = 12073` : les index **sont**
+  utilisés. Sur 43 lignes vivantes, PostgreSQL préfère légitimement un parcours
+  séquentiel — c'est moins cher. Le chiffre relevé par l'audit était un artefact
+  de la petitesse de la table, pas un défaut. **Aucune action.**
+* **Agents 1 et « Agent Commercial IA » — pas de doublon.** Capacités
+  **disjointes** (`pilotage_commercial` · `qualification_prospects`+`handoff_crm`
+  · `suivi_affaires_commercial` pour l'Agent 3), workflows distincts, aucun
+  `duplicate_group` partagé. C'est une division du travail, pas un recouvrement.
+  L'audit avait conclu sur les noms. **Aucune action.**
+
+### Agents `legacy_superseded` encore `n8n_active`
+
+7 composants (2 Immobilier-Qualification, 2 Industrie-Production,
+2 Industrie-Maintenance, 1 SW17). **Non sélectionnables par Hermès** — prouvé :
+aucune ligne d'`agent_action_catalog` ne cible leur `workflow_id`, et
+`v_dashboard_components` les exclut déjà par `is_current_in_group = true`.
+
+Leur désactivation **dans n8n** est `BLOCKED_EXTERNAL`. Basculer
+`component_registry.n8n_active = false` sans toucher n8n ferait **mentir le
+registre**, qui est un miroir de l'état n8n — un faux sentiment de sécurité pire
+que le constat. Les deux invariants vérifiables sont donc verrouillés par test
+(`LEG1`, `LEG2`).
+
+### Preuves
+
+`db/tests/phase2_hygiene.test.sql` — 16 assertions, transaction annulée,
+**16 PASS**, dont `DATA1`/`DATA2` (aucune donnée réelle perdue) et
+`P1a`/`P1b`/`P1c` (les protections de la Phase 1 restent intactes).
+
+---
+
+## 2026-08-19 — PACK PHOTOVOLTAÏQUE, LOT PV-1 : modèle de données métier
+
+Lots `20260819_pv1_1_schema` + `_2_functions` + `_9_rollback`. Appliqués au projet
+`smubxqorirlfldatzmym`. **0 ligne métier écrite en production.**
+
+### Ce que le lot ferme
+
+L'audit du 2026-08-19 avait établi que le schéma ne contenait **aucune** colonne
+photovoltaïque, et que les Agents 4 (Facture EDF) et 5 (Bureau d'Études PV), pourtant
+actifs dans n8n, étaient **orphelins** — aucune table ne pouvait recevoir leur sortie.
+
+**9 tables** : `pv_prospects` · `pv_prospect_transitions` · `pv_sites` ·
+`pv_consumption_profiles` · `pv_energy_bills` · `pv_energy_bill_extractions` ·
+`pv_studies` · `pv_study_assumptions` · `pv_economics`.
+
+### L'invariant central — l'IA ne s'auto-valide jamais
+
+Déclencheur `pv_human_validation_guard`, opposable à tout écrivain :
+
+* `auth.uid()` NULL ⇒ **refus** — un runner en `service_role` n'a pas d'identité
+  authentifiée, il ne peut donc structurellement pas valider ;
+* `verified_by` / `validated_by` doit être **l'appelant authentifié lui-même** — on ne
+  valide pas au nom d'autrui ;
+* `CHECK` complémentaire (acteur **et** horodatage) + FK vers `auth.users(id)`.
+
+Conséquence : une étude `prepared_by = 'AGENT_5'` en `CALCULATED` ne peut pas atteindre
+`VALIDATED`, et une extraction ne peut pas rendre une facture `VERIFIED`.
+`pv_promote_bill_extraction()` — seul chemin sanctionné — aboutit à **`NEEDS_REVIEW`**,
+jamais `VERIFIED` : promouvoir et certifier sont deux gestes distincts.
+
+### Isolation — la FK composite
+
+Une FK enfant sur `id` seul aurait laissé un site pointer le prospect d'un **autre
+tenant**. Les 7 FK du lot sont donc **composites** `(tenant_id, parent_id)`, adossées à
+une clé candidate `unique (tenant_id, id)` sur chaque parent. Plus `tenant_id` immuable
+par déclencheur, RLS deny-all sur les 9 tables, et `REVOKE ALL FROM anon, authenticated`.
+
+### Décisions de modélisation
+
+* **Azimut et inclinaison numériques** (`numeric`), pas des chaînes : « plein sud » n'est
+  pas calculable par PVGIS.
+* **Hypothèses d'étude en colonnes typées** (prix énergie, inflation, horizon,
+  actualisation, dégradation, pertes, rachat surplus, aides, TVA). `extra_assumptions`
+  (jsonb) est un **complément**, jamais la source d'un chiffre montré au client.
+* **Documents = (bucket privé, chemin)**, jamais une URL — un `CHECK` refuse `http(s)://`.
+  Le bucket `hermes-pv-documents` et sa RLS `storage` sont au lot PV-2 : PV-1 ne pose que
+  le contrat de colonnes.
+* **Audit : brique EXISTANTE réutilisée** (`entity_audit_log`). Aucun second système.
+* **`ON DELETE RESTRICT`** sur les chaînes porteuses de données ; `CASCADE` uniquement
+  là où l'enfant n'a aucun sens seul et ne porte rien de validé (extractions, hypothèses).
+
+### Preuves
+
+`db/tests/pv1_schema.test.sql` — **30 assertions, 30 PASS**, transaction annulée,
+couvrant les 12 tests exigés + audit + promotion + RLS, dont le rollback réel du lot
+(9 tables retirées, et **seulement** elles) et la non-régression des Phases 1 et 2.
+
+`tests/pv1-schema-migrations.test.ts` — 22 assertions de contrat sur le diff SQL.
+Vérifié par mutation : remplacer une FK composite par une FK simple fait échouer un test.
+
+## 2026-08-20 — GOUVERNANCE DES MIGRATIONS PRODUCTION — **NON APPLIQUÉE**
+
+Le 2026-08-19, deux sessions Claude ont écrit sur la même base à quelques minutes
+d'intervalle (PV-1 à 13:22, PV-2 à 16:10–16:14) pendant qu'une troisième mission
+auditait cette même base. Aucune n'a mal agi ; aucune ne pouvait savoir. Ce lot
+supprime cette cécité mutuelle.
+
+| Fichier | Migration à appliquer | Objet |
+|------|-------------------|---------|
+| `20260820_hermes_migration_governance_1_lock.sql` | `hermes_migration_governance_1_lock` | `production_migration_lock` (singleton structurel) + `…_lock_history` |
+| `20260820_hermes_migration_governance_2_functions.sql` | `hermes_migration_governance_2_functions` | `acquire_…` / `release_…` / `…_status` |
+| `20260820_hermes_migration_governance_3_baseline.sql` | `hermes_migration_governance_3_baseline` | photo de la dette + `migrations_since_baseline()` |
+| `20260820_hermes_migration_governance_9_rollback.sql` | — | démontage complet |
+
+**APPLIQUÉE le 2026-08-20** — `hermes_migration_governance_1_lock` (06:37:08),
+`_2_functions` (06:37:40), `_3_baseline` (06:38:07). Verrou testé sur la production :
+16/16 assertions, verrou laissé `FREE`, historique nettoyé de ses lignes de test.
+Ligne de base : `cutoff_version = 20260820063740`, **205 migrations en héritage**.
+
+**Mode = COOPÉRATIF.** Pas d'`event trigger` DDL : le verrou rend l'occupation
+visible et opposable, il ne peut pas l'empêcher. C'est un choix assumé, documenté
+dans `docs/hermes-migrations-production.md`.
+
+### Garanties structurelles
+
+* `ONE_ACTIVE_LOCK_MAX` — `primary key (lock_id)` + `check (lock_id = 'PRODUCTION')`.
+  La table **ne peut pas** contenir deux lignes ; ce n'est pas une convention.
+* `TTL_REQUIRED` — borné des deux côtés en base (`> acquired_at`, `<= +2 heures`),
+  et en fonction (1 à 120 minutes). Un verrou éternel est un interblocage différé.
+* `EXPIRED_LOCK_CAN_BE_RECLAIMED` — la reprise archive le détenteur périmé
+  **avant** de supprimer sa ligne, et renvoie un avertissement : un verrou expiré
+  signale une migration qui n'a jamais dit qu'elle était finie.
+* `base_sha ~ '^[0-9a-f]{40}$'` — on ne verrouille pas en déclarant « main ».
+* RLS deny-all, `revoke all … from public, anon, authenticated`, aucune façade
+  `public` : ce n'est pas une capacité métier.
+
+### Dette historique
+
+Sur ~203 migrations appliquées, la grande majorité n'a aucun fichier ici. Une règle
+« toute migration sans fichier = STOP » bloquerait Hermès et serait désactivée le
+lendemain. `migration_baseline` photographie donc l'existant : **`LEGACY_BASELINE`**
+ne bloque rien, **`NEW_UNVERSIONED_DRIFT`** (appliqué après la frontière, sans
+fichier) rend `STOP_UNVERSIONED_DB_DRIFT`.
+
+### Preuves
+
+* **25 assertions sur PostgreSQL réel** — acquisition, contention, réentrance,
+  refus de libération par un tiers, TTL invalides, SHA invalide, identité vide,
+  reprise après expiration, singleton (deux `insert` refusés par la base),
+  `update` direct au-delà de 2 h refusé, non-reprise de la photo de base.
+* `tests/migration-drift-guard.test.ts` — 26 assertions de contrat.
+  Vérifié par mutation (7 mutations) : neutraliser le singleton, exposer une
+  fonction à `authenticated`, rendre le rapprochement de noms approximatif dans un
+  sens **ou dans l'autre**, oublier une table dans le rollback, faire diverger le
+  script du module, ou neutraliser son contrôle de ligne de base — chacune fait
+  échouer au moins un test.
+
+## 2026-08-22 — PACK PHOTOVOLTAÏQUE, LOT PV-5 : le devis
+
+Le premier artefact **contractuel** du Pack PV. PV-4 produisait un état terminal
+`READY_FOR_OFFER` que rien ne consommait, et la machine à états du prospect
+n'avait aucun état entre `STUDY_DELIVERED` et `WON` — un dossier passait donc de
+« étude livrée » à « gagné » sans qu'aucun artefact ne justifie le passage.
+
+| Fichier | Migration appliquée | Objet |
+|---|---|---|
+| `20260822_pv5_1_quotes_schema.sql` | `pv5_1_quotes_schema` | `pv_quotes`, `pv_quote_lines`, `pv_quote_sequences` ; FK **composites** `(tenant_id, …)` ; total de ligne en **colonne générée** ; recalcul des totaux par déclencheur ; `quote_id` sur `pv_documents` |
+| `20260822_pv5_2_state_machine.sql` | `pv5_2_state_machine` | `pv_quote_transitions` (15 chemins, **données**) ; gel du contenu après envoi (devis **et** lignes) ; audit via `entity_audit_log` ; états `OFFER_*` du prospect et **retrait** du raccourci `STUDY_DELIVERED → WON` |
+| `20260822_pv5_3_facades.sql` | `pv5_3_facades` | 14 façades `public.*` ; garde d'acceptation humaine réutilisée de PV-1 ; `pv_quote_blockers` |
+| `20260822_pv5_3b_blocker_array_cast.sql` | `pv5_3b_blocker_array_cast` | **Correctif** : `text[] \|\| 'chaîne'` n'est pas l'ajout d'un élément — PostgreSQL lit la chaîne comme un array et échoue. `array_append()` partout. |
+| `20260822_pv5_9_rollback.sql` | — | Teardown complet. **Destructif** sur les devis ; **échoue volontairement** si des prospects sont en état `OFFER_*`. |
+
+### Invariants
+
+- **Aucun total ne vient du navigateur.** `line_total_ht_eur` est une colonne
+  `generated always as … stored` : il n'existe aucun point d'écriture. Les totaux
+  du devis sont recalculés par déclencheur. Aucune façade n'accepte de total,
+  aucun formulaire ne porte de champ qui en soit un.
+- **TVA arrondie une fois PAR TAUX**, après répartition proportionnelle de la
+  remise globale. Arrondir par ligne accumulerait l'erreur.
+- **Un devis transmis est figé.** La seule voie de modification est la
+  **révision** : nouvelle version, même numéro commercial, ancienne intacte en
+  `SUPERSEDED`.
+- **`WON` n'est atteignable que depuis `OFFER_ACCEPTED`.** L'acceptation d'un
+  devis met le prospect en `OFFER_ACCEPTED`, pas en `WON` : gagner l'affaire
+  reste un second geste délibéré.
+- **Un agent ne peut pas accepter un devis** — `pv_human_validation_guard`
+  paramétrée, réutilisée de PV-1 : refus quand `auth.uid()` est NULL.
+- **Aucun cron, aucun scheduler.** La péremption est calculée à la lecture et
+  applicable à la demande. n8n reste hors périmètre.
+- **Aucune capacité IA créée** : le devis est 100 % manuel en PV-5.
+
+### Preuves
+
+* **80 assertions SQL** (`db/tests/pv5_quotes.test.sql`), en transaction annulée.
+* **52 assertions de contrat TS** (`tests/pv5-quotes.test.ts`,
+  `tests/pv5-quote-pdf.test.ts`), dont le contenu **décodé** du PDF.
+* **Mutation testing (5 mutations)** : filtrage du statut d'étude neutralisé, gel
+  après envoi neutralisé, raccourci `WON` remis, arrondi TVA par ligne. La
+  quatrième a d'abord **survécu** — l'assertion d'arrondi ne distinguait pas les
+  deux règles sur son jeu d'essai ; le cas qui les sépare (trois lignes à 0,03 €)
+  a été ajouté, et tue le mutant.
+
+---
+
+## 2026-08-23 — PACK PHOTOVOLTAÏQUE, LOT PV-6 : la visite technique
+
+Le trou que ce lot ferme, mesuré avant d'être traité :
+
+```sql
+select column_name from information_schema.columns
+ where table_schema='hermes_os' and table_name='pv_sites'
+   and (column_name like '%verif%' or column_name like '%visit%');
+-- → AUCUNE LIGNE
+```
+
+`pv_sites` ne portait **aucun champ de vérification**. Les six données qui
+déterminent la puissance, la production et donc le prix — surface exploitable,
+azimut, inclinaison, état de couverture, ombrage, accès — étaient saisies au
+bureau et jamais confrontées au terrain. PV-5 en avait fait la base d'un
+engagement contractuel, et les deux PDF produits par Hermès **promettaient déjà**
+cette visite (« sous réserve de … visite technique … »). Le système promettait
+une visite que rien n'implémentait.
+
+| Fichier | Migration appliquée | Objet |
+|---|---|---|
+| `20260823_pv6_1_survey_schema.sql` | `pv6_1_survey_schema` | `pv_survey_thresholds` (seuils **en données**, défaut global + surcharge par tenant), `pv_site_surveys` (mesures en **colonnes typées**), `pv_site_survey_findings` ; FK **composites** ; `survey_id` sur `pv_documents` |
+| `20260823_pv6_2_state_machine.sql` | `pv6_2_state_machine` | `pv_survey_transitions` (15 chemins, **données**) ; garde de validation humaine **réutilisée** de PV-1 ; gel du relevé après validation ; audit via `entity_audit_log` |
+| `20260823_pv6_3_findings_engine.sql` | `pv6_3_findings_engine` | Moteur d'écarts **déterministe** (10 règles, aucune IA), écart d'azimut **circulaire**, `pv_survey_gate` |
+| `20260823_pv6_3b_gate_blocking_priority.sql` | `pv6_3b_gate_blocking_priority` | **Correctif** : la porte testait `VALIDATED` avant `BLOCKING` — une visite validée en mars masquait une visite d'octobre constatant un toit impraticable. Un blocage prime désormais sur une validation antérieure. |
+| `20260823_pv6_4_facades.sql` | `pv6_4_facades` | 11 façades `public.*` ; extension de `pv_quote_blockers` (3 codes de visite) ; `get_pv_deal` gagne `survey_gate` |
+| `20260823_pv6_9_rollback.sql` | — | Teardown complet. **Destructif** sur les visites et les écarts ; restaure `pv_quote_blockers` et `get_pv_deal` **avant** de supprimer `pv_survey_gate`. |
+
+### Invariants
+
+- **La mesure n'écrase jamais la déclaration.** Une valeur relevée sur le toit ne
+  remplace pas la valeur saisie au bureau : les deux coexistent, l'écart est
+  nommé, et un humain décide. `apply_pv_survey_measurement` est la **seule**
+  fonction de ce lot qui écrit dans `pv_sites` ; aucun déclencheur ne le fait, et
+  chaque application est confirmée puis auditée avec son avant/après.
+- **Les mesures sont des colonnes typées.** Une surface cachée dans un blob JSON
+  ne peut être ni contrainte, ni indexée, ni comparée par une règle déterministe.
+  `metadata` existe pour le complément, jamais comme source.
+- **Les vocabulaires mesurés sont alignés sur `pv_sites`** (`PENTE`, `BON`,
+  `FAIBLE`, …). Deux échelles pour la même grandeur auraient exigé une table de
+  traduction que personne n'aurait maintenue, et la comparaison serait devenue
+  une approximation.
+- **Aucune IA ne décide d'une gravité.** Dix règles SQL documentées, deux paliers
+  par grandeur (`REVIEW` puis `BLOCKING`), lisant des seuils **stockés en base** :
+  changer une tolérance ne demande aucun redéploiement, et le même relevé produit
+  toujours les mêmes écarts.
+- **Un agent ne valide jamais une visite** — `pv_human_validation_guard`
+  paramétrée, réutilisée de PV-1 : refus quand `auth.uid()` est NULL, refus quand
+  l'acteur déclaré n'est pas l'appelant. `SECURITY DEFINER` ne la contourne pas.
+- **`PLANNED → VALIDATED` et `BLOCKING → VALIDATED` sont absents** de la table de
+  transitions : on ne valide pas une visite qui n'a pas eu lieu, et un blocage se
+  lève par le terrain ou par une revue, jamais par un changement de statut.
+- **Une visite ne peut pas être validée avec un écart bloquant non résolu** :
+  sinon la preuve terrain dirait le contraire de ce qu'elle a constaté.
+- **Les dossiers engagés ne cassent pas.** L'absence de visite et la visite non
+  validée sont des **avis** (`PV_ADVISORIES`), pas des exigences : un dossier
+  reste `READY_FOR_OFFER`. La garde dure est ciblée sur le devis — `READY`,
+  transmission et PDF `FINAL` exigent une visite validée. Un devis **déjà `SENT`
+  ou `ACCEPTED` n'est jamais modifié** : il affiche l'alerte, et la seule voie de
+  correction reste la révision.
+- **Aucun nouveau bucket.** Photos et rapports rejoignent `hermes-pv-documents`,
+  chemins privés bornés au tenant. Aucun `delete from storage.*` nulle part.
+- **Aucun cron, aucun scheduler, aucune capacité IA.** n8n reste hors périmètre.
+
+### Permissions — décision documentée
+
+La visite est un geste **technique**, pas administratif. Exiger `tenant.admin`
+pour saisir un relevé de toiture interdirait à un technicien de faire son travail
+et pousserait à partager un compte d'administrateur — ce qui serait pire. Les 11
+façades de ce lot passent donc par `pv_guard()` (membre du tenant), comme la
+validation d'étude en PV-3. La seule irréversibilité du Pack PV, la purge
+d'octets, reste réservée à `tenant.admin` (PV-4) : elle détruit, la visite
+constate.
+
+### Preuves
+
+* **65 assertions SQL** (`db/tests/pv6_site_survey.test.sql`), en transaction
+  annulée — **65/65 PASS**.
+* **53 assertions de contrat TS** (`tests/pv6-survey.test.ts` 33,
+  `tests/pv6-survey-pdf.test.ts` 20), dont le contenu **décodé** du PDF.
+* **Mutation testing (2 mutations)**, toutes deux **tuées** : ordre
+  `VALIDATED`-avant-`BLOCKING` rétabli dans la porte ; régénération des écarts
+  effaçant les résolutions humaines.
+* **Rollback exécuté** dans une transaction annulée : 4 tables et 11 façades
+  retirées, `pv_quote_blockers` et `get_pv_deal` restaurés et **appelables**,
+  0 objet de stockage supprimé, bucket intact.
+* **Équivalence fichier ↔ production vérifiée** : le SQL de chaque migration du
+  dépôt est identique (commentaires exclus) à celui réellement appliqué —
+  empreintes MD5 comparées ligne à ligne.
+
+### Deux défauts trouvés par les tests, et corrigés
+
+1. **La porte masquait un blocage postérieur** — `pv_survey_gate` testait
+   `VALIDATED` avant `BLOCKING`. Trouvé en écrivant l'assertion T55. Corrigé par
+   la migration `pv6_3b`, dans un **fichier séparé** : `pv6_3` était déjà
+   appliquée, et on ne réécrit pas une migration appliquée.
+2. **Le rapport PDF imprimait « ?18 m² »** — le moins typographique `−` (U+2212)
+   et le `≠` (U+2260) n'existent pas dans WinAnsi ; le moteur les remplaçait
+   silencieusement. L'écran affichait donc une chose et le rapport une autre. Les
+   deux caractères sont remplacés par de l'ASCII et par le mot « différent », et
+   une assertion vérifie désormais qu'aucun `?` n'apparaît dans le PDF décodé.
+
+---
+
+## 2026-08-24 — PACK PHOTOVOLTAÏQUE, LOT PV-7 : l'approvisionnement matériel
+
+Le trou que ce lot ferme, mesuré avant d'être traité :
+
+```sql
+select table_name from information_schema.tables
+ where table_schema='hermes_os'
+   and (table_name like 'pv_%material%' or table_name like 'pv_%supplier%'
+        or table_name like 'pv_%purchase%' or table_name like 'pv_%commande%');
+-- → AUCUNE LIGNE
+```
+
+À la fin de PV-6, Hermès savait qu'un devis était accepté et qu'une visite était
+validée — et ne savait rien de ce qu'il fallait **acheter** pour tenir cet
+engagement. PV-7 pose la chaîne **besoin → fournisseur → commande → réception**,
+et rien de plus.
+
+| Fichier | Migration appliquée | Objet |
+|---|---|---|
+| `20260824_pv7_1_catalog_suppliers.sql` | `pv7_1_catalog_suppliers` | `pv_material_catalog` (19 catégories, SKU unique par tenant), `pv_suppliers` (table PV dédiée — `btp_fournisseurs` appartient à une autre verticale), `pv_supplier_prices` **datés** (`valid_from`/`valid_until`) ; FK **composites** |
+| `20260824_pv7_2_requirements.sql` | `pv7_2_requirements` | `pv_material_requirements` (article catalogue **XOR** texte libre) ; dérivation depuis devis à **correspondance exacte uniquement**, tout le reste en `needs_confirmation` ; dérivation depuis visite limitée à **3** familles d'écarts univoques |
+| `20260824_pv7_3_purchase_orders.sql` | `pv7_3_purchase_orders` | Numérotation atomique `CMD-YYYY-NNNNNN` ; `pv_purchase_orders` / `_lines` (total de ligne **colonne générée**) / `pv_purchase_receipts` (événements) ; `pv_purchase_order_transitions` (10 chemins, **données**) ; gardes humaines `READY` / `ORDERED` / réception ; gel du contenu commercial après `ORDERED` ; TVA arrondie **par taux** |
+| `20260824_pv7_3b_line_guard_generated_column.sql` | `pv7_3b_line_guard_generated_column` | **Correctif** : le gel de ligne comparait `line_total_ht_eur`, colonne `generated always as … stored` donc **NULL dans `NEW`** en `BEFORE UPDATE` — la comparaison était toujours vraie et **toute réception était impossible**. La colonne est exclue de la comparaison ; `quantity` et `unit_price_ht_eur`, dont elle dérive, restent comparées. |
+| `20260824_pv7_4_balance_and_facades.sql` | `pv7_4_balance_and_facades` | `pv_material_balance` (7 statuts d'écart, dont `SHORTAGE`), `pv_material_readiness` (`READY` exige besoins obligatoires **reçus** ET 0 besoin à confirmer), `pv_purchase_blockers` (réutilise `pv_survey_gate`), `pv_material_costs` (`margin_reliable`) ; 8 façades catalogue/fournisseurs |
+| `20260824_pv7_5_facades_orders.sql` | `pv7_5_facades_orders` | 12 façades besoins/commandes/réceptions ; `get_pv_deal` gagne `material_readiness` |
+| `20260824_pv7_9_rollback.sql` | — | Teardown complet. **Destructif** sur l'historique d'achat ; restaure `get_pv_deal` **avant** de supprimer `pv_material_readiness`. Documente que PV-7 n'a jamais transmis de commande réelle : aucun engagement externe à défaire. |
+
+### Invariants
+
+- **`ORDERED` = un humain déclare, Hermès n'envoie rien.** Aucun email, aucune
+  API fournisseur, aucun navigateur, aucun webhook, aucun n8n. Même contrat que
+  « devis marqué envoyé » en PV-5, et confirmation explicite `COMMANDER` exigée.
+- **Structuré → consolidable ; texte libre → confirmation humaine.** Aucune
+  déduction : « Pose de panneaux » ne devient jamais « 24 panneaux ».
+- **L'écart n'est jamais absorbé.** Une commande peut être `RECEIVED` et
+  l'élément `SHORTAGE` : deux objets, deux vérités, les deux affichées.
+- **Aucune écriture dans `pv_quotes` / `pv_quote_lines`** : le prix de vente
+  n'est jamais écrasé par le prix d'achat. Marge affichée comme **MARGE
+  MATÉRIELLE INDICATIVE**, et masquée dès qu'un coût est inconnu.
+- **Aucun total accepté du navigateur** : total de ligne en colonne générée,
+  aucune façade n'a de paramètre `p_total` / `p_montant` / `p_amount`.
+- **Aucun nouveau journal d'audit** : `entity_audit_log` réutilisé.
+- **Aucun nouveau bucket** : `pv_documents` réutilisé, rattachement par commande.
+- **RLS active, 0 policy, 0 GRANT `anon`** sur les 9 tables ; accès uniquement
+  par façades `SECURITY DEFINER` accordées à `authenticated`.
+- **Aucun cron, aucun scheduler, aucune capacité IA.** n8n reste hors périmètre.
+
+### Preuves
+
+* **76 assertions SQL** (`db/tests/pv7_material_procurement.test.sql`), en
+  transaction annulée — **76/76 PASS**.
+* **33 assertions de contrat TS** (`tests/pv7-material.test.ts`) — **33/33 PASS**.
+* **Mutation testing (6 mutations)**, toutes **tuées**.
+* **Rollback exécuté** en transaction annulée : 9 tables et 20 façades retirées,
+  `pv_survey_gate` et les façades PV-6 intactes, 0 objet de stockage supprimé.
+* **Équivalence fichier ↔ production** vérifiée par MD5 — **5/5 identiques**.
+* **Dérive de migration = 0.**
