@@ -6,12 +6,14 @@ import { randomUUID } from "node:crypto";
 
 import {
   acceptPvQuote,
+  applyPvSurveyMeasurement,
   cancelPvQuote,
   createPvQuote,
   deletePvQuoteLine,
   expirePvQuotes,
   generatePvQuotePdf,
   generatePvStudySummary,
+  generatePvSurveyReport,
   promotePvBillExtraction,
   purgePvDocuments,
   setPvEconomicsStatus,
@@ -20,12 +22,18 @@ import {
   uploadPvDocument,
   upsertPvEconomics,
   upsertPvStudy,
+  planPvSiteSurvey,
   refusePvQuote,
+  resolvePvSurveyFinding,
   revisePvQuote,
   sendPvQuote,
   setPvQuoteReady,
+  setPvSurveyStatus,
   updatePvQuote,
   upsertPvQuoteLine,
+  upsertPvSurveyContext,
+  upsertPvSurveyElectrical,
+  upsertPvSurveyRoof,
   upsertPvStudyAssumptions,
   verifyPvConsumptionProfile,
   registerPvEnergyBill,
@@ -35,10 +43,12 @@ import {
   upsertPvSite,
   validatePvStudy,
   verifyPvEconomics,
+  validatePvSiteSurvey,
   verifyPvEnergyBill,
 } from "@/services/hermes/pv";
 import { PV_QUOTE_BLOCKER_LABELS } from "@/lib/pv/quoteLabels";
-import type { PvQuoteOutcome, PvWriteOutcome } from "@/types/pv";
+import { PV_SURVEY_FINDING_LABELS } from "@/lib/pv/surveyLabels";
+import type { PvQuoteOutcome, PvSurveyOutcome, PvWriteOutcome } from "@/types/pv";
 
 /**
  * PACK PHOTOVOLTAÏQUE — Server Actions du LOT PV-2.
@@ -119,6 +129,25 @@ const ERROR_MESSAGES: Record<string, string> = {
   BAD_STATUS: "Cette action n’est pas possible dans l’état actuel du devis.",
   INVALID_LINE: "Ligne refusée : une valeur est hors des bornes autorisées.",
   LINE_NOT_FOUND: "Cette ligne n’existe plus.",
+  // — PV-6 —
+  SITE_SURVEY_REQUIRED:
+    "Aucune visite technique validée : un devis contractuel ne peut pas reposer sur des données de toiture jamais vérifiées sur site.",
+  SITE_SURVEY_BLOCKING:
+    "La visite technique a constaté un blocage sur site. La pose est impossible en l’état.",
+  SITE_SURVEY_NOT_VALIDATED:
+    "Une visite technique existe mais n’est pas validée : validez-la avant d’émettre un devis.",
+  SURVEY_LOCKED:
+    "Cette visite est validée ou annulée : son relevé est figé. Planifiez une nouvelle visite.",
+  SURVEY_NOT_READY: "Cette visite n’est pas assez avancée pour cette action.",
+  BLOCKING_FINDINGS_UNRESOLVED:
+    "Des écarts bloquants ne sont pas résolus : une visite ne peut pas être validée en les ignorant.",
+  NO_MEASUREMENT: "Aucune mesure n’a été relevée pour ce champ.",
+  UNKNOWN_FIELD: "Ce champ ne peut pas être appliqué au site.",
+  INVALID_MEASUREMENT: "Mesure refusée : une valeur est hors des bornes autorisées.",
+  BAD_RESOLUTION: "Cette résolution n’existe pas.",
+  // `VALIDATION_REFUSED` et `USE_VALIDATION_FACADE` existent déjà plus haut
+  // (PV-2/PV-3) et disent exactement la même chose pour la visite : on ne les
+  // redouble pas — deux messages pour un code finiraient par diverger.
 };
 
 export type PvActionState = {
@@ -1053,5 +1082,276 @@ export async function generatePvQuotePdfAction(
       result.code === "ALREADY_GENERATED"
         ? "Ce PDF avait déjà été généré : le document existant est réutilisé."
         : `PDF ${result.stage === "FINAL" ? "définitif" : "brouillon"} généré.`,
+  };
+}
+
+// --- PV-6 : la visite technique -----------------------------------------------
+
+/** Traduit un refus de visite en message + raisons lisibles. */
+function surveyState(result: PvSurveyOutcome, successMessage: string): PvActionState {
+  if (result.ok) {
+    return {
+      phase: "ok",
+      code: result.code,
+      id: result.surveyId ?? undefined,
+      message: successMessage,
+    };
+  }
+  const base = ERROR_MESSAGES[result.code] ?? "Action refusée.";
+  const reasons = result.blockingFindings
+    .map((c) => PV_SURVEY_FINDING_LABELS[c] ?? c)
+    .join(" · ");
+  return {
+    phase: "error",
+    code: result.code,
+    message: reasons.length > 0 ? `${base} ${reasons}.` : base,
+  };
+}
+
+export async function planPvSiteSurveyAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const prospectId = text(formData, "prospect_id");
+  if (prospectId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await planPvSiteSurvey({
+    prospectId,
+    scheduledOn: text(formData, "scheduled_on"),
+    technicianUserId: null, // jamais reçu du navigateur : la base prend l'appelant
+  });
+  if (result.ok) revalidatePath(`/etudes/affaires/${prospectId}`);
+  return surveyState(result, "Visite technique planifiée.");
+}
+
+export async function upsertPvSurveyRoofAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const surveyId = text(formData, "survey_id");
+  if (surveyId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await upsertPvSurveyRoof({
+    surveyId,
+    roofAreaTotalM2: decimal(formData, "roof_area_total_m2"),
+    roofAreaUsableM2: decimal(formData, "roof_area_usable_m2"),
+    azimuthDeg: decimal(formData, "azimuth_deg"),
+    tiltDeg: decimal(formData, "tilt_deg"),
+    roofType: text(formData, "roof_type"),
+    roofCondition: text(formData, "roof_condition"),
+    shading: text(formData, "shading"),
+    accessDifficulty: text(formData, "access_difficulty"),
+    heightM: decimal(formData, "height_m"),
+    ridgeLengthM: decimal(formData, "ridge_length_m"),
+    eaveLengthM: decimal(formData, "eave_length_m"),
+    slopeLengthM: decimal(formData, "slope_length_m"),
+    obstacles: text(formData, "obstacles"),
+    // Une case décochée doit pouvoir LEVER la suspicion : sans marqueur, un
+    // `null` signifierait « inchangé » et la coche serait irréversible. Le
+    // marqueur dit « ce formulaire s'est prononcé sur l'amiante » ; les autres
+    // appelants, qui ne l'envoient pas, ne touchent pas au champ.
+    asbestosSuspicion: formData.has("asbestos_declared")
+      ? formData.get("asbestos_suspicion") === "on"
+      : null,
+    asbestosNote: text(formData, "asbestos_note"),
+  });
+  if (result.ok) revalidatePath(`/etudes/visites/${surveyId}`);
+  return surveyState(
+    result,
+    result.findings === null
+      ? "Relevé de toiture enregistré."
+      : `Relevé enregistré. ${result.findings} écart(s) constaté(s).`,
+  );
+}
+
+export async function upsertPvSurveyElectricalAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const surveyId = text(formData, "survey_id");
+  if (surveyId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await upsertPvSurveyElectrical({
+    surveyId,
+    panelLocation: text(formData, "panel_location"),
+    inverterLocation: text(formData, "inverter_location"),
+    batteryLocation: text(formData, "battery_location"),
+    cableRoute: text(formData, "cable_route"),
+    cableDistanceM: decimal(formData, "cable_distance_m"),
+    panelBoardLocation: text(formData, "panel_board_location"),
+    panelBoardCondition: text(formData, "panel_board_condition"),
+    panelBoardFreeSlots: decimal(formData, "panel_board_free_slots"),
+    mainBreakerRatingA: decimal(formData, "main_breaker_rating_a"),
+    earthingObserved: text(formData, "earthing_observed"),
+    earthingNote: text(formData, "earthing_note"),
+  });
+  if (result.ok) revalidatePath(`/etudes/visites/${surveyId}`);
+  return surveyState(result, "Relevé électrique enregistré.");
+}
+
+export async function upsertPvSurveyContextAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const surveyId = text(formData, "survey_id");
+  if (surveyId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await upsertPvSurveyContext({
+    surveyId,
+    weatherConditions: text(formData, "weather_conditions"),
+    roofAccess: text(formData, "roof_access"),
+    accessMeans: text(formData, "access_means"),
+    siteCondition: text(formData, "site_condition"),
+    safetyConstraints: text(formData, "safety_constraints"),
+    observations: text(formData, "observations"),
+    remarks: text(formData, "remarks"),
+  });
+  if (result.ok) revalidatePath(`/etudes/visites/${surveyId}`);
+  return surveyState(result, "Conditions de visite enregistrées.");
+}
+
+export async function setPvSurveyStatusAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const surveyId = text(formData, "survey_id");
+  const status = text(formData, "status");
+  if (surveyId === null || status === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await setPvSurveyStatus(surveyId, status);
+  if (result.ok) revalidatePath(`/etudes/visites/${surveyId}`);
+  return surveyState(result, `Visite passée à « ${status} ».`);
+}
+
+/**
+ * VALIDER une visite. Geste HUMAIN : la base refuse quand `auth.uid()` est NULL,
+ * et refuse aussi tant qu'un écart bloquant n'est pas résolu — valider en les
+ * ignorant ferait dire à la preuve terrain le contraire de ce qu'elle a constaté.
+ */
+export async function validatePvSiteSurveyAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const surveyId = text(formData, "survey_id");
+  if (surveyId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  if (formData.get("confirm") !== "VALIDER") {
+    return {
+      phase: "error",
+      code: "CONFIRMATION_REQUIRED",
+      message: "Confirmation requise : cochez la case avant de valider la visite.",
+    };
+  }
+  const result = await validatePvSiteSurvey(surveyId);
+  if (result.ok) revalidatePath(`/etudes/visites/${surveyId}`);
+  return surveyState(
+    result,
+    "Visite validée. La preuve terrain est disponible pour l’émission d’un devis.",
+  );
+}
+
+export async function resolvePvSurveyFindingAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const findingId = text(formData, "finding_id");
+  const surveyId = text(formData, "survey_id");
+  const resolution = text(formData, "resolution");
+  if (findingId === null || resolution === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await resolvePvSurveyFinding({
+    findingId,
+    resolution,
+    comment: text(formData, "comment"),
+  });
+  if (result.ok && surveyId !== null) revalidatePath(`/etudes/visites/${surveyId}`);
+  return result.ok
+    ? { phase: "ok", code: result.code, message: "Écart résolu." }
+    : { phase: "error", code: result.code, message: ERROR_MESSAGES[result.code] ?? "Résolution refusée." };
+}
+
+/**
+ * APPLIQUER une mesure au site. Geste EXPLICITE et audité — le seul chemin par
+ * lequel une valeur de terrain remplace une valeur déclarée. Confirmation exigée :
+ * la déclaration d'origine disparaît du site (elle survit dans l'audit et dans
+ * la visite, mais l'écran du site, lui, ne la montrera plus).
+ */
+export async function applyPvSurveyMeasurementAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const surveyId = text(formData, "survey_id");
+  const field = text(formData, "field");
+  if (surveyId === null || field === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  if (formData.get("confirm") !== "APPLIQUER") {
+    return {
+      phase: "error",
+      code: "CONFIRMATION_REQUIRED",
+      message: "Confirmation requise : cochez la case avant de remplacer la donnée déclarée.",
+    };
+  }
+  const result = await applyPvSurveyMeasurement({ surveyId, field });
+  if (result.ok) revalidatePath(`/etudes/visites/${surveyId}`);
+  if (!result.ok) {
+    return {
+      phase: "error",
+      code: result.code,
+      message: ERROR_MESSAGES[result.code] ?? "Application refusée.",
+    };
+  }
+  return {
+    phase: "ok",
+    code: result.code,
+    message: `Mesure appliquée au site : ${result.previousValue ?? "non renseigné"} → ${result.newValue ?? "non renseigné"}.`,
+  };
+}
+
+/**
+ * GÉNÉRER le rapport de visite technique.
+ *
+ * La clé d'idempotence vient de l'écran mais reste STABLE (visite + statut) :
+ * deux clics ne produisent pas deux fichiers, alors qu'une visite passée de
+ * « Terminée » à « Validée » produit bien un nouveau constat — ce qui est
+ * exactement ce que l'on veut archiver.
+ */
+export async function generatePvSurveyReportAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const surveyId = text(formData, "survey_id");
+  if (surveyId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await generatePvSurveyReport({
+    surveyId,
+    requestId: text(formData, "request_id") ?? randomUUID(),
+    company: text(formData, "company") ?? "Hermès OS",
+    generatedOn: new Date().toISOString().slice(0, 10),
+  });
+  if (result.ok) revalidatePath(`/etudes/visites/${surveyId}`);
+  if (!result.ok) {
+    return {
+      phase: "error",
+      code: result.code,
+      message: ERROR_MESSAGES[result.code] ?? "Génération refusée.",
+    };
+  }
+  return {
+    phase: "ok",
+    code: result.code,
+    id: result.documentId ?? undefined,
+    message:
+      result.code === "ALREADY_GENERATED"
+        ? "Ce rapport avait déjà été généré : le document existant est réutilisé."
+        : "Rapport de visite technique généré.",
   };
 }

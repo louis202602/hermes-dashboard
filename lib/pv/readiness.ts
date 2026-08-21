@@ -38,8 +38,37 @@ export const PV_REQUIREMENTS = [
   "STUDY_NOT_VALIDATED",
   "NO_ECONOMICS",
   "ECONOMICS_NOT_VERIFIED",
+  // PV-6 — la preuve terrain. Seul `SITE_SURVEY_BLOCKING` est une EXIGENCE :
+  // une visite qui a constaté un toit impraticable arrête le dossier. L'absence
+  // de visite et la visite non validée sont des AVIS (`advisories`) — voir
+  // `PV_ADVISORIES` et le commentaire de `PvReadiness`.
+  "SITE_SURVEY_BLOCKING",
 ] as const;
 export type PvRequirement = (typeof PV_REQUIREMENTS)[number];
+
+/**
+ * AVIS — signalés, mais non bloquants pour l'état du dossier.
+ *
+ * Pourquoi une seconde liste plutôt que d'ajouter ces codes aux exigences : le
+ * jour où PV-6 est livré, TOUS les dossiers existants deviendraient d'un coup
+ * « non prêts » — aucun n'a de visite. Casser silencieusement l'état de dossiers
+ * réels pour introduire une garde nouvelle serait le contraire d'une livraison
+ * honnête.
+ *
+ * La garde DURE est ailleurs, et elle est ciblée : un devis ne peut plus passer
+ * `READY`, être transmis, ni produire un PDF FINAL sans visite VALIDÉE (voir
+ * `canEmitFinalQuote` et `hermes_os.pv_quote_blockers`). Un dossier peut donc
+ * rester `READY_FOR_OFFER` — on peut préparer un brouillon de devis — mais rien
+ * de contractuel ne sort sans preuve terrain.
+ */
+export const PV_ADVISORIES = [
+  "SITE_NOT_SURVEYED",
+  "SITE_SURVEY_NOT_VALIDATED",
+] as const;
+export type PvAdvisory = (typeof PV_ADVISORIES)[number];
+
+/** État de la preuve terrain pour le site du dossier — miroir de `pv_survey_gate`. */
+export type PvSurveyGate = "NONE" | "NOT_VALIDATED" | "BLOCKING" | "OK";
 
 export type PvReadinessInput = {
   prospect: { status: string; optedOut: boolean } | null;
@@ -63,6 +92,12 @@ export type PvReadinessInput = {
   latestStudy: { status: string } | null;
   /** Chiffrage RETENU — VERIFIED uniquement, lié à l'étude retenue. */
   retainedEconomics: { status: string } | null;
+  /**
+   * PV-6 — état de la preuve terrain, calculé en base (`hermes_os.pv_survey_gate`).
+   * `undefined` quand l'appelant ne le connaît pas : le moteur se comporte alors
+   * exactement comme avant PV-6, plutôt que de supposer une absence de visite.
+   */
+  surveyGate?: PvSurveyGate;
   /** Existe-t-il au moins un chiffrage sur l'étude retenue ? */
   hasAnyEconomics: boolean;
 };
@@ -70,8 +105,16 @@ export type PvReadinessInput = {
 export type PvReadiness = {
   state: PvDealState;
   missingRequirements: PvRequirement[];
-  /** `true` quand une synthèse FINALE peut être produite. */
+  /** PV-6 — signalé à l'écran, sans arrêter le dossier. */
+  advisories: PvAdvisory[];
+  /** `true` quand une synthèse d'étude FINALE peut être produite. */
   canGenerateFinalPdf: boolean;
+  /**
+   * PV-6 — `true` quand un devis peut passer `READY` / produire un PDF FINAL.
+   * Exige, EN PLUS de `canGenerateFinalPdf`, une visite technique VALIDÉE.
+   * La base le revérifie de son côté : cet indicateur sert l'écran, pas la garde.
+   */
+  canEmitFinalQuote: boolean;
 };
 
 /** Statuts commerciaux qui ferment un dossier. Aucune étude ne les rouvre. */
@@ -102,22 +145,51 @@ function isPresent(s: string | null | undefined): boolean {
 export function resolvePvReadiness(input: PvReadinessInput): PvReadiness {
   const missing: PvRequirement[] = [];
 
+  // PV-6 — la preuve terrain. `undefined` = l'appelant ne sait pas : on ne
+  // suppose rien, et le moteur se comporte comme avant PV-6.
+  const gate = input.surveyGate;
+  const advisories: PvAdvisory[] = [];
+  if (gate === "NONE") advisories.push("SITE_NOT_SURVEYED");
+  if (gate === "NOT_VALIDATED") advisories.push("SITE_SURVEY_NOT_VALIDATED");
+  const surveyValidated = gate === "OK";
+
   // --- Arrêt commercial : rien d'autre ne compte -----------------------------
   if (input.prospect === null) {
-    return { state: "INCOMPLETE", missingRequirements: ["NO_SITE"], canGenerateFinalPdf: false };
+    return {
+      state: "INCOMPLETE",
+      missingRequirements: ["NO_SITE"],
+      advisories,
+      canGenerateFinalPdf: false,
+      canEmitFinalQuote: false,
+    };
   }
   if (input.prospect.optedOut) {
     return {
       state: "BLOCKED",
       missingRequirements: ["PROSPECT_OPTED_OUT"],
+      advisories,
       canGenerateFinalPdf: false,
+      canEmitFinalQuote: false,
     };
   }
   if (CLOSED_STATUSES.has(input.prospect.status)) {
     return {
       state: "BLOCKED",
       missingRequirements: ["PROSPECT_CLOSED"],
+      advisories,
       canGenerateFinalPdf: false,
+      canEmitFinalQuote: false,
+    };
+  }
+  // Une visite qui a constaté un site impraticable arrête le dossier — au même
+  // titre qu'une opposition client. C'est le SEUL code de visite qui bloque.
+  if (gate === "BLOCKING") {
+    return {
+      state: "BLOCKED",
+      missingRequirements: ["SITE_SURVEY_BLOCKING"],
+      advisories,
+      canGenerateFinalPdf: false,
+      canEmitFinalQuote: false,
     };
   }
 
@@ -173,7 +245,15 @@ export function resolvePvReadiness(input: PvReadinessInput): PvReadiness {
 
   // --- État ------------------------------------------------------------------
   if (missing.length === 0) {
-    return { state: "READY_FOR_OFFER", missingRequirements: [], canGenerateFinalPdf: true };
+    return {
+      state: "READY_FOR_OFFER",
+      missingRequirements: [],
+      advisories,
+      canGenerateFinalPdf: true,
+      // La synthèse d'étude reste productible sans visite — elle est INDICATIVE
+      // et le dit. Le devis, lui, engage un prix : il exige la preuve terrain.
+      canEmitFinalQuote: surveyValidated,
+    };
   }
 
   const siteReady =
@@ -186,12 +266,30 @@ export function resolvePvReadiness(input: PvReadinessInput): PvReadiness {
   // Une étude qui attend un humain prime sur « prêt à étudier » : le geste
   // suivant n'est pas de préparer une étude, c'est de trancher celle qui existe.
   if (input.latestStudy !== null && STUDY_AWAITING_HUMAN.has(input.latestStudy.status)) {
-    return { state: "STUDY_REVIEW_REQUIRED", missingRequirements: missing, canGenerateFinalPdf: false };
+    return {
+      state: "STUDY_REVIEW_REQUIRED",
+      missingRequirements: missing,
+      advisories,
+      canGenerateFinalPdf: false,
+      canEmitFinalQuote: false,
+    };
   }
   if (siteReady && energyReady) {
-    return { state: "READY_FOR_STUDY", missingRequirements: missing, canGenerateFinalPdf: false };
+    return {
+      state: "READY_FOR_STUDY",
+      missingRequirements: missing,
+      advisories,
+      canGenerateFinalPdf: false,
+      canEmitFinalQuote: false,
+    };
   }
-  return { state: "INCOMPLETE", missingRequirements: missing, canGenerateFinalPdf: false };
+  return {
+    state: "INCOMPLETE",
+    missingRequirements: missing,
+    advisories,
+    canGenerateFinalPdf: false,
+    canEmitFinalQuote: false,
+  };
 }
 
 /** Libellés français des états. Le vocabulaire d'écran, en un seul endroit. */
@@ -201,6 +299,14 @@ export const PV_DEAL_STATE_LABELS: Record<PvDealState, string> = {
   READY_FOR_STUDY: "Prêt pour l’étude",
   STUDY_REVIEW_REQUIRED: "Étude à trancher",
   READY_FOR_OFFER: "Prêt pour la proposition",
+};
+
+/** Libellés des AVIS PV-6 — signalés, non bloquants. */
+export const PV_ADVISORY_LABELS: Record<PvAdvisory, string> = {
+  SITE_NOT_SURVEYED:
+    "Aucune visite technique : les données de toiture n’ont jamais été confrontées au terrain",
+  SITE_SURVEY_NOT_VALIDATED:
+    "Une visite technique existe mais n’est pas validée",
 };
 
 /** Libellés des exigences manquantes — actionnables, pas descriptifs. */
@@ -218,4 +324,6 @@ export const PV_REQUIREMENT_LABELS: Record<PvRequirement, string> = {
   STUDY_NOT_VALIDATED: "Aucune étude n’est validée par un humain.",
   NO_ECONOMICS: "Aucun chiffrage économique n’est rattaché à l’étude retenue.",
   ECONOMICS_NOT_VERIFIED: "Le chiffrage n’est pas vérifié par un humain.",
+  SITE_SURVEY_BLOCKING:
+    "La visite technique a constaté un blocage sur site : la pose est impossible en l’état.",
 };

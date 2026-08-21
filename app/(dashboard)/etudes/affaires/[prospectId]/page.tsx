@@ -3,9 +3,10 @@ import { notFound } from "next/navigation";
 import PvDealPanel from "@/components/dashboard/PvDealPanel";
 import PvQuotesPanel from "@/components/dashboard/PvQuotesPanel";
 import PvStudySummaryForm from "@/components/dashboard/PvStudySummaryForm";
+import PvSurveysPanel from "@/components/dashboard/PvSurveysPanel";
 import { requireRoute } from "@/lib/dashboard/routeGuard";
 import { resolvePvReadiness } from "@/lib/pv/readiness";
-import { getPvDeal, getPvQuotes } from "@/services/hermes/pv";
+import { getPvDeal, getPvQuotes, getPvSiteSurveys } from "@/services/hermes/pv";
 import { getActiveTenantIdentity } from "@/services/hermes/tenantIdentity";
 
 export const metadata = { title: "Affaire photovoltaïque — Hermès" };
@@ -29,10 +30,11 @@ export default async function PvDealPage({
   await requireRoute("/etudes");
 
   const { prospectId } = await params;
-  const [deal, tenant, quotes] = await Promise.all([
+  const [deal, tenant, quotes, surveys] = await Promise.all([
     getPvDeal(prospectId),
     getActiveTenantIdentity(),
     getPvQuotes(prospectId),
+    getPvSiteSurveys(prospectId),
   ]);
   if (deal === null) notFound();
 
@@ -45,6 +47,10 @@ export default async function PvDealPage({
     latestStudy: deal.latestStudy,
     retainedEconomics: deal.retainedEconomics,
     hasAnyEconomics: deal.retainedEconomics !== null,
+    // PV-6 — la preuve terrain entre dans le calcul d'état. Deux niveaux : tant
+    // qu'aucune visite n'existe, c'est une ALERTE qui ne casse rien ; dès qu'une
+    // visite constate un blocage, le dossier est bloqué.
+    surveyGate: deal.surveyGate,
   });
 
   const company = tenant.ok ? (tenant.data.displayName ?? "Hermès OS") : "Hermès OS";
@@ -60,6 +66,13 @@ export default async function PvDealPage({
         // une nouvelle version d'étude, elle, produit bien une nouvelle synthèse.
         requestId={`${deal.prospect.id}-v${deal.retainedStudy?.version ?? deal.latestStudy?.version ?? 0}`}
         company={company}
+      />
+      {/* PV-6 — placé AVANT le devis : ce que le terrain confirme se lit avant
+          de proposer un prix, pas après l'avoir envoyé. */}
+      <PvSurveysPanel
+        prospectId={deal.prospect.id}
+        surveys={surveys}
+        gate={deal.surveyGate}
       />
       {/* PV-5 — le devis consomme enfin l'état READY_FOR_OFFER produit par PV-4. */}
       <PvQuotesPanel

@@ -6324,3 +6324,88 @@ html[data-reduce-transparency="1"] .notif-panel {
 .pv-quote-grand { border-top: 1px solid var(--border-strong); padding-top: 6px; font-weight: 700; font-size: 1.05rem; }
 .pv-line-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-3); align-items: end; }
 .pv-line-delete { margin: 0; }
+
+/* --- PV-6 : visite technique — comparatif déclaré/mesuré, écarts. Préfixe `pv-`. ---
+   Règle d'accessibilité tenue partout dans ce bloc : LA COULEUR NE PORTE JAMAIS
+   L'INFORMATION SEULE. Chaque état affiche son libellé en toutes lettres
+   (« Conforme », « À revoir », « Bloquant », « Non mesuré ») ; les variantes
+   ci-dessous ne font que redire ce qui est déjà écrit — utiles en un coup d'œil,
+   inutiles à la compréhension. */
+.pv-badge.is-ok { border-color: var(--success); color: var(--success); }
+.pv-badge.is-warn { border-color: var(--warning); color: var(--warning); }
+.pv-badge.is-muted { border-style: dotted; color: var(--text-secondary); }
+.pv-badge.is-neutral { color: var(--text-secondary); }
+
+.pv-advisories {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px dotted var(--border-strong);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.pv-survey-plan { display: flex; align-items: end; gap: var(--space-3); flex-wrap: wrap; }
+.pv-survey-gate {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.pv-survey-gate.is-ok { border-color: var(--success); }
+.pv-survey-gate.is-warn { border-color: var(--warning); }
+.pv-survey-gate.is-neutral { border-style: dashed; color: var(--text-secondary); }
+.pv-survey-gate.is-muted { border-style: dotted; color: var(--text-secondary); }
+
+.pv-survey-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pv-survey-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.pv-survey-ref { font-weight: 600; text-decoration: none; }
+
+.pv-survey-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.pv-survey-table th, .pv-survey-table td {
+  text-align: left;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+.pv-survey-table td:nth-child(2), .pv-survey-table td:nth-child(3),
+.pv-survey-table td:nth-child(4) { font-variant-numeric: tabular-nums; }
+.pv-survey-status { font-weight: 600; }
+.pv-survey-status.is-ok { color: var(--success); }
+.pv-survey-status.is-warn { color: var(--warning); }
+.pv-survey-status.is-muted { color: var(--text-secondary); font-weight: 400; font-style: italic; }
+.pv-survey-status.is-neutral { color: var(--text-secondary); }
+
+.pv-survey-apply { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; }
+.pv-survey-apply .pv-checkbox { font-size: 11.5px; color: var(--text-secondary); }
+
+.pv-survey-findings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.pv-survey-finding {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pv-survey-finding.is-warn { border-color: var(--warning); }
+.pv-survey-finding.is-ok { border-color: var(--success); }
+.pv-survey-finding.is-muted { border-style: dotted; }
+.pv-survey-finding-head { margin: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+
+.pv-survey-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3); align-items: end; }
+.pv-survey-form > .photo-note, .pv-survey-form > button { grid-column: 1 / -1; }
+.pv-survey-resolve { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: end; }
+
+.pv-document-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pv-document-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }
