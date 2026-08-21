@@ -37,7 +37,7 @@ import {
 } from "@/lib/attachments/attachments";
 import { encodeImageFileToJpeg } from "@/lib/attachments/browserImage";
 import { attachInputConfig, type AttachMenuKind } from "@/lib/attachments/scan";
-import HermesOrb from "@/components/dashboard/HermesOrb";
+import HermesOrb, { type OrbState } from "@/components/dashboard/HermesOrb";
 import ScanDocumentModal from "@/components/dashboard/ScanDocumentModal";
 import type { AttachmentUploadState } from "@/types/hermes-attachments";
 import { useVoice } from "@/lib/voice/useVoice";
@@ -182,9 +182,15 @@ type HermesPanelProps = {
    *  (header + live-state aside are hidden via CSS since the Home hero carries the
    *  identity/état). Omitted / "full" = the complete panel (chat sub-page). */
   variant?: "full" | "hero";
+  /** Reports the Hermès orb state (idle/processing/responding/success/error) so a parent
+   *  (the Home hero) can animate its own identity sphere/star from the SAME real signals. */
+  onStateChange?: (state: OrbState) => void;
 };
 
-export default function HermesPanel({ variant = "full" }: HermesPanelProps) {
+export default function HermesPanel({
+  variant = "full",
+  onStateChange,
+}: HermesPanelProps) {
   const { t } = useI18n();
 
   // Display-only helpers (closures over `t`); the underlying state/kind tokens
@@ -703,6 +709,44 @@ export default function HermesPanel({ variant = "full" }: HermesPanelProps) {
   // indicator shows in the thread during this window — the little life the chat was
   // missing. Action queue/running already has its own lifecycle badge, so it is excluded.
   const thinking = sending || !!activeResolve;
+
+  // --- Hermès orb state, derived from ALREADY-known system signals (0 extra AI call) ---
+  // error   : last turn failed / policy-denied / timed out
+  // responding : Hermès is speaking the reply aloud (real TTS)
+  // processing : a request is in flight (sending / resolving / action queued / running)
+  // success : a brief éclat right after a request completes without error
+  // idle    : otherwise.
+  const errorNow =
+    lastAssistant?.outcome === "ERROR" ||
+    lastAssistant?.lifecycle === "FAILED" ||
+    lastAssistant?.lifecycle === "POLICY_DENIED" ||
+    lastAssistant?.lifecycle === "TIMEOUT";
+  const [successPulse, setSuccessPulse] = useState(false);
+  const prevInFlight = useRef(false);
+  useEffect(() => {
+    // Falling edge of inFlight, no error ⇒ a short success éclat, then back to calm.
+    if (prevInFlight.current && !inFlight && !errorNow) {
+      setSuccessPulse(true);
+      const id = setTimeout(() => setSuccessPulse(false), 1600);
+      prevInFlight.current = inFlight;
+      return () => clearTimeout(id);
+    }
+    prevInFlight.current = inFlight;
+    return undefined;
+  }, [inFlight, errorNow]);
+
+  const orbState: OrbState = errorNow
+    ? "error"
+    : voice.speaking
+      ? "responding"
+      : inFlight
+        ? "processing"
+        : successPulse
+          ? "success"
+          : "idle";
+  useEffect(() => {
+    onStateChange?.(orbState);
+  }, [orbState, onStateChange]);
   // Send is blocked while any attachment is still uploading or has failed;
   // UPLOADED attachments are transmitted with the message.
   const attachmentsBusy = attachments.some((a) => a.state === "UPLOADING");
@@ -754,11 +798,7 @@ export default function HermesPanel({ variant = "full" }: HermesPanelProps) {
     >
       <div className="hermes-panel-header">
         <div className="hermes-head-identity">
-          <HermesOrb
-            size={44}
-            state={inFlight ? "thinking" : "idle"}
-            className="hermes-head-orb"
-          />
+          <HermesOrb size={44} state={orbState} className="hermes-head-orb" />
           <div className="hermes-head-titles">
             <span className="panel-eyebrow">{t("chat.header.eyebrow")}</span>
             <h2>Hermès</h2>
@@ -789,7 +829,11 @@ export default function HermesPanel({ variant = "full" }: HermesPanelProps) {
             name="command"
             aria-label={t("chat.composer.ariaLabel")}
             className="hermes-composer-input"
-            placeholder={t("chat.composer.placeholder")}
+            placeholder={
+              variant === "hero"
+                ? t("home.hero.prompt")
+                : t("chat.composer.placeholder")
+            }
             rows={2}
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -1159,7 +1203,7 @@ export default function HermesPanel({ variant = "full" }: HermesPanelProps) {
               {thinking ? (
                 <div className="hermes-turn is-assistant is-thinking">
                   <span className="hermes-turn-avatar" aria-hidden>
-                    <HermesOrb size={26} state="thinking" />
+                    <HermesOrb size={26} state="processing" />
                   </span>
                   <div className="hermes-turn-main">
                     <div

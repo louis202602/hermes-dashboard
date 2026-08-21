@@ -199,6 +199,46 @@ function ToggleRow({
   );
 }
 
+function SliderRow({
+  label,
+  value,
+  min,
+  max,
+  disabled,
+  suffix,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  disabled?: boolean;
+  suffix?: string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className={`settings-row${disabled ? " is-disabled" : ""}`}>
+      <span className="settings-row-label">{label}</span>
+      <span className="settings-slider-wrap">
+        <input
+          type="range"
+          className="settings-slider"
+          min={min}
+          max={max}
+          value={value}
+          disabled={disabled}
+          aria-label={label}
+          onChange={(e) => onChange(Number(e.target.value))}
+        />
+        <span className="settings-slider-value">
+          {value}
+          {suffix ?? ""}
+        </span>
+      </span>
+    </label>
+  );
+}
+
 export default function DashboardSettings({
   initial,
   availableWidgets = [],
@@ -820,6 +860,8 @@ export default function DashboardSettings({
           <ToggleRow label={t("settings.row.highContrast")} checked={appearance.contrast === "high"} onChange={(v) => setA({ contrast: v ? "high" : "standard" })} />
           <ToggleRow label={t("settings.row.reduceMotion")} checked={appearance.reduceMotion} onChange={(v) => setA({ reduceMotion: v })} />
           <ToggleRow label={t("settings.row.reduceTransparency")} checked={appearance.reduceTransparency} onChange={(v) => setA({ reduceTransparency: v })} />
+          <ToggleRow label={t("settings.row.liquidGlass")} checked={appearance.liquidGlass} onChange={(v) => setA({ liquidGlass: v })} />
+          <SliderRow label={t("settings.row.glassLevel")} value={appearance.glassLevel} min={0} max={100} suffix=" %" disabled={!appearance.liquidGlass} onChange={(v) => setA({ glassLevel: v })} />
           <ToggleRow label={t("settings.row.comfortableDensity")} checked={appearance.density === "comfortable"} onChange={(v) => setA({ density: v ? "comfortable" : "compact" })} />
         </Section>
 

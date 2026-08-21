@@ -704,14 +704,6 @@ html[data-theme="light"] .dashboard-sidebar {
   color: var(--warning);
 }
 
-/* Reduced hero microcopy — the single premium prompt above the composer. */
-.cc-hero-prompt {
-  margin: -2px 0 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-  letter-spacing: 0.01em;
-}
-
 /* Hero ask — the HermesPanel hero variant sits INSIDE the hero glass, so the panel
    itself is transparent (no nested card) and shows only the composer. */
 .hermes-panel-hero {
@@ -724,12 +716,19 @@ html[data-theme="light"] .dashboard-sidebar {
   backdrop-filter: none !important;
 }
 .hermes-panel-hero .hermes-panel-header,
-.hermes-panel-hero .hermes-insight-top {
+.hermes-panel-hero .hermes-insight-top,
+.hermes-panel-hero .hermes-composer-eyebrow,
+.hermes-panel-hero .hermes-command-left {
+  /* Minimalist Home command post: no header, no eyebrow, no attach/read-aloud/hint —
+     only the identity (hero orb), the input, and the mic + send buttons. */
   display: none;
 }
 .hermes-panel-hero .hermes-exec-grid {
   grid-template-columns: 1fr;
   gap: 12px;
+}
+.hermes-panel-hero .hermes-command-actions {
+  justify-content: flex-end;
 }
 .hermes-panel-hero .hermes-thread {
   max-height: 148px;
@@ -1877,7 +1876,7 @@ html[data-reduce-motion="1"] .hermes-typing-dots span {
 .hermes-orb.is-idle .hermes-orb-core {
   animation: hermes-orb-breathe-core 6.5s ease-in-out infinite;
 }
-.hermes-orb.is-thinking .hermes-orb-core {
+.hermes-orb.is-processing .hermes-orb-core {
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.25),
     inset -2px -3px 6px rgba(4, 16, 32, 0.5),
@@ -1885,14 +1884,139 @@ html[data-reduce-motion="1"] .hermes-typing-dots span {
     0 0 34px rgba(52, 152, 255, 0.5);
   animation: hermes-orb-pulse 1.6s ease-in-out infinite;
 }
-.hermes-orb.is-thinking .hermes-orb-ring {
+.hermes-orb.is-processing .hermes-orb-ring {
   animation-duration: 3.2s;
   opacity: 0.78;
 }
-.hermes-orb.is-thinking::after {
+.hermes-orb.is-processing::after {
   animation-duration: 2.4s;
   background: radial-gradient(circle, rgba(90, 215, 255, 0.5), transparent 70%);
 }
+
+/* The star inside the sphere — calm at rest, alive while thinking. */
+.hermes-orb-star {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 52%;
+  height: 52%;
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+  fill: #eaf9ff;
+  opacity: 0.6;
+  filter: drop-shadow(0 0 2px rgba(234, 249, 255, 0.65));
+  pointer-events: none;
+}
+.hermes-orb.is-processing .hermes-orb-star {
+  opacity: 0.96;
+  filter: drop-shadow(0 0 5px rgba(170, 238, 255, 0.95));
+  animation: hermes-star-think 2.4s ease-in-out infinite;
+}
+@keyframes hermes-star-think {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg) scale(0.9);
+    opacity: 0.72;
+  }
+  50% {
+    transform: translate(-50%, -50%) rotate(45deg) scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(90deg) scale(0.9);
+    opacity: 0.72;
+  }
+}
+
+/* RESPONDING — Hermès delivers the reply (e.g. reading it aloud): a soft, steady glow
+   with a slow drift, gentler than processing. */
+.hermes-orb.is-responding .hermes-orb-core {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+    inset -2px -3px 6px rgba(4, 16, 32, 0.5),
+    0 0 14px rgba(90, 215, 255, 0.6),
+    0 0 30px rgba(52, 152, 255, 0.42);
+}
+.hermes-orb.is-responding .hermes-orb-star {
+  opacity: 0.92;
+  filter: drop-shadow(0 0 4px rgba(170, 238, 255, 0.9));
+  animation: hermes-star-respond 3.6s ease-in-out infinite;
+}
+@keyframes hermes-star-respond {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) rotate(-6deg) scale(0.96);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translate(-50%, -50%) rotate(6deg) scale(1.04);
+    opacity: 1;
+  }
+}
+
+/* SUCCESS — a brief éclat right after a request completes (transient, ~1.6s). */
+.hermes-orb.is-success .hermes-orb-core {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.3),
+    0 0 16px rgba(52, 211, 153, 0.6),
+    0 0 34px rgba(52, 211, 153, 0.4);
+  animation: hermes-orb-success 1.6s ease-out;
+}
+.hermes-orb.is-success .hermes-orb-star {
+  fill: #eafff6;
+  opacity: 1;
+  filter: drop-shadow(0 0 6px rgba(120, 240, 190, 0.95));
+  animation: hermes-star-success 1.6s ease-out;
+}
+@keyframes hermes-orb-success {
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes hermes-star-success {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg) scale(0.9);
+    opacity: 0.7;
+  }
+  35% {
+    transform: translate(-50%, -50%) rotate(20deg) scale(1.25);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(0deg) scale(1);
+    opacity: 0.85;
+  }
+}
+
+/* ERROR — a discreet, non-aggressive red signal: a slow, low red glow (no flashing). */
+.hermes-orb.is-error .hermes-orb-core {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    inset -2px -3px 6px rgba(4, 16, 32, 0.5),
+    0 0 12px rgba(255, 100, 112, 0.5),
+    0 0 26px rgba(255, 100, 112, 0.32);
+  animation: hermes-orb-error 3s ease-in-out infinite;
+}
+.hermes-orb.is-error .hermes-orb-star {
+  fill: #ffe6ea;
+  opacity: 0.8;
+  filter: drop-shadow(0 0 3px rgba(255, 120, 132, 0.7));
+}
+@keyframes hermes-orb-error {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 @keyframes hermes-orb-spin {
   to {
     transform: rotate(360deg);
@@ -2063,6 +2187,7 @@ html[data-reduce-motion="1"] .hermes-typing-dots span {
   .hermes-orb-ring,
   .hermes-orb::after,
   .hermes-orb-core,
+  .hermes-orb-star,
   .hermes-typing::before,
   .hermes-bubble.is-assistant,
   .hermes-bubble.is-user {
@@ -5149,6 +5274,71 @@ html[data-density="spacious"] {
   --space-2: 12px; --space-3: 18px; --space-4: 28px; --space-6: 40px; --space-8: 56px;
 }
 
+/* ══ MODE ÉPURÉ (density = compact) ═══════════════════════════════════════════
+   Axe DENSITÉ pur — indépendant et composable avec Liquid Glass (transparence).
+   Principe : « extérieur respirant / intérieur compact ». On NE touche pas à la
+   transparence, au blur, aux couleurs, aux fonctions ni à l'architecture
+   responsive : uniquement padding / hauteurs / tailles / largeurs de conteneur,
+   pour que les panneaux occupent nettement moins de surface et laissent le
+   wallpaper respirer autour. 100 % CSS, 0 JS par-widget, 0 coût.
+
+   Les tokens --space-* sont déjà resserrés ci-dessus (cascade globale) ; ce bloc
+   ajoute des surcharges ciblées là où les composants codent des valeurs en dur.  */
+
+/* — Conteneurs : on resserre la largeur max pour que le wallpaper respire sur
+     les côtés (moins de blocs « 100 % de large »), en gardant un gap extérieur
+     généreux entre les groupes fonctionnels. — */
+html[data-density="compact"] .command-center { max-width: 1160px; }
+html[data-density="compact"] .cc-premium { max-width: 980px; gap: 20px; }
+html[data-density="compact"] .page-stack { max-width: 1160px; gap: 18px; }
+
+/* — Home cockpit : hero « poste de commande » nettement plus bas (~30 %),
+     sans rien retirer (titre, état Hermès, zone de requête, envoi). — */
+html[data-density="compact"] .cc-hero { padding: 12px 20px; gap: 10px; border-radius: 22px; }
+html[data-density="compact"] .cc-hero-head { gap: 12px; }
+html[data-density="compact"] .cc-hero-copy { gap: 4px; }
+html[data-density="compact"] .cc-hero-title {
+  margin-top: 0;
+  font-size: clamp(22px, 2.9vw, 32px);
+}
+html[data-density="compact"] .hermes-panel-hero .hermes-thread { max-height: 128px; }
+
+/* — KPI de synthèse : petites capsules basses. — */
+html[data-density="compact"] .cc-synthese { gap: 10px; }
+html[data-density="compact"] .cc-stat { padding: 10px 13px; border-radius: 14px; gap: 3px; }
+html[data-density="compact"] .cc-stat strong { font-size: 23px; }
+html[data-density="compact"] .cc-chip { padding: 7px 13px; }
+
+/* — Cartes / panneaux génériques : intérieur compact (padding + en-têtes). — */
+html[data-density="compact"] .dashboard-card { padding: 13px; }
+html[data-density="compact"] .hermes-panel { padding: 13px; }
+html[data-density="compact"] .kpi-card { padding: 10px 12px; }
+html[data-density="compact"] .kpi-card-top { margin-bottom: 7px; }
+html[data-density="compact"] .kpi-value { margin-top: 3px; font-size: 20px; }
+html[data-density="compact"] .dashboard-card-header,
+html[data-density="compact"] .hermes-panel-header { gap: 12px; }
+html[data-density="compact"] .dashboard-card-header h3,
+html[data-density="compact"] .hermes-panel-header h2 { margin-top: 2px; }
+
+/* — Widgets secondaires : hauteur naturelle quand peu de contenu (pas de grande
+     carte vide qui étire la surface). — */
+html[data-density="compact"] .system-service-item { min-height: 118px; }
+
+/* — Formulaires (« Nouveau prospect » …) : champs un peu moins hauts, gaps
+     réduits, boutons plus compacts — sans sacrifier la lisibilité ni le tactile. */
+html[data-density="compact"] .agent-action-form { gap: 0.55rem; }
+html[data-density="compact"] .agent-field { gap: 0.25rem; }
+html[data-density="compact"] .agent-field input,
+html[data-density="compact"] .agent-field select { padding: 0.45rem 0.65rem; }
+html[data-density="compact"] .agent-submit { padding: 0.5rem 1rem; }
+
+/* — Mobile : on n'écrase pas les cibles tactiles ni les marges latérales. — */
+@media (max-width: 560px) {
+  html[data-density="compact"] .cc-hero { padding: 15px 16px; }
+  html[data-density="compact"] .agent-field input,
+  html[data-density="compact"] .agent-field select { padding: 0.55rem 0.7rem; }
+}
+
 /* --- Accessibility: user-forced reduced motion / reduced transparency --- */
 html[data-reduce-motion="1"] *,
 html[data-reduce-motion="1"] *::before,
@@ -6052,6 +6242,116 @@ html[data-reduce-transparency="1"] .notif-panel {
   font-weight: 600;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   LIQUID GLASS — a premium translucent-surface appearance mode.
+   Gated by html[data-liquid-glass="1"]; the surface opacity is driven by the
+   numeric CSS var --glass-level (0..100, set inline from the Appearance). Other
+   modes are untouched (all rules are scoped to the attribute). Deep frosted
+   glass on the MAIN surfaces only (a few well-defined blurs, not everything) so
+   the wallpaper stays clearly visible while text keeps its contrast.
+   ══════════════════════════════════════════════════════════════════════════ */
+html[data-liquid-glass="1"] {
+  /* Higher --glass-level ⇒ more translucent. Clamped so it never becomes illegible. */
+  --glass-alpha: clamp(0.14, calc((100 - var(--glass-level, 60)) / 100 * 0.72 + 0.16), 0.96);
+  --glass-alpha-strong: clamp(0.22, calc(var(--glass-alpha) + 0.12), 0.98);
+  --glass-blur: 26px;
+  --surface: rgb(12 28 47 / var(--glass-alpha));
+  --surface-strong: rgb(10 25 44 / var(--glass-alpha-strong));
+}
+html[data-theme="light"][data-liquid-glass="1"] {
+  --surface: rgb(246 250 254 / var(--glass-alpha));
+  --surface-strong: rgb(255 255 255 / var(--glass-alpha-strong));
+}
+
+/* Deep frosted glass + a hairline top reflection on the main surfaces. */
+html[data-liquid-glass="1"] .dashboard-card,
+html[data-liquid-glass="1"] .kpi-card,
+html[data-liquid-glass="1"] .hermes-panel,
+html[data-liquid-glass="1"] .hos-sidebar,
+html[data-liquid-glass="1"] .dashboard-header,
+html[data-liquid-glass="1"] .context-bar,
+html[data-liquid-glass="1"] .cc-hero,
+html[data-liquid-glass="1"] .cc-stat,
+html[data-liquid-glass="1"] .cc-chip,
+html[data-liquid-glass="1"] .notif-panel {
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border-color: color-mix(in srgb, var(--border) 82%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 22px 55px rgba(0, 8, 20, 0.3);
+}
+html[data-theme="light"][data-liquid-glass="1"] .dashboard-card,
+html[data-theme="light"][data-liquid-glass="1"] .kpi-card,
+html[data-theme="light"][data-liquid-glass="1"] .hermes-panel,
+html[data-theme="light"][data-liquid-glass="1"] .cc-hero {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 22px 55px rgba(20, 40, 80, 0.14);
+}
+
+/* Fallback — no backdrop-filter support ⇒ keep surfaces more opaque so text stays
+   readable without the blur (clean semi-opaque, never a broken screen). */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html[data-liquid-glass="1"] {
+    --glass-alpha: clamp(0.55, calc((100 - var(--glass-level, 60)) / 100 * 0.4 + 0.55), 0.97);
+  }
+}
+
+/* Accessibility — reduced transparency (Hermès toggle OR the OS setting): the glass
+   goes near-solid and drops the blur; the mode's layout is otherwise unchanged. */
+html[data-reduce-transparency="1"][data-liquid-glass="1"] {
+  --glass-alpha: 0.93;
+  --glass-alpha-strong: 0.98;
+}
+html[data-reduce-transparency="1"][data-liquid-glass="1"] .dashboard-card,
+html[data-reduce-transparency="1"][data-liquid-glass="1"] .kpi-card,
+html[data-reduce-transparency="1"][data-liquid-glass="1"] .hermes-panel,
+html[data-reduce-transparency="1"][data-liquid-glass="1"] .cc-hero,
+html[data-reduce-transparency="1"][data-liquid-glass="1"] .context-bar {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+@media (prefers-reduced-transparency: reduce) {
+  html[data-liquid-glass="1"] {
+    --glass-alpha: 0.92;
+    --glass-alpha-strong: 0.98;
+  }
+  html[data-liquid-glass="1"] .dashboard-card,
+  html[data-liquid-glass="1"] .kpi-card,
+  html[data-liquid-glass="1"] .hermes-panel,
+  html[data-liquid-glass="1"] .cc-hero,
+  html[data-liquid-glass="1"] .context-bar {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Settings — Liquid Glass transparency slider. */
+.settings-row.is-disabled {
+  opacity: 0.5;
+}
+.settings-slider-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.settings-slider {
+  width: 150px;
+  max-width: 46vw;
+  accent-color: var(--hermes-cyan);
+  cursor: pointer;
+}
+.settings-slider:disabled {
+  cursor: not-allowed;
+}
+.settings-slider-value {
+  min-width: 44px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
 /* ============================================================================
    PHOTO-P0 — Verticale Hermès Studio (photographe).
    Classes dédiées, comme .scan-* ou .chantier-map-* : aucun style existant n'est

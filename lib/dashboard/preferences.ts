@@ -69,6 +69,12 @@ export type Appearance = {
   density: Density;
   reduceMotion: boolean;
   reduceTransparency: boolean;
+  // Liquid Glass — a premium translucent-surface mode (independent of the discrete
+  // `transparency` option). When on, the main surfaces become deep frosted glass driven
+  // by `glassLevel` (0 = nearly solid … 100 = maximally translucent). Profile-scoped like
+  // the rest of appearance; persisted in the same JSONB (no new column/table/RPC).
+  liquidGlass: boolean;
+  glassLevel: number; // 0..100
 };
 
 /**
@@ -148,6 +154,8 @@ export const HERMES_DEFAULT_APPEARANCE: Appearance = {
   density: "comfortable",
   reduceMotion: false,
   reduceTransparency: false,
+  liquidGlass: false,
+  glassLevel: 60,
 };
 
 export const HERMES_DEFAULT_BEHAVIOR: Behavior = {
@@ -264,7 +272,16 @@ export function clampAppearance(input: unknown): Appearance {
     density: pick(DENSITIES, a.density, d.density),
     reduceMotion: bool(a.reduceMotion, d.reduceMotion),
     reduceTransparency: bool(a.reduceTransparency, d.reduceTransparency),
+    liquidGlass: bool(a.liquidGlass, d.liquidGlass),
+    glassLevel: clampGlassLevel(a.glassLevel, d.glassLevel),
   };
+}
+
+/** 0..100 integer, fail-safe to the default. */
+function clampGlassLevel(v: unknown, fallback: number): number {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(100, Math.round(n)));
 }
 
 /**
@@ -408,9 +425,11 @@ export function appearanceToDataset(a: Appearance): Record<string, string> {
     textsize: a.textSize,
     weight: a.fontWeight,
     density: a.density,
+    glasslevel: String(a.glassLevel),
   };
   if (a.reduceMotion) ds.reduceMotion = "1";
   if (a.reduceTransparency) ds.reduceTransparency = "1";
+  if (a.liquidGlass) ds.liquidGlass = "1";
   return ds;
 }
 
@@ -445,6 +464,8 @@ export function datasetToAppearance(ds: Record<string, string>): Appearance {
     density: ds.density,
     reduceMotion: ds.reduceMotion === "1",
     reduceTransparency: ds.reduceTransparency === "1",
+    liquidGlass: ds.liquidGlass === "1",
+    glassLevel: ds.glasslevel,
   });
 }
 
@@ -463,6 +484,8 @@ const HTML_ATTR_KEYS: Record<string, string> = {
   density: "data-density",
   reduceMotion: "data-reduce-motion",
   reduceTransparency: "data-reduce-transparency",
+  liquidGlass: "data-liquid-glass",
+  glasslevel: "data-glasslevel",
 };
 
 /**
