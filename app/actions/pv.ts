@@ -6,7 +6,22 @@ import { randomUUID } from "node:crypto";
 
 import {
   acceptPvQuote,
+  addPvMaterialRequirement,
   applyPvSurveyMeasurement,
+  cancelPvPurchaseOrder,
+  confirmPvMaterialRequirement,
+  createPvPurchaseOrder,
+  deletePvPurchaseOrderLine,
+  derivePvMaterialRequirements,
+  dismissPvMaterialRequirement,
+  markPvPurchaseOrderOrdered,
+  recordPvPurchaseReceipt,
+  setPvMaterialActive,
+  setPvPurchaseOrderReady,
+  upsertPvMaterial,
+  upsertPvPurchaseOrderLine,
+  upsertPvSupplier,
+  upsertPvSupplierPrice,
   cancelPvQuote,
   createPvQuote,
   deletePvQuoteLine,
@@ -48,7 +63,13 @@ import {
 } from "@/services/hermes/pv";
 import { PV_QUOTE_BLOCKER_LABELS } from "@/lib/pv/quoteLabels";
 import { PV_SURVEY_FINDING_LABELS } from "@/lib/pv/surveyLabels";
-import type { PvQuoteOutcome, PvSurveyOutcome, PvWriteOutcome } from "@/types/pv";
+import { PV_PURCHASE_BLOCKER_LABELS } from "@/lib/pv/materialLabels";
+import type {
+  PvMaterialOutcome,
+  PvQuoteOutcome,
+  PvSurveyOutcome,
+  PvWriteOutcome,
+} from "@/types/pv";
 
 /**
  * PACK PHOTOVOLTAÏQUE — Server Actions du LOT PV-2.
@@ -145,6 +166,28 @@ const ERROR_MESSAGES: Record<string, string> = {
   UNKNOWN_FIELD: "Ce champ ne peut pas être appliqué au site.",
   INVALID_MEASUREMENT: "Mesure refusée : une valeur est hors des bornes autorisées.",
   BAD_RESOLUTION: "Cette résolution n’existe pas.",
+  // — PV-7 —
+  INVALID_MATERIAL: "Article invalide : catégorie, référence interne et désignation sont obligatoires.",
+  DUPLICATE_SKU: "Cette référence interne existe déjà dans votre catalogue.",
+  INVALID_SUPPLIER: "Fournisseur invalide : la raison sociale est obligatoire.",
+  DUPLICATE_SUPPLIER: "Un fournisseur porte déjà ce nom.",
+  SUPPLIER_NOT_FOUND: "Ce fournisseur n’existe pas.",
+  INVALID_PRICE: "Prix invalide : un tarif fournisseur ne peut pas être négatif.",
+  INVALID_REQUIREMENT:
+    "Besoin invalide : indiquez SOIT un article du catalogue, SOIT une désignation libre — pas les deux.",
+  REASON_REQUIRED: "Un motif est obligatoire.",
+  ORDER_LOCKED:
+    "Cette commande a été passée : son contenu commercial est figé. Créez une nouvelle commande.",
+  ORDER_NOT_READY:
+    "Cette commande ne peut pas être engagée. Les raisons sont listées ci-dessous.",
+  ORDER_NOT_ORDERED:
+    "On ne réceptionne que ce qui a été commandé : marquez d’abord la commande comme passée.",
+  OVER_RECEIPT:
+    "Réception refusée : le cumul dépasserait la quantité commandée. Corrigez la commande avant de réceptionner davantage.",
+  INVALID_RECEIPT: "Réception refusée : une valeur est hors des bornes autorisées.",
+  NO_SITE: "Aucun site n’est rattaché à cette affaire.",
+  // `LINE_NOT_FOUND` existe déjà (PV-5) et dit la même chose ici : on ne le
+  // redouble pas — deux messages pour un code finiraient par diverger.
   // `VALIDATION_REFUSED` et `USE_VALIDATION_FACADE` existent déjà plus haut
   // (PV-2/PV-3) et disent exactement la même chose pour la visite : on ne les
   // redouble pas — deux messages pour un code finiraient par diverger.
@@ -1353,5 +1396,373 @@ export async function generatePvSurveyReportAction(
       result.code === "ALREADY_GENERATED"
         ? "Ce rapport avait déjà été généré : le document existant est réutilisé."
         : "Rapport de visite technique généré.",
+  };
+}
+
+// --- PV-7 : approvisionnement matériel ---------------------------------------
+
+/**
+ * Traduit un refus PV-7. Les blocages de commande remontent en toutes lettres :
+ * « refusé » sans raison n'aide personne à débloquer une affaire.
+ */
+function materialState(result: PvMaterialOutcome, successMessage: string): PvActionState {
+  if (result.ok) {
+    return { phase: "ok", code: result.code, id: result.id ?? undefined, message: successMessage };
+  }
+  const base = ERROR_MESSAGES[result.code] ?? "Action refusée.";
+  const reasons = result.blockers
+    .map((b) => PV_PURCHASE_BLOCKER_LABELS[b] ?? b)
+    .join(" ");
+  return {
+    phase: "error",
+    code: result.code,
+    message: reasons.length > 0 ? `${base} ${reasons}` : base,
+  };
+}
+
+export async function upsertPvMaterialAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const result = await upsertPvMaterial({
+    id: text(formData, "material_id"),
+    category: text(formData, "category"),
+    sku: text(formData, "sku"),
+    designation: text(formData, "designation"),
+    subcategory: text(formData, "subcategory"),
+    brand: text(formData, "brand"),
+    manufacturerRef: text(formData, "manufacturer_ref"),
+    description: text(formData, "description"),
+    unit: text(formData, "unit") ?? "U",
+    unitCostHtEur: decimal(formData, "unit_cost_ht_eur"),
+    preferredSupplierId: text(formData, "preferred_supplier_id"),
+    notes: text(formData, "notes"),
+  });
+  if (result.ok) revalidatePath("/etudes");
+  return materialState(result, "Article enregistré.");
+}
+
+export async function setPvMaterialActiveAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const materialId = text(formData, "material_id");
+  if (materialId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const active = formData.get("active") === "1";
+  const result = await setPvMaterialActive(materialId, active);
+  if (result.ok) revalidatePath("/etudes");
+  return materialState(
+    result,
+    active
+      ? "Article réactivé : il est de nouveau proposé."
+      : "Article désactivé : il n’est plus proposé, mais reste dans l’historique.",
+  );
+}
+
+export async function upsertPvSupplierAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const result = await upsertPvSupplier({
+    id: text(formData, "supplier_id"),
+    name: text(formData, "name"),
+    contactName: text(formData, "contact_name"),
+    email: text(formData, "email"),
+    phone: text(formData, "phone"),
+    addressLine1: text(formData, "address_line1"),
+    postalCode: text(formData, "postal_code"),
+    city: text(formData, "city"),
+    leadTimeDays: decimal(formData, "lead_time_days"),
+    paymentTerms: text(formData, "payment_terms"),
+    freeShippingHtEur: decimal(formData, "free_shipping_ht_eur"),
+    isActive: formData.has("is_active_declared") ? formData.get("is_active") === "on" : null,
+    notes: text(formData, "notes"),
+  });
+  if (result.ok) revalidatePath("/etudes");
+  return materialState(result, "Fournisseur enregistré.");
+}
+
+/**
+ * Enregistrer un tarif OUVRE une période datée. La façade clôt la précédente la
+ * veille : l'historique reste lisible, et une commande passée en mars garde son
+ * prix de mars.
+ */
+export async function upsertPvSupplierPriceAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const materialId = text(formData, "material_id");
+  const supplierId = text(formData, "supplier_id");
+  const price = decimal(formData, "price_ht_eur");
+  if (materialId === null || supplierId === null || price === null) {
+    return { phase: "error", code: "INVALID_PRICE", message: ERROR_MESSAGES.INVALID_PRICE };
+  }
+  const result = await upsertPvSupplierPrice({
+    materialId,
+    supplierId,
+    priceHtEur: price,
+    validFrom: text(formData, "valid_from"),
+    supplierRef: text(formData, "supplier_ref"),
+    minQuantity: decimal(formData, "min_quantity"),
+    packSize: decimal(formData, "pack_size"),
+    leadTimeDays: decimal(formData, "lead_time_days"),
+    availability: text(formData, "availability"),
+    source: text(formData, "source") ?? "MANUAL",
+    notes: text(formData, "notes"),
+  });
+  if (result.ok) revalidatePath("/etudes");
+  return materialState(result, "Tarif enregistré : une nouvelle période de validité est ouverte.");
+}
+
+export async function addPvMaterialRequirementAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const prospectId = text(formData, "prospect_id");
+  const quantity = decimal(formData, "quantity");
+  if (prospectId === null || quantity === null) {
+    return { phase: "error", code: "INVALID_REQUIREMENT", message: ERROR_MESSAGES.INVALID_REQUIREMENT };
+  }
+  const result = await addPvMaterialRequirement({
+    prospectId,
+    quantity,
+    materialId: text(formData, "material_id"),
+    freeDesignation: text(formData, "free_designation"),
+    unit: text(formData, "unit") ?? "U",
+    isMandatory: formData.get("is_mandatory") !== "off",
+    comment: text(formData, "comment"),
+  });
+  if (result.ok) revalidatePath(`/etudes/affaires/${prospectId}`);
+  return materialState(result, "Besoin ajouté.");
+}
+
+/**
+ * Dérive les besoins depuis les artefacts RETENUS. Idempotent : relancer ne
+ * redouble rien. Le message dit ce qui a été TROUVÉ, pas ce qui a été deviné.
+ */
+export async function derivePvMaterialRequirementsAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const prospectId = text(formData, "prospect_id");
+  if (prospectId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await derivePvMaterialRequirements(prospectId);
+  if (result.ok) revalidatePath(`/etudes/affaires/${prospectId}`);
+  if (!result.ok) {
+    return {
+      phase: "error",
+      code: result.code,
+      message: ERROR_MESSAGES[result.code] ?? "Dérivation refusée.",
+    };
+  }
+  const total = result.fromQuote + result.fromSurvey;
+  return {
+    phase: "ok",
+    code: result.code,
+    message:
+      total === 0
+        ? "Aucun besoin nouveau : tout ce qui était dérivable l’est déjà."
+        : `${total} besoin(s) ajouté(s) — ${result.fromQuote} depuis le devis, ${result.fromSurvey} depuis la visite. Les besoins issus de texte libre attendent votre confirmation.`,
+  };
+}
+
+/** Geste HUMAIN : c'est lui qui autorise un besoin à compter dans la readiness. */
+export async function confirmPvMaterialRequirementAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const requirementId = text(formData, "requirement_id");
+  const prospectId = text(formData, "prospect_id");
+  if (requirementId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await confirmPvMaterialRequirement({
+    requirementId,
+    materialId: text(formData, "material_id"),
+    quantity: decimal(formData, "quantity"),
+  });
+  if (result.ok && prospectId !== null) revalidatePath(`/etudes/affaires/${prospectId}`);
+  return materialState(result, "Besoin confirmé.");
+}
+
+export async function dismissPvMaterialRequirementAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const requirementId = text(formData, "requirement_id");
+  const prospectId = text(formData, "prospect_id");
+  const reason = text(formData, "reason");
+  if (requirementId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  if (reason === null) {
+    return { phase: "error", code: "REASON_REQUIRED", message: ERROR_MESSAGES.REASON_REQUIRED };
+  }
+  const result = await dismissPvMaterialRequirement(requirementId, reason);
+  if (result.ok && prospectId !== null) revalidatePath(`/etudes/affaires/${prospectId}`);
+  return materialState(result, "Besoin écarté, avec son motif.");
+}
+
+export async function createPvPurchaseOrderAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const prospectId = text(formData, "prospect_id");
+  const supplierId = text(formData, "supplier_id");
+  if (prospectId === null || supplierId === null) {
+    return { phase: "error", code: "SUPPLIER_NOT_FOUND", message: ERROR_MESSAGES.SUPPLIER_NOT_FOUND };
+  }
+  const result = await createPvPurchaseOrder({
+    prospectId,
+    supplierId,
+    expectedDeliveryOn: text(formData, "expected_delivery_on"),
+  });
+  if (result.ok) revalidatePath(`/etudes/affaires/${prospectId}`);
+  return materialState(result, "Commande créée en brouillon.");
+}
+
+export async function upsertPvPurchaseOrderLineAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const orderId = text(formData, "order_id");
+  const designation = text(formData, "designation");
+  const quantity = decimal(formData, "quantity");
+  if (orderId === null || designation === null || quantity === null) {
+    return { phase: "error", code: "INVALID_LINE", message: ERROR_MESSAGES.INVALID_LINE };
+  }
+  const result = await upsertPvPurchaseOrderLine({
+    lineId: text(formData, "line_id"),
+    orderId,
+    designation,
+    quantity,
+    unit: text(formData, "unit") ?? "U",
+    unitPriceHtEur: decimal(formData, "unit_price_ht_eur"),
+    vatRatePct: decimal(formData, "vat_rate_pct"),
+    materialId: text(formData, "material_id"),
+    supplierRef: text(formData, "supplier_ref"),
+    expectedDeliveryOn: text(formData, "expected_delivery_on"),
+    requirementId: text(formData, "requirement_id"),
+  });
+  if (result.ok) revalidatePath(`/etudes/commandes/${orderId}`);
+  return materialState(result, "Ligne enregistrée.");
+}
+
+export async function deletePvPurchaseOrderLineAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const lineId = text(formData, "line_id");
+  const orderId = text(formData, "order_id");
+  if (lineId === null) {
+    return { phase: "error", code: "LINE_NOT_FOUND", message: ERROR_MESSAGES.LINE_NOT_FOUND };
+  }
+  const result = await deletePvPurchaseOrderLine(lineId);
+  if (result.ok && orderId !== null) revalidatePath(`/etudes/commandes/${orderId}`);
+  return materialState(result, "Ligne supprimée.");
+}
+
+export async function setPvPurchaseOrderReadyAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const orderId = text(formData, "order_id");
+  if (orderId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  const result = await setPvPurchaseOrderReady(orderId);
+  if (result.ok) revalidatePath(`/etudes/commandes/${orderId}`);
+  return materialState(result, "Commande prête à être passée.");
+}
+
+/**
+ * ⚠️ N'ENVOIE RIEN chez le fournisseur.
+ *
+ * Ce bouton enregistre qu'un humain déclare avoir passé la commande — par
+ * téléphone, par courriel, sur un portail. Exactement le contrat de
+ * « Marquer comme envoyé » en PV-5. Confirmation exigée : le geste engage
+ * l'argent de l'entreprise.
+ */
+export async function markPvPurchaseOrderOrderedAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const orderId = text(formData, "order_id");
+  if (orderId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  if (formData.get("confirm") !== "COMMANDER") {
+    return {
+      phase: "error",
+      code: "CONFIRMATION_REQUIRED",
+      message: "Confirmation requise : cochez la case avant de déclarer la commande passée.",
+    };
+  }
+  const result = await markPvPurchaseOrderOrdered({
+    orderId,
+    orderedOn: text(formData, "ordered_on"),
+  });
+  if (result.ok) revalidatePath(`/etudes/commandes/${orderId}`);
+  return materialState(
+    result,
+    "Commande enregistrée comme passée. Hermès n’a rien envoyé : c’est votre déclaration qui fait foi.",
+  );
+}
+
+export async function cancelPvPurchaseOrderAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const orderId = text(formData, "order_id");
+  const reason = text(formData, "reason");
+  if (orderId === null) {
+    return { phase: "error", code: "NOT_FOUND", message: ERROR_MESSAGES.NOT_FOUND };
+  }
+  if (reason === null) {
+    return { phase: "error", code: "REASON_REQUIRED", message: ERROR_MESSAGES.REASON_REQUIRED };
+  }
+  const result = await cancelPvPurchaseOrder(orderId, reason);
+  if (result.ok) revalidatePath(`/etudes/commandes/${orderId}`);
+  return materialState(result, "Commande annulée, avec son motif.");
+}
+
+/** Réception PARTIELLE native : on saisit ce qui est arrivé, pas ce qui manque. */
+export async function recordPvPurchaseReceiptAction(
+  _prev: PvActionState,
+  formData: FormData,
+): Promise<PvActionState> {
+  const lineId = text(formData, "line_id");
+  const orderId = text(formData, "order_id");
+  const quantity = decimal(formData, "quantity");
+  if (lineId === null || quantity === null) {
+    return { phase: "error", code: "INVALID_RECEIPT", message: ERROR_MESSAGES.INVALID_RECEIPT };
+  }
+  const result = await recordPvPurchaseReceipt({
+    lineId,
+    quantity,
+    receivedOn: text(formData, "received_on"),
+    deliveryNoteRef: text(formData, "delivery_note_ref"),
+    condition: text(formData, "condition") ?? "CONFORME",
+    comment: text(formData, "comment"),
+  });
+  if (result.ok && orderId !== null) revalidatePath(`/etudes/commandes/${orderId}`);
+  if (!result.ok) {
+    return {
+      phase: "error",
+      code: result.code,
+      message: ERROR_MESSAGES[result.code] ?? "Réception refusée.",
+    };
+  }
+  return {
+    phase: "ok",
+    code: result.code,
+    message:
+      result.lineMissing > 0
+        ? `Réception enregistrée : ${result.lineReceived} reçu sur ${result.lineOrdered} commandé — il manque ${result.lineMissing}.`
+        : `Réception enregistrée : la ligne est complète (${result.lineReceived}).`,
   };
 }

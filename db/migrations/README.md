@@ -1330,3 +1330,63 @@ constate.
    silencieusement. L'écran affichait donc une chose et le rapport une autre. Les
    deux caractères sont remplacés par de l'ASCII et par le mot « différent », et
    une assertion vérifie désormais qu'aucun `?` n'apparaît dans le PDF décodé.
+
+---
+
+## 2026-08-24 — PACK PHOTOVOLTAÏQUE, LOT PV-7 : l'approvisionnement matériel
+
+Le trou que ce lot ferme, mesuré avant d'être traité :
+
+```sql
+select table_name from information_schema.tables
+ where table_schema='hermes_os'
+   and (table_name like 'pv_%material%' or table_name like 'pv_%supplier%'
+        or table_name like 'pv_%purchase%' or table_name like 'pv_%commande%');
+-- → AUCUNE LIGNE
+```
+
+À la fin de PV-6, Hermès savait qu'un devis était accepté et qu'une visite était
+validée — et ne savait rien de ce qu'il fallait **acheter** pour tenir cet
+engagement. PV-7 pose la chaîne **besoin → fournisseur → commande → réception**,
+et rien de plus.
+
+| Fichier | Migration appliquée | Objet |
+|---|---|---|
+| `20260824_pv7_1_catalog_suppliers.sql` | `pv7_1_catalog_suppliers` | `pv_material_catalog` (19 catégories, SKU unique par tenant), `pv_suppliers` (table PV dédiée — `btp_fournisseurs` appartient à une autre verticale), `pv_supplier_prices` **datés** (`valid_from`/`valid_until`) ; FK **composites** |
+| `20260824_pv7_2_requirements.sql` | `pv7_2_requirements` | `pv_material_requirements` (article catalogue **XOR** texte libre) ; dérivation depuis devis à **correspondance exacte uniquement**, tout le reste en `needs_confirmation` ; dérivation depuis visite limitée à **3** familles d'écarts univoques |
+| `20260824_pv7_3_purchase_orders.sql` | `pv7_3_purchase_orders` | Numérotation atomique `CMD-YYYY-NNNNNN` ; `pv_purchase_orders` / `_lines` (total de ligne **colonne générée**) / `pv_purchase_receipts` (événements) ; `pv_purchase_order_transitions` (10 chemins, **données**) ; gardes humaines `READY` / `ORDERED` / réception ; gel du contenu commercial après `ORDERED` ; TVA arrondie **par taux** |
+| `20260824_pv7_3b_line_guard_generated_column.sql` | `pv7_3b_line_guard_generated_column` | **Correctif** : le gel de ligne comparait `line_total_ht_eur`, colonne `generated always as … stored` donc **NULL dans `NEW`** en `BEFORE UPDATE` — la comparaison était toujours vraie et **toute réception était impossible**. La colonne est exclue de la comparaison ; `quantity` et `unit_price_ht_eur`, dont elle dérive, restent comparées. |
+| `20260824_pv7_4_balance_and_facades.sql` | `pv7_4_balance_and_facades` | `pv_material_balance` (7 statuts d'écart, dont `SHORTAGE`), `pv_material_readiness` (`READY` exige besoins obligatoires **reçus** ET 0 besoin à confirmer), `pv_purchase_blockers` (réutilise `pv_survey_gate`), `pv_material_costs` (`margin_reliable`) ; 8 façades catalogue/fournisseurs |
+| `20260824_pv7_5_facades_orders.sql` | `pv7_5_facades_orders` | 12 façades besoins/commandes/réceptions ; `get_pv_deal` gagne `material_readiness` |
+| `20260824_pv7_9_rollback.sql` | — | Teardown complet. **Destructif** sur l'historique d'achat ; restaure `get_pv_deal` **avant** de supprimer `pv_material_readiness`. Documente que PV-7 n'a jamais transmis de commande réelle : aucun engagement externe à défaire. |
+
+### Invariants
+
+- **`ORDERED` = un humain déclare, Hermès n'envoie rien.** Aucun email, aucune
+  API fournisseur, aucun navigateur, aucun webhook, aucun n8n. Même contrat que
+  « devis marqué envoyé » en PV-5, et confirmation explicite `COMMANDER` exigée.
+- **Structuré → consolidable ; texte libre → confirmation humaine.** Aucune
+  déduction : « Pose de panneaux » ne devient jamais « 24 panneaux ».
+- **L'écart n'est jamais absorbé.** Une commande peut être `RECEIVED` et
+  l'élément `SHORTAGE` : deux objets, deux vérités, les deux affichées.
+- **Aucune écriture dans `pv_quotes` / `pv_quote_lines`** : le prix de vente
+  n'est jamais écrasé par le prix d'achat. Marge affichée comme **MARGE
+  MATÉRIELLE INDICATIVE**, et masquée dès qu'un coût est inconnu.
+- **Aucun total accepté du navigateur** : total de ligne en colonne générée,
+  aucune façade n'a de paramètre `p_total` / `p_montant` / `p_amount`.
+- **Aucun nouveau journal d'audit** : `entity_audit_log` réutilisé.
+- **Aucun nouveau bucket** : `pv_documents` réutilisé, rattachement par commande.
+- **RLS active, 0 policy, 0 GRANT `anon`** sur les 9 tables ; accès uniquement
+  par façades `SECURITY DEFINER` accordées à `authenticated`.
+- **Aucun cron, aucun scheduler, aucune capacité IA.** n8n reste hors périmètre.
+
+### Preuves
+
+* **76 assertions SQL** (`db/tests/pv7_material_procurement.test.sql`), en
+  transaction annulée — **76/76 PASS**.
+* **33 assertions de contrat TS** (`tests/pv7-material.test.ts`) — **33/33 PASS**.
+* **Mutation testing (6 mutations)**, toutes **tuées**.
+* **Rollback exécuté** en transaction annulée : 9 tables et 20 façades retirées,
+  `pv_survey_gate` et les façades PV-6 intactes, 0 objet de stockage supprimé.
+* **Équivalence fichier ↔ production** vérifiée par MD5 — **5/5 identiques**.
+* **Dérive de migration = 0.**

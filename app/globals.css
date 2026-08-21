@@ -6409,3 +6409,82 @@ html[data-reduce-transparency="1"] .notif-panel {
 
 .pv-document-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .pv-document-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }
+
+/* --- PV-7 : approvisionnement matériel — besoin / commandé / reçu. Préfixe `pv-`. ---
+   Même règle d'accessibilité qu'en PV-6 : LA COULEUR NE PORTE JAMAIS
+   L'INFORMATION SEULE. « Non commandé », « Partiellement reçu », « Manquant »
+   sont écrits en toutes lettres ; les variantes ci-dessous ne font que redire
+   ce qui est déjà lisible. */
+.pv-material-table, .pv-order-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.pv-material-table th, .pv-material-table td,
+.pv-order-table th, .pv-order-table td {
+  text-align: left;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+.pv-material-table td:nth-child(2), .pv-material-table td:nth-child(3),
+.pv-material-table td:nth-child(4), .pv-material-table td:nth-child(5) {
+  font-variant-numeric: tabular-nums;
+}
+.pv-order-table td:nth-child(n + 2) { font-variant-numeric: tabular-nums; }
+.pv-material-status { font-weight: 600; }
+.pv-material-status.is-ok { color: var(--success); }
+.pv-material-status.is-warn { color: var(--warning); }
+.pv-material-status.is-muted { color: var(--text-secondary); font-weight: 400; font-style: italic; }
+.pv-material-status.is-neutral { color: var(--text-secondary); }
+
+.pv-material-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3); align-items: end; }
+.pv-material-form > .photo-note, .pv-material-form > button { grid-column: 1 / -1; }
+
+.pv-material-pending { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.pv-material-pending > li {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pv-material-pending-head { margin: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.pv-material-confirm { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: end; }
+.pv-material-dismiss { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pv-material-dismiss input[type="text"] { flex: 1 1 220px; }
+
+.pv-material-margin {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pv-order-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pv-order-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.pv-order-ref { font-weight: 600; text-decoration: none; }
+.pv-order-total { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+.pv-order-line-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--space-3); align-items: end; }
+.pv-order-line-form > button { grid-column: 1 / -1; }
+
+.pv-receipt-block {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pv-receipt-head { margin: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.pv-receipt-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--space-3); align-items: end; }
+.pv-receipt-form > .photo-note, .pv-receipt-form > button { grid-column: 1 / -1; }
+.pv-receipt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pv-receipt-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }

@@ -3,10 +3,18 @@ import { notFound } from "next/navigation";
 import PvDealPanel from "@/components/dashboard/PvDealPanel";
 import PvQuotesPanel from "@/components/dashboard/PvQuotesPanel";
 import PvStudySummaryForm from "@/components/dashboard/PvStudySummaryForm";
+import PvMaterialPanel from "@/components/dashboard/PvMaterialPanel";
 import PvSurveysPanel from "@/components/dashboard/PvSurveysPanel";
 import { requireRoute } from "@/lib/dashboard/routeGuard";
 import { resolvePvReadiness } from "@/lib/pv/readiness";
-import { getPvDeal, getPvQuotes, getPvSiteSurveys } from "@/services/hermes/pv";
+import {
+  getPvDeal,
+  getPvMaterialPlan,
+  getPvMaterials,
+  getPvQuotes,
+  getPvSiteSurveys,
+  getPvSuppliers,
+} from "@/services/hermes/pv";
 import { getActiveTenantIdentity } from "@/services/hermes/tenantIdentity";
 
 export const metadata = { title: "Affaire photovoltaïque — Hermès" };
@@ -30,11 +38,14 @@ export default async function PvDealPage({
   await requireRoute("/etudes");
 
   const { prospectId } = await params;
-  const [deal, tenant, quotes, surveys] = await Promise.all([
+  const [deal, tenant, quotes, surveys, plan, materials, suppliers] = await Promise.all([
     getPvDeal(prospectId),
     getActiveTenantIdentity(),
     getPvQuotes(prospectId),
     getPvSiteSurveys(prospectId),
+    getPvMaterialPlan(prospectId),
+    getPvMaterials(),
+    getPvSuppliers(),
   ]);
   if (deal === null) notFound();
 
@@ -79,6 +90,14 @@ export default async function PvDealPage({
         prospectId={deal.prospect.id}
         quotes={quotes}
         canQuote={readiness.state === "READY_FOR_OFFER"}
+      />
+      {/* PV-7 — placé APRÈS le devis : on approvisionne ce qui a été vendu, et
+          la porte de commande exige justement un devis accepté. */}
+      <PvMaterialPanel
+        prospectId={deal.prospect.id}
+        plan={plan}
+        materials={materials}
+        suppliers={suppliers}
       />
     </div>
   );
