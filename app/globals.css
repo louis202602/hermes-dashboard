@@ -5274,6 +5274,71 @@ html[data-density="spacious"] {
   --space-2: 12px; --space-3: 18px; --space-4: 28px; --space-6: 40px; --space-8: 56px;
 }
 
+/* ══ MODE ÉPURÉ (density = compact) ═══════════════════════════════════════════
+   Axe DENSITÉ pur — indépendant et composable avec Liquid Glass (transparence).
+   Principe : « extérieur respirant / intérieur compact ». On NE touche pas à la
+   transparence, au blur, aux couleurs, aux fonctions ni à l'architecture
+   responsive : uniquement padding / hauteurs / tailles / largeurs de conteneur,
+   pour que les panneaux occupent nettement moins de surface et laissent le
+   wallpaper respirer autour. 100 % CSS, 0 JS par-widget, 0 coût.
+
+   Les tokens --space-* sont déjà resserrés ci-dessus (cascade globale) ; ce bloc
+   ajoute des surcharges ciblées là où les composants codent des valeurs en dur.  */
+
+/* — Conteneurs : on resserre la largeur max pour que le wallpaper respire sur
+     les côtés (moins de blocs « 100 % de large »), en gardant un gap extérieur
+     généreux entre les groupes fonctionnels. — */
+html[data-density="compact"] .command-center { max-width: 1160px; }
+html[data-density="compact"] .cc-premium { max-width: 980px; gap: 20px; }
+html[data-density="compact"] .page-stack { max-width: 1160px; gap: 18px; }
+
+/* — Home cockpit : hero « poste de commande » nettement plus bas (~30 %),
+     sans rien retirer (titre, état Hermès, zone de requête, envoi). — */
+html[data-density="compact"] .cc-hero { padding: 12px 20px; gap: 10px; border-radius: 22px; }
+html[data-density="compact"] .cc-hero-head { gap: 12px; }
+html[data-density="compact"] .cc-hero-copy { gap: 4px; }
+html[data-density="compact"] .cc-hero-title {
+  margin-top: 0;
+  font-size: clamp(22px, 2.9vw, 32px);
+}
+html[data-density="compact"] .hermes-panel-hero .hermes-thread { max-height: 128px; }
+
+/* — KPI de synthèse : petites capsules basses. — */
+html[data-density="compact"] .cc-synthese { gap: 10px; }
+html[data-density="compact"] .cc-stat { padding: 10px 13px; border-radius: 14px; gap: 3px; }
+html[data-density="compact"] .cc-stat strong { font-size: 23px; }
+html[data-density="compact"] .cc-chip { padding: 7px 13px; }
+
+/* — Cartes / panneaux génériques : intérieur compact (padding + en-têtes). — */
+html[data-density="compact"] .dashboard-card { padding: 13px; }
+html[data-density="compact"] .hermes-panel { padding: 13px; }
+html[data-density="compact"] .kpi-card { padding: 10px 12px; }
+html[data-density="compact"] .kpi-card-top { margin-bottom: 7px; }
+html[data-density="compact"] .kpi-value { margin-top: 3px; font-size: 20px; }
+html[data-density="compact"] .dashboard-card-header,
+html[data-density="compact"] .hermes-panel-header { gap: 12px; }
+html[data-density="compact"] .dashboard-card-header h3,
+html[data-density="compact"] .hermes-panel-header h2 { margin-top: 2px; }
+
+/* — Widgets secondaires : hauteur naturelle quand peu de contenu (pas de grande
+     carte vide qui étire la surface). — */
+html[data-density="compact"] .system-service-item { min-height: 118px; }
+
+/* — Formulaires (« Nouveau prospect » …) : champs un peu moins hauts, gaps
+     réduits, boutons plus compacts — sans sacrifier la lisibilité ni le tactile. */
+html[data-density="compact"] .agent-action-form { gap: 0.55rem; }
+html[data-density="compact"] .agent-field { gap: 0.25rem; }
+html[data-density="compact"] .agent-field input,
+html[data-density="compact"] .agent-field select { padding: 0.45rem 0.65rem; }
+html[data-density="compact"] .agent-submit { padding: 0.5rem 1rem; }
+
+/* — Mobile : on n'écrase pas les cibles tactiles ni les marges latérales. — */
+@media (max-width: 560px) {
+  html[data-density="compact"] .cc-hero { padding: 15px 16px; }
+  html[data-density="compact"] .agent-field input,
+  html[data-density="compact"] .agent-field select { padding: 0.55rem 0.7rem; }
+}
+
 /* --- Accessibility: user-forced reduced motion / reduced transparency --- */
 html[data-reduce-motion="1"] *,
 html[data-reduce-motion="1"] *::before,

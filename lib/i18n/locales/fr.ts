@@ -160,7 +160,7 @@ export const fr = {
   "opt.weight.normal": "Normale",
   "opt.weight.medium": "Moyenne",
   "opt.weight.strong": "Forte",
-  "opt.density.compact": "Compact",
+  "opt.density.compact": "Épuré",
   "opt.density.comfortable": "Confortable",
   "opt.density.spacious": "Spacieux",
   "opt.hour.24": "24 h",

@@ -149,7 +149,7 @@ export const pt: Messages = {
   "opt.weight.normal": "Normal",
   "opt.weight.medium": "Média",
   "opt.weight.strong": "Forte",
-  "opt.density.compact": "Compacta",
+  "opt.density.compact": "Depurada",
   "opt.density.comfortable": "Confortável",
   "opt.density.spacious": "Espaçosa",
   "opt.hour.24": "24 h",
