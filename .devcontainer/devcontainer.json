@@ -1,0 +1,23 @@
+{
+  "name": "Hermes Computer Use",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "22"
+    }
+  },
+  "forwardPorts": [6080],
+  "portsAttributes": {
+    "6080": {
+      "label": "Hermes Computer Use noVNC",
+      "onAutoForward": "notify",
+      "visibility": "private"
+    }
+  },
+  "postCreateCommand": "bash hermes-computer-use/scripts/setup.sh",
+  "postStartCommand": "bash hermes-computer-use/scripts/start.sh",
+  "remoteEnv": {
+    "HCU_STATE_DIR": "/workspaces/hermes-dashboard/hermes-computer-use/state",
+    "HCU_CDP_URL": "http://127.0.0.1:9222"
+  }
+}
