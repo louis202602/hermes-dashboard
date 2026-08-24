@@ -40,5 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Hermes Computer Use runtime state / browser profile / evidence
+/hermes-computer-use/state/
+/hermes-computer-use/tests/evidence/
+
 # Keep the env template tracked
 !.env.example
