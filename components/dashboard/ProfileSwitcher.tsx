@@ -28,6 +28,9 @@ export default function ProfileSwitcher({
 }) {
   const { t } = useI18n();
   const shown = PROFILE_IDS.filter((id) => available.includes(id) || id === active);
+  const photovoltaicFocus =
+    shown.length === 1 && shown[0] === "direction" && available.length === 1;
+
   return (
     <div className="profile-switcher" role="group" aria-label={t("profile.switcher.aria")}>
       <span className="profile-switcher-label">
@@ -36,7 +39,9 @@ export default function ProfileSwitcher({
       </span>
       <div className="profile-switcher-chips">
         {shown.map((id) => {
-          const label = names[id]?.trim() || t(`profile.${id}` as MessageKey);
+          const label = photovoltaicFocus
+            ? "Photovoltaïque"
+            : names[id]?.trim() || t(`profile.${id}` as MessageKey);
           const descKey = profileDef(id)?.descriptionKey;
           const isActive = id === active;
           return (
@@ -45,7 +50,7 @@ export default function ProfileSwitcher({
               type="button"
               className={`profile-chip${isActive ? " is-active" : ""}`}
               aria-pressed={isActive}
-              title={descKey ? t(descKey as MessageKey) : undefined}
+              title={photovoltaicFocus ? "Pilotage photovoltaïque" : descKey ? t(descKey as MessageKey) : undefined}
               onClick={() => onSelect(id)}
             >
               {label}

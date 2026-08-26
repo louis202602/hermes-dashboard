@@ -10,6 +10,7 @@ import {
 import { photoGateKeys } from "@/lib/dashboard/photoAccess";
 import { resolveHomeProfile } from "@/lib/dashboard/shortcuts";
 import { clampLayout, type LayoutPreferences } from "@/lib/dashboard/widgets";
+import { resolveVertical } from "@/lib/verticals/manifest";
 import type { AvailableCapabilities, ServiceResult } from "@/types/hermes";
 
 /**
@@ -41,10 +42,24 @@ export function resolveHomeProfileContext(
   const capabilityKeys = photoGateKeys(realCapabilityKeys, photoModuleEnabled);
   const capabilitiesKnown =
     capabilities.ok && capabilities.data.resolutionStatus === "OK";
-  const offeredProfiles = availableProfiles(
-    deriveCapabilityTokens(capabilityKeys),
+  const capabilityTokens = deriveCapabilityTokens(capabilityKeys);
+  const capabilityOfferedProfiles = availableProfiles(
+    capabilityTokens,
     capabilitiesKnown,
   );
+
+  // PV-FOCUS — le moteur multi-métier reste intact, mais tant que ce tenant est
+  // réellement résolu sur la verticale solaire on présente UN seul mode de travail.
+  // On réutilise le profil `direction` existant (aucune migration, aucun effacement de
+  // préférences) : repasser à une autre verticale restitue automatiquement les profils
+  // universels. Le libellé "Photovoltaïque" est appliqué par le switcher lorsque cette
+  // liste volontairement mono-profil est détectée.
+  const { vertical } = resolveVertical(capabilityTokens);
+  const offeredProfiles: ProfileId[] =
+    capabilitiesKnown && vertical === "solar"
+      ? ["direction"]
+      : capabilityOfferedProfiles;
+
   const activeProfile = fallbackProfile(
     resolveHomeProfile(prefs.behavior, profiles, globalLayout),
     offeredProfiles,
