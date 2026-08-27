@@ -3,6 +3,7 @@ export type PvLeadTemperature = "FROID" | "TIEDE" | "CHAUD" | "TRES_PRIORITAIRE"
 export type PvLeadInboxItem = {
   prospectId: string;
   companyName: string | null;
+  city: string | null;
   contactName: string | null;
   email: string | null;
   phone: string | null;
