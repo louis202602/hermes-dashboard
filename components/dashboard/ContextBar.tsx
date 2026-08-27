@@ -16,11 +16,7 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type Props = {
   model: ContextBarModel;
-  /** Server-formatted clock for the tenant timezone — used for the first paint
-   *  so hydration matches exactly, then replaced by the live client clock. */
   initialClock: { time: string; date: string; offset: string };
-  /** Optional segment allow-list — the seam a future DASH-4 personalization
-   *  layer will drive per user/tenant. Unset ⇒ every segment is shown. */
   visibleSegments?: string[];
 };
 
@@ -38,13 +34,9 @@ function fmtCurrency(amount: number, currency: string, locale: string): string {
 
 export default function ContextBar({ model, initialClock, visibleSegments }: Props) {
   const { t } = useI18n();
-  const { settings, timezone, timezoneSource, units, weather, cost, alerts } =
-    model;
+  const { settings, timezone, timezoneSource, units, weather, cost, alerts } = model;
   const locale = settings.locale || "fr-FR";
   const hour12 = units.hourCycle === "12h";
-  // DASH-4B: per-segment visibility (unset ⇒ every segment shown). Toggling a
-  // segment only changes rendering — never adds a fetch (data already loaded, and
-  // weather is skipped upstream when its segment is off).
   const show = (seg: string) => !visibleSegments || visibleSegments.includes(seg);
   const showLocation = show("location");
   const showDate = show("date");
@@ -54,49 +46,69 @@ export default function ContextBar({ model, initialClock, visibleSegments }: Pro
   const showTemperature = show("temperature");
   const showRain = show("rain");
   const showWind = show("wind");
-  // The weather block renders if ANY weather-dependent segment is on (temperature
-  // is a peer of the weather condition, not a child) — must match the upstream
-  // fetch condition so the data is available whenever any part is shown.
   const showWeatherSeg = showWeather || showTemperature || showRain || showWind;
   const showNextEvent = show("nextEvent");
   const showAlerts = show("alerts");
   const showCost = show("cost");
   const showSeconds = model.showSeconds;
 
-  // DASH-4D (LOW#1): lazy weather on profile switch. If a switch makes a
-  // weather-dependent segment visible but the server skipped the upstream call
-  // (the initial profile hid weather — COST-FIRST), fetch ONCE client-side via the
-  // SAME cached Open-Meteo service. No polling; 0 calls when no weather segment is
-  // shown or when no location is configured; never fabricated.
-  const [lazyWeather, setLazyWeather] = useState<WeatherSnapshot | null>(null);
+  const [liveWeather, setLiveWeather] = useState<WeatherSnapshot | null>(null);
+  const [gpsActive, setGpsActive] = useState(false);
   const weatherReq = useRef<string | null>(null);
+
+  // For the PV cockpit, prefer the device's actual position. The browser owns the
+  // permission prompt: if the user refuses or GPS is unavailable we fall back to the
+  // configured tenant coordinates. No IP-derived or invented position is used.
   useEffect(() => {
-    if (!showWeatherSeg || weather.provenance === "REAL") return;
+    if (!showWeatherSeg || typeof navigator === "undefined" || !navigator.geolocation) return;
+    let alive = true;
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        if (!alive) return;
+        const latitude = position.coords.latitude;
+        const longitude = position.coords.longitude;
+        const key = `gps:${latitude.toFixed(4)},${longitude.toFixed(4)}`;
+        if (weatherReq.current === key) return;
+        weatherReq.current = key;
+        void getContextWeatherAction(latitude, longitude, "auto").then((snap) => {
+          if (alive && snap) {
+            setLiveWeather(snap);
+            setGpsActive(true);
+          }
+        });
+      },
+      () => {
+        // Permission denied/unavailable: the configured location fallback below remains valid.
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 15 * 60 * 1000 },
+    );
+    return () => {
+      alive = false;
+    };
+  }, [showWeatherSeg]);
+
+  // Fallback to explicitly configured tenant coordinates when GPS has not produced a
+  // result. This is still real weather; it simply represents the configured business location.
+  useEffect(() => {
+    if (!showWeatherSeg || liveWeather) return;
     const { latitude, longitude } = settings;
     if (latitude === null || longitude === null) return;
-    const key = `${latitude},${longitude}`;
-    if (weatherReq.current === key) return; // already fetched/fetching for this location
+    const key = `configured:${latitude},${longitude}`;
+    if (weatherReq.current === key || weatherReq.current?.startsWith("gps:")) return;
     weatherReq.current = key;
     let alive = true;
     void getContextWeatherAction(latitude, longitude, timezone).then((snap) => {
-      if (alive && snap) setLazyWeather(snap);
+      if (alive && snap) setLiveWeather(snap);
     });
     return () => {
       alive = false;
     };
-  }, [showWeatherSeg, weather.provenance, settings, timezone]);
+  }, [showWeatherSeg, liveWeather, settings, timezone]);
 
-  const displayWeather =
-    weather.provenance === "REAL"
-      ? weather
-      : lazyWeather
-        ? ({ provenance: "REAL", snapshot: lazyWeather } as const)
-        : weather;
+  const displayWeather = liveWeather
+    ? ({ provenance: "REAL", snapshot: liveWeather } as const)
+    : weather;
 
-  // Live clock island — the only timer on the dashboard. Null until mounted so
-  // the first client render reuses the server strings (hydration-safe), then we
-  // tick every second. When the tenant has no timezone configured (fallback to
-  // UTC), opportunistically upgrade to the browser zone — zero cost, no consent.
   const [liveClock, setLiveClock] = useState<{
     time: string;
     date: string;
@@ -110,11 +122,10 @@ export default function ContextBar({ model, initialClock, visibleSegments }: Pro
         const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
         if (isValidTimeZone(browserTz)) tz = browserTz;
       } catch {
-        /* keep the resolved (UTC) fallback */
+        /* keep fallback */
       }
     }
-    const tick = () =>
-      setLiveClock(formatClock(new Date(), tz, locale, { hour12, showSeconds }));
+    const tick = () => setLiveClock(formatClock(new Date(), tz, locale, { hour12, showSeconds }));
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
@@ -124,11 +135,12 @@ export default function ContextBar({ model, initialClock, visibleSegments }: Pro
 
   return (
     <div className="context-bar" role="status" aria-live="off">
-      {/* Localisation */}
       {showLocation ? (
         <span className="context-seg context-seg-location">
           <MapPin className="context-ico" aria-hidden />
-          {settings.city ? (
+          {gpsActive ? (
+            <span className="context-strong">Position GPS</span>
+          ) : settings.city ? (
             <span className="context-strong">{settings.city}</span>
           ) : (
             <span className="context-muted">{t("context.location.todo")}</span>
@@ -136,150 +148,62 @@ export default function ContextBar({ model, initialClock, visibleSegments }: Pro
         </span>
       ) : null}
 
-      {showLocation && showClock ? (
-        <span className="context-sep" aria-hidden>
-          ·
-        </span>
-      ) : null}
+      {showLocation && showClock ? <span className="context-sep" aria-hidden>·</span> : null}
 
-      {/* Date · heure locale (live) */}
       {showClock ? (
         <span className="context-seg context-seg-clock">
           {showDate ? <span className="context-date">{clock.date}</span> : null}
-          {showTime ? (
-            <span className="context-time" suppressHydrationWarning>
-              {clock.time}
-            </span>
-          ) : null}
-          {showTime ? (
-            <span className="context-tz" title={timezone}>
-              {clock.offset}
-            </span>
-          ) : null}
+          {showTime ? <span className="context-time" suppressHydrationWarning>{clock.time}</span> : null}
+          {showTime ? <span className="context-tz" title={timezone}>{clock.offset}</span> : null}
         </span>
       ) : null}
 
-      {(showLocation || showClock) && showWeatherSeg ? (
-        <span className="context-sep" aria-hidden>
-          ·
-        </span>
-      ) : null}
+      {(showLocation || showClock) && showWeatherSeg ? <span className="context-sep" aria-hidden>·</span> : null}
 
-      {/* Météo — chaque sous-segment (condition, température, pluie, vent) est
-          gaté indépendamment ; le conteneur s'affiche si l'un d'eux est visible. */}
       {showWeatherSeg ? (
-      <span className="context-seg context-seg-weather">
-        {displayWeather.provenance === "REAL" ? (
-          <>
-            {showWeather ? (
-              <span className="context-wx-icon" aria-hidden>
-                {displayWeather.snapshot.icon}
-              </span>
-            ) : null}
-            {showTemperature ? (
-              <span className="context-strong">
-                {formatTemperature(
-                  displayWeather.snapshot.temperatureC,
-                  units.temperature,
-                )}
-              </span>
-            ) : null}
-            {showWeather ? (
-              <span className="context-muted context-hide-mobile">
-                {displayWeather.snapshot.condition}
-              </span>
-            ) : null}
-            {showRain &&
-            displayWeather.snapshot.precipitationMm !== null &&
-            displayWeather.snapshot.precipitationMm > 0 ? (
-              <span className="context-muted context-hide-tablet">
-                · {displayWeather.snapshot.precipitationMm} mm
-              </span>
-            ) : null}
-            {showWind && displayWeather.snapshot.windKph !== null ? (
-              <span className="context-muted context-hide-tablet">
-                · {formatWind(displayWeather.snapshot.windKph, units.wind)}
-              </span>
-            ) : null}
-          </>
-        ) : showWeather ? (
-          <span className="context-muted">
-            {settings.locationConfigured
-              ? t("context.weather.unavailable")
-              : t("context.weather.todo")}
-          </span>
-        ) : null}
-      </span>
+        <span className="context-seg context-seg-weather">
+          {displayWeather.provenance === "REAL" ? (
+            <>
+              {showWeather ? <span className="context-wx-icon" aria-hidden>{displayWeather.snapshot.icon}</span> : null}
+              {showTemperature ? <span className="context-strong">{formatTemperature(displayWeather.snapshot.temperatureC, units.temperature)}</span> : null}
+              {showWeather ? <span className="context-muted context-hide-mobile">{displayWeather.snapshot.condition}</span> : null}
+              {showRain && displayWeather.snapshot.precipitationMm !== null && displayWeather.snapshot.precipitationMm > 0 ? <span className="context-muted context-hide-tablet">· {displayWeather.snapshot.precipitationMm} mm</span> : null}
+              {showWind && displayWeather.snapshot.windKph !== null ? <span className="context-muted context-hide-tablet">· {formatWind(displayWeather.snapshot.windKph, units.wind)}</span> : null}
+            </>
+          ) : showWeather ? <span className="context-muted">{settings.locationConfigured ? t("context.weather.unavailable") : t("context.weather.todo")}</span> : null}
+        </span>
       ) : null}
 
       <span className="context-spacer" aria-hidden />
 
-      {/* Prochain RDV — emplacement préparé ; source agenda = DASH-2. */}
       {showNextEvent && model.nextEvent.provenance === "REAL" ? (
         <span className="context-seg context-seg-agenda context-hide-mobile">
           <CalendarClock className="context-ico" aria-hidden />
           <span className="context-strong">{model.nextEvent.label}</span>
-          {model.nextEvent.whenLabel ? (
-            <span className="context-muted">{model.nextEvent.whenLabel}</span>
-          ) : null}
+          {model.nextEvent.whenLabel ? <span className="context-muted">{model.nextEvent.whenLabel}</span> : null}
         </span>
       ) : null}
 
-      {/* Alertes importantes */}
       {showAlerts ? (
-      <span className="context-seg context-seg-alerts">
-        <AlertTriangle className="context-ico" aria-hidden />
-        {alerts.provenance === "REAL" ? (
-          <span
-            className={alerts.count > 0 ? "context-strong" : "context-muted"}
-          >
-            {t(alerts.count === 1 ? "context.alerts.one" : "context.alerts.other", { count: alerts.count })}
-          </span>
-        ) : (
-          <span className="context-muted">—</span>
-        )}
-      </span>
+        <span className="context-seg context-seg-alerts">
+          <AlertTriangle className="context-ico" aria-hidden />
+          {alerts.provenance === "REAL" ? <span className={alerts.count > 0 ? "context-strong" : "context-muted"}>{t(alerts.count === 1 ? "context.alerts.one" : "context.alerts.other", { count: alerts.count })}</span> : <span className="context-muted">—</span>}
+        </span>
       ) : null}
 
-      {/* Coût Hermès (devise source réelle — SW23/USD). Aujourd'hui = principal ;
-          mois + budget restant = secondaires (masqués sur petits écrans). */}
       {showCost ? (
-      <span className="context-seg context-seg-cost">
-        <Sparkles className="context-ico" aria-hidden />
-        <span className="context-muted">{t("context.brand")}</span>
-        {cost.provenance === "REAL" ? (
-          <>
-            <span
-              className="context-strong"
-              title={t("context.cost.todayTitle")}
-            >
-              {fmtCurrency(cost.todayAmount, cost.currency, locale)}
-            </span>
-            <span className="context-muted context-hide-mobile">{t("context.cost.today")}</span>
-            {cost.monthAmount !== null ? (
-              <span
-                className="context-muted context-hide-tablet"
-                title={t("context.cost.monthTitle")}
-              >
-                · {fmtCurrency(cost.monthAmount, cost.currency, locale)} {t("context.cost.month")}
-              </span>
-            ) : null}
-            {cost.remainingAmount !== null ? (
-              <span
-                className="context-muted context-hide-tablet"
-                title={t("context.cost.remainingTitle")}
-              >
-                · {fmtCurrency(cost.remainingAmount, cost.currency, locale)}{" "}
-                {t("context.cost.remaining")}
-              </span>
-            ) : null}
-          </>
-        ) : (
-          <span className="context-muted" title={t("context.cost.unavailable")}>
-            {t("context.cost.unavailable")}
-          </span>
-        )}
-      </span>
+        <span className="context-seg context-seg-cost">
+          <Sparkles className="context-ico" aria-hidden />
+          <span className="context-muted">{t("context.brand")}</span>
+          {cost.provenance === "REAL" ? (
+            <>
+              <span className="context-strong" title={t("context.cost.todayTitle")}>{fmtCurrency(cost.todayAmount, cost.currency, locale)}</span>
+              <span className="context-muted context-hide-mobile">{t("context.cost.today")}</span>
+              {cost.monthAmount !== null ? <span className="context-muted context-hide-tablet" title={t("context.cost.monthTitle")}>· {fmtCurrency(cost.monthAmount, cost.currency, locale)} {t("context.cost.month")}</span> : null}
+              {cost.remainingAmount !== null ? <span className="context-muted context-hide-tablet" title={t("context.cost.remainingTitle")}>· {fmtCurrency(cost.remainingAmount, cost.currency, locale)} {t("context.cost.remaining")}</span> : null}
+            </>
+          ) : <span className="context-muted" title={t("context.cost.unavailable")}>{t("context.cost.unavailable")}</span>}
+        </span>
       ) : null}
     </div>
   );
