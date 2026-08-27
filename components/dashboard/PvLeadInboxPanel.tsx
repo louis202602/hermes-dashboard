@@ -19,6 +19,11 @@ function displayDate(value: string | null): string | null {
   }).format(date);
 }
 
+function displayAction(value: string | null): string | null {
+  if (!value) return null;
+  return value.toLowerCase().replaceAll("_", " ");
+}
+
 export default function PvLeadInboxPanel({
   inbox,
   filters,
@@ -70,7 +75,7 @@ export default function PvLeadInboxPanel({
               type="search"
               name="q"
               defaultValue={filters.search ?? ""}
-              placeholder="Entreprise, contact, e-mail, téléphone"
+              placeholder="Entreprise, ville, contact, e-mail, téléphone"
               maxLength={120}
             />
           </label>
@@ -112,21 +117,23 @@ export default function PvLeadInboxPanel({
           <ul className="photo-session-list">
             {inbox.items.map((lead) => {
               const nextAt = displayDate(lead.nextActionAt);
+              const nextAction = displayAction(lead.nextAction);
               const name = lead.companyName || lead.contactName || "Prospect";
               const contact = [lead.contactName, lead.email, lead.phone].filter(Boolean).join(" · ");
               return (
                 <li key={lead.prospectId} className="photo-session-item">
                   <div className="photo-session-main">
                     <strong>{name}</strong>
+                    {lead.city && <span className="photo-session-meta">{lead.city}</span>}
                     <span className="photo-session-meta">
-                      {contact || "Contact à vérifier"}
+                      {contact || "Contact à rechercher"}
                     </span>
                     <span className="photo-session-meta">
-                      {lead.priorityReason || lead.replySummary || "Aucun signal prioritaire"}
+                      {lead.priorityReason || lead.replySummary || "Enrichissement en cours"}
                     </span>
-                    {(lead.nextAction || nextAt) && (
+                    {(nextAction || nextAt) && (
                       <span className="photo-session-meta">
-                        Prochaine action : {lead.nextAction || "rappel"}{nextAt ? ` · ${nextAt}` : ""}
+                        Prochaine action : {nextAction || "rappel"}{nextAt ? ` · ${nextAt}` : ""}
                       </span>
                     )}
                   </div>
