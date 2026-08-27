@@ -2,6 +2,7 @@ import "server-only";
 
 import { logEvent } from "@/lib/observability/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { PvDailyKpi } from "@/types/pvDailyKpi";
 import type { PvLeadInbox, PvLeadInboxItem, PvLeadTemperature } from "@/types/pvLead";
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -104,5 +105,29 @@ export async function getPvLeadInbox(params: {
   return {
     items,
     total: Number.isFinite(parsedTotal) ? parsedTotal : items.length,
+  };
+}
+
+export async function getPvDailyKpi(): Promise<PvDailyKpi | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("get_pv_daily_kpi");
+
+  if (error) {
+    logEvent("error", "pv.daily_kpi_rpc_error", { code: error.code });
+    return null;
+  }
+
+  const raw = asRecord(data);
+  if (raw.ok === false) return null;
+
+  return {
+    date: str(raw.date),
+    zone: str(raw.zone),
+    qualifiedCallableCount: numOrNull(raw.qualified_callable_count) ?? 0,
+    target: numOrNull(raw.target) ?? 20,
+    remaining: numOrNull(raw.remaining) ?? 0,
+    weeklyCount: numOrNull(raw.weekly_count) ?? 0,
+    weeklyTarget: numOrNull(raw.weekly_target) ?? 100,
+    readyProspectIds: strings(raw.ready_prospect_ids),
   };
 }
