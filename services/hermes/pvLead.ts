@@ -47,6 +47,7 @@ function mapLead(raw: Record<string, unknown>): PvLeadInboxItem {
   return {
     prospectId: String(raw.prospect_id ?? ""),
     companyName: str(raw.company_name),
+    city: str(raw.city),
     contactName: str(raw.contact_name),
     email: str(raw.email),
     phone: str(raw.phone),
