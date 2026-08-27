@@ -1,18 +1,6 @@
 /**
- * HERMÈS — NAVIGATION_POLICY et garde de routes.
- *
- * Le menu n'est plus une liste écrite à la main : il se CALCULE à partir des
- * modules accordés, ordonnés par la verticale. Deux propriétés en découlent, et
- * ce sont les deux que l'audit demandait :
- *
- *   1. Un tenant photo ne peut pas voir « Chantiers », parce que le module
- *      `worksites` ne lui est pas accordé — pas parce qu'un `if` le cache.
- *   2. Cacher l'entrée NE SUFFIT PAS, et le moteur ne prétend pas le contraire :
- *      `isRouteAllowed` répond à la même question pour une URL tapée à la main,
- *      à partir de la MÊME table de modules. Menu et garde ne peuvent pas
- *      diverger : il n'y a qu'une source.
- *
- * Pur, sans I/O, sans React. La sidebar n'aura qu'à rendre le résultat.
+ * HERMÈS — navigation calculée depuis les modules accordés.
+ * La verticale ne donne aucun droit : elle ne fait qu'ordonner/filtrer la présentation.
  */
 
 import type { MessageKey } from "@/lib/i18n/languages";
@@ -26,29 +14,24 @@ import { verticalDef, type VerticalId } from "@/lib/verticals/manifest";
 export type NavEntry = {
   moduleId: ModuleId;
   labelKey: MessageKey;
-  /** `null` ⇒ page prévue, non construite : rendue désactivée, jamais en lien mort. */
   href: string | null;
-  /** `true` quand la page n'existe pas encore (libellé « bientôt disponible »). */
   comingSoon: boolean;
 };
 
-/**
- * Route rendue disponible lorsqu'une page est livrée avant le nettoyage du
- * registre historique. La garde reste fail-closed grâce à `ownedRoutes`.
- */
+/** Pages réellement livrées avant nettoyage du registre historique. */
 const LIVE_ROUTE_OVERRIDES: Partial<Record<ModuleId, string>> = {
   "crm.prospects": "/prospects",
+  agenda: "/agenda",
 };
 
 /**
- * Le menu d'un tenant.
- *
- * Ordre = celui de la verticale, puis les modules accordés qu'elle ne cite pas
- * (dans l'ordre du registre). Rien n'est perdu silencieusement : un module
- * accordé apparaît toujours, même si la verticale a oublié de le mentionner.
- *
- * FILTRAGE, jamais octroi : citer un module non accordé ne l'ajoute pas.
+ * Présentation solaire : la carte BTP historique n'est pas un écran du cockpit PV.
+ * On masque uniquement son entrée dans la verticale solaire ; le module `worksites`
+ * et sa garde restent intacts pour les autres métiers et pour une future vraie vue
+ * Chantiers PV. C'est donc réversible et ne détruit pas le moteur multi-métier.
  */
+const SOLAR_HIDDEN_PRESENTATION_MODULES = new Set<ModuleId>(["worksites"]);
+
 export function resolveNavigation(
   vertical: VerticalId,
   granted: Iterable<ModuleId>,
@@ -72,8 +55,9 @@ export function resolveNavigation(
 
   const out: NavEntry[] = [];
   for (const id of ordered) {
+    if (vertical === "solar" && SOLAR_HIDDEN_PRESENTATION_MODULES.has(id)) continue;
     const def = moduleDef(id);
-    if (!def) continue; // id inconnu (préférence obsolète) ⇒ ignoré, pas de crash
+    if (!def) continue;
     const href = def.route ?? LIVE_ROUTE_OVERRIDES[def.id] ?? null;
     out.push({
       moduleId: def.id,
@@ -85,13 +69,6 @@ export function resolveNavigation(
   return out;
 }
 
-/**
- * À quel module appartient une route ? `null` ⇒ route non revendiquée.
- *
- * Le plus LONG préfixe gagne, pour qu'un module spécifique puisse posséder une
- * sous-route d'un module plus large sans ambiguïté. `/` est traité en égalité
- * stricte : sans cela, la racine posséderait tout le site.
- */
 export function routeModule(pathname: string): ModuleId | null {
   const path = normalize(pathname);
   if (path === "/") return "core.home";
@@ -110,18 +87,6 @@ export function routeModule(pathname: string): ModuleId | null {
   return best?.id ?? null;
 }
 
-/**
- * LA GARDE SERVEUR. Une route est autorisée si — et seulement si — le module qui
- * la possède est accordé.
- *
- * FAIL-CLOSED sur deux fronts, volontairement :
- *   * module non accordé          ⇒ refus (c'est l'objet de la garde) ;
- *   * route qu'AUCUN module ne revendique ⇒ refus également.
- *
- * Le second point est le plus important : une page ajoutée demain sans être
- * rattachée à un module est refusée par défaut. On ne peut donc pas introduire
- * une route non gardée par simple oubli — l'oubli ferme, il n'ouvre pas.
- */
 export function isRouteAllowed(pathname: string, granted: Iterable<ModuleId>): boolean {
   const grantedSet = granted instanceof Set ? granted : new Set(granted);
   const owner = routeModule(pathname);
@@ -129,7 +94,6 @@ export function isRouteAllowed(pathname: string, granted: Iterable<ModuleId>): b
   return grantedSet.has(owner);
 }
 
-/** Normalise : sans query/hash, sans slash final superflu, jamais vide. */
 function normalize(pathname: string): string {
   const raw = String(pathname ?? "");
   const cut = raw.split(/[?#]/)[0] ?? "";
@@ -138,7 +102,6 @@ function normalize(pathname: string): string {
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 }
 
-/** Routes revendiquées par le registre — utile aux tests de couverture. */
 export function claimedRoutePrefixes(): string[] {
   const out = new Set<string>();
   for (const m of MODULE_REGISTRY) for (const r of m.ownedRoutes) out.add(r);
