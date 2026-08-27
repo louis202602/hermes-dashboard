@@ -33,6 +33,14 @@ export type NavEntry = {
 };
 
 /**
+ * Route rendue disponible lorsqu'une page est livrée avant le nettoyage du
+ * registre historique. La garde reste fail-closed grâce à `ownedRoutes`.
+ */
+const LIVE_ROUTE_OVERRIDES: Partial<Record<ModuleId, string>> = {
+  "crm.prospects": "/prospects",
+};
+
+/**
  * Le menu d'un tenant.
  *
  * Ordre = celui de la verticale, puis les modules accordés qu'elle ne cite pas
@@ -66,11 +74,12 @@ export function resolveNavigation(
   for (const id of ordered) {
     const def = moduleDef(id);
     if (!def) continue; // id inconnu (préférence obsolète) ⇒ ignoré, pas de crash
+    const href = def.route ?? LIVE_ROUTE_OVERRIDES[def.id] ?? null;
     out.push({
       moduleId: def.id,
       labelKey: def.labelKey,
-      href: def.route,
-      comingSoon: def.route === null,
+      href,
+      comingSoon: href === null,
     });
   }
   return out;
