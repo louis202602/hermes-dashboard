@@ -1,3 +1,4 @@
+import type { PvDailyKpi } from "@/types/pvDailyKpi";
 import type { PvLeadInbox, PvLeadTemperature } from "@/types/pvLead";
 
 const TEMPERATURE_LABELS: Record<PvLeadTemperature, string> = {
@@ -26,9 +27,11 @@ function displayAction(value: string | null): string | null {
 
 export default function PvLeadInboxPanel({
   inbox,
+  dailyKpi,
   filters,
 }: {
   inbox: PvLeadInbox;
+  dailyKpi: PvDailyKpi | null;
   filters: {
     search: string | null;
     temperature: PvLeadTemperature | null;
@@ -52,6 +55,23 @@ export default function PvLeadInboxPanel({
             {inbox.total === 0 ? "aucun prospect" : `${inbox.total} prospect${inbox.total > 1 ? "s" : ""}`}
           </span>
         </div>
+
+        {dailyKpi && (
+          <div className="pv-pilot-grid">
+            <div className="pv-pilot-stat">
+              <span className="photo-session-meta">Qualifiés aujourd’hui</span>
+              <strong>{dailyKpi.qualifiedCallableCount} / {dailyKpi.target}</strong>
+            </div>
+            <div className="pv-pilot-stat">
+              <span className="photo-session-meta">Objectif semaine</span>
+              <strong>{dailyKpi.weeklyCount} / {dailyKpi.weeklyTarget}</strong>
+            </div>
+            <div className="pv-pilot-stat">
+              <span className="photo-session-meta">Reste aujourd’hui</span>
+              <strong>{dailyKpi.remaining}</strong>
+            </div>
+          </div>
+        )}
 
         <div className="pv-pilot-grid">
           <div className="pv-pilot-stat">
