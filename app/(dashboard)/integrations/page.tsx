@@ -1,13 +1,13 @@
 import PageHeading from "@/components/dashboard/PageHeading";
 import { requireRoute } from "@/lib/dashboard/routeGuard";
 import { isProviderImplemented } from "@/lib/integrations/connectionState";
+import { getOperationalIntegrationHealth } from "@/services/hermes/integrationHealth";
 import { getTenantIntegrations } from "@/services/hermes/integrations";
 import type { IntegrationStatus } from "@/types/integrations";
 
 export const metadata = { title: "Intégrations — Hermès OS" };
 
-/** Libellés d'état des comptes de l'utilisatrice. */
-const CONNECTION_LABEL: Record<IntegrationStatus, string> = {
+const LABEL: Record<IntegrationStatus, string> = {
   NOT_CONNECTED: "Non connecté",
   CONNECTING: "Connexion en cours",
   CONNECTED: "Connecté",
@@ -16,180 +16,93 @@ const CONNECTION_LABEL: Record<IntegrationStatus, string> = {
   REVOKED: "Révoqué",
 };
 
-/** Ce que l'état implique concrètement — dit honnêtement, sans jargon. */
-const CONNECTION_HINT: Record<IntegrationStatus, string> = {
-  NOT_CONNECTED:
-    "Non connecté. Le standard répond et qualifie quand même, mais n’annonce aucune disponibilité.",
-  CONNECTING: "Connexion en cours chez le fournisseur.",
-  CONNECTED: "Connecté. Vous pouvez révoquer l’accès à tout moment.",
-  ERROR: "La dernière tentative a échoué. Vous pouvez réessayer.",
-  REAUTH_REQUIRED: "L’autorisation a expiré : une reconnexion est nécessaire.",
-  REVOKED: "Accès révoqué. Aucune donnée n’est lue.",
-};
-
-// Only integrations that REALLY exist in Hermès today. No invented connections. Where a
-// live status would require a dedicated read we don't have (COST-FIRST: 0 new RPC), the
-// status is stated honestly as "À venir" rather than a fake "Connecté" badge. The two core
-// dependencies (orchestrateur, base de données) are structurally active — the app cannot
-// run without them — so "Actif (cœur)" is a true statement, not a fabricated one.
-type CoreStatus = "core" | "conditional" | "soon";
-
-const INTEGRATIONS: {
-  name: string;
-  role: string;
-  status: CoreStatus;
-  note: string;
-}[] = [
-  {
-    name: "Hermès — Orchestrateur & Gateway",
-    role: "Exécution sécurisée des actions (orchestrateur → gateway → permissions → SW15)",
-    status: "core",
-    note: "Noyau d'Hermès. Toujours actif — c'est le chemin de toute action.",
-  },
-  {
-    name: "Supabase",
-    role: "Base de données Postgres, authentification et stockage",
-    status: "core",
-    note: "Dépendance structurelle : données, auth et fichiers.",
-  },
-  {
-    name: "n8n",
-    role: "Moteur d'automatisation / workflows (consommateurs d'actions)",
-    status: "soon",
-    note: "Configuré via le gateway. Supervision d'exécution détaillée : à venir.",
-  },
-  {
-    name: "Résolveur IA",
-    role: "Traitement des messages Hermès et proposition d'actions",
-    status: "conditional",
-    note: "État en direct (activé, circuit, file) dans « Agents ».",
-  },
-  {
-    name: "Open-Meteo",
-    role: "Météo de la barre de contexte et des chantiers",
-    status: "conditional",
-    note: "Active uniquement lorsqu'une localisation est configurée (mise en cache).",
-  },
-];
-
-const STATUS_LABEL: Record<CoreStatus, string> = {
-  core: "Actif (cœur)",
-  conditional: "Selon configuration",
-  soon: "Supervision à venir",
-};
-
-/**
- * /integrations — deux sections, deux natures très différentes :
- *
- *   1. MES OUTILS — les comptes qui appartiennent à l'utilisatrice (agenda,
- *      messagerie, réseaux). Elle les connecte ELLE-MÊME par OAuth : Hermès ne
- *      lui demande jamais son mot de passe et n'en stocke aucun.
- *   2. NOYAU HERMÈS — l'infrastructure fournie par Hermès (orchestrateur, base,
- *      n8n, téléphonie). Rien à connecter : c'est notre part du contrat.
- *
- * La liste des outils vient d'une lecture RÉELLE (`get_tenant_integrations`),
- * bornée au tenant appelant. Aucun jeton ne transite : la façade n'en renvoie
- * pas, et les types n'en portent pas.
- */
 export default async function IntegrationsPage() {
   const ctx = await requireRoute("/integrations");
-  const { integrations: allIntegrations, resolutionStatus } = await getTenantIntegrations();
-
-  // FILTRE PAR VERTICALE. Un fournisseur activé globalement n'est pas pour
-  // autant pertinent : Instagram n'a rien à faire chez un installateur solaire.
-  // L'offre est l'INTERSECTION du catalogue global et de ce que la verticale
-  // justifie. Fail-closed : verticale sans fournisseur ⇒ aucune proposition.
-  //
-  // ⚠️ Ce filtre est ici une COMMODITÉ D'AFFICHAGE, pas une barrière : la RPC
-  // renvoie encore tout le catalogue global. La barrière réelle est posée en
-  // base (cf. PR #59) — sans elle, un appel direct à la RPC contournerait ceci.
-  const allowedProviders = new Set(ctx.composition.integrationProviders);
-  const integrations = allIntegrations.filter((it) => allowedProviders.has(it.provider));
+  const [{ integrations: allIntegrations, resolutionStatus }, health] = await Promise.all([
+    getTenantIntegrations(),
+    getOperationalIntegrationHealth(),
+  ]);
+  const allowed = new Set(ctx.composition.integrationProviders);
+  const integrations = allIntegrations.filter((item) => allowed.has(item.provider));
 
   return (
     <div className="page-stack">
       <PageHeading titleKey="nav.integrations" />
 
-      <section className="dashboard-card">
+      <section className="dashboard-card pv-card">
         <div className="dashboard-card-header">
-          <div>
-            <span className="panel-eyebrow">MES OUTILS</span>
-            <h3>Connecter mes comptes</h3>
-          </div>
+          <div><span className="panel-eyebrow">ÉTAT RÉEL</span><h3>Noyau & automatisations</h3></div>
         </div>
-        <p className="integration-note">
-          Vous vous connectez directement chez le fournisseur. Hermès ne voit jamais
-          votre mot de passe et reçoit uniquement l’autorisation que vous accordez —
-          révocable à tout moment.
-        </p>
-        {resolutionStatus !== "OK" ? (
-          <p className="integration-note">
-            État des connexions indisponible pour le moment.
-          </p>
-        ) : integrations.length === 0 ? (
-          <p className="integration-note">
-            Aucun outil n’est encore proposé à la connexion pour votre compte.
-          </p>
+        {!health.ok ? (
+          <p className="integration-note">La vérification en direct est indisponible. Aucun statut positif n’est supposé.</p>
         ) : (
           <ul className="integrations-grid">
-            {integrations.map((it) => (
-              <li className="dashboard-card integration-card" key={it.provider}>
+            <li className="dashboard-card integration-card">
+              <div className="dashboard-card-header"><div><span className="panel-eyebrow">BASE</span><h3>Supabase</h3></div><span className="integration-status">{health.supabase.status}</span></div>
+              <p className="integration-note">Preuve : la lecture RPC et la base répondent pendant le rendu de cette page.</p>
+            </li>
+            <li className="dashboard-card integration-card">
+              <div className="dashboard-card-header"><div><span className="panel-eyebrow">PROSPECTION</span><h3>Hermès Business</h3></div><span className="integration-status">{health.hermesBusiness.status}</span></div>
+              <p className="integration-note">{health.hermesBusiness.eventsLast24h} événements d’automatisation vérifiés sur les dernières 24 h. Dernière activité : {health.hermesBusiness.lastSeenAt ?? "aucune"}.</p>
+            </li>
+            <li className="dashboard-card integration-card">
+              <div className="dashboard-card-header"><div><span className="panel-eyebrow">AUTOMATISATION</span><h3>n8n</h3></div><span className="integration-status">{health.n8n.status}</span></div>
+              <p className="integration-note">{health.n8n.note}</p>
+            </li>
+          </ul>
+        )}
+      </section>
+
+      <section className="dashboard-card pv-card">
+        <div className="dashboard-card-header">
+          <div><span className="panel-eyebrow">COMPTES EXTERNES</span><h3>Connexions OAuth</h3></div>
+        </div>
+        <p className="integration-note">Un fournisseur n’est affiché « connecté » que si la base confirme la connexion. Les secrets OAuth ne sont jamais envoyés au navigateur.</p>
+
+        {health.ok ? (
+          <div className="dashboard-card integration-card">
+            <div className="dashboard-card-header">
+              <div><span className="panel-eyebrow">AGENDA EXTERNE</span><h3>Google Agenda</h3></div>
+              <span className="integration-status">{health.googleCalendar.provisioned ? health.googleCalendar.status : "NON PROVISIONNÉ"}</span>
+            </div>
+            <p className="integration-note">
+              {health.googleCalendar.provisioned
+                ? "Le connecteur OAuth Google est provisionné. Son état ci-dessus vient de la connexion réelle du tenant."
+                : "Le dashboard utilise déjà son agenda PV interne réel. La synchronisation Google restera désactivée tant qu’un client OAuth Google n’est pas provisionné côté serveur."}
+            </p>
+            {health.googleCalendar.lastErrorCode ? <p className="integration-note">Dernière erreur : {health.googleCalendar.lastErrorCode}</p> : null}
+          </div>
+        ) : null}
+
+        {resolutionStatus !== "OK" ? (
+          <p className="integration-note">La liste des comptes connectables est momentanément indisponible.</p>
+        ) : integrations.length === 0 ? (
+          <p className="integration-note">Aucun fournisseur OAuth n’est actuellement provisionné pour cette verticale.</p>
+        ) : (
+          <ul className="integrations-grid">
+            {integrations.map((item) => (
+              <li className="dashboard-card integration-card" key={item.provider}>
                 <div className="dashboard-card-header">
-                  <div>
-                    <span className="panel-eyebrow">Mon compte</span>
-                    <h3>{it.label}</h3>
-                  </div>
-                  <span className="integration-status">
-                    {CONNECTION_LABEL[it.status] ?? it.status}
-                  </span>
+                  <div><span className="panel-eyebrow">MON COMPTE</span><h3>{item.label}</h3></div>
+                  <span className="integration-status">{LABEL[item.status] ?? item.status}</span>
                 </div>
-                {it.accountLabel ? (
-                  <p className="integration-role">{it.accountLabel}</p>
-                ) : null}
-                <p className="integration-note">
-                  {isProviderImplemented(it.provider)
-                    ? CONNECTION_HINT[it.status]
-                    : "Prévu — pas encore disponible à la connexion."}
-                </p>
+                {item.accountLabel ? <p className="integration-role">{item.accountLabel}</p> : null}
+                {isProviderImplemented(item.provider) ? (
+                  item.status === "CONNECTED" ? (
+                    <form action={`/api/integrations/${item.provider}/disconnect`} method="post">
+                      <button className="card-secondary-button" type="submit">Déconnecter</button>
+                    </form>
+                  ) : (
+                    <a className="card-secondary-button" href={`/api/integrations/${item.provider}/start`}>Connecter</a>
+                  )
+                ) : <p className="integration-note">Connecteur non implémenté : aucune action n’est proposée.</p>}
               </li>
             ))}
           </ul>
         )}
       </section>
 
-      <section className="dashboard-card">
-        <div className="dashboard-card-header">
-          <div>
-            <span className="panel-eyebrow">NOYAU HERMÈS</span>
-            <h3>Fourni par Hermès</h3>
-          </div>
-        </div>
-        <p className="integration-note">
-          Rien à connecter ici : ces briques sont opérées par Hermès. Vous n’avez ni
-          compte à créer, ni clé à saisir.
-        </p>
-        <ul className="integrations-grid">
-          {INTEGRATIONS.map((it) => (
-            <li className="dashboard-card integration-card" key={it.name}>
-              <div className="dashboard-card-header">
-                <div>
-                  <span className="panel-eyebrow">Intégration</span>
-                  <h3>{it.name}</h3>
-                </div>
-                <span className={`integration-status is-${it.status}`}>
-                  {STATUS_LABEL[it.status]}
-                </span>
-              </div>
-              <p className="integration-role">{it.role}</p>
-              <p className="integration-note">{it.note}</p>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <p className="page-foot-note">
-        {"Aucune connexion n'est inventée : un outil non connecté est affiché comme tel, jamais avec un faux état « connecté »."}
-      </p>
+      <p className="page-foot-note">Aucun statut décoratif : chaque état positif est issu d’une lecture réelle, sinon l’écran affiche explicitement l’absence de preuve.</p>
     </div>
   );
 }
