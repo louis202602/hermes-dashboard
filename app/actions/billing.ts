@@ -13,6 +13,11 @@ const MESSAGES: Record<string, string> = {
   QUOTE_HAS_NO_LINES: "Le devis accepté ne contient aucune ligne facturable.",
   INVALID_PERCENTAGE: "Le pourcentage doit être compris entre 0 et 100 %.",
   INVALID_KIND: "Type de facture invalide.",
+  INVALID_OPERATION_CATEGORY: "La nature de l’opération est invalide.",
+  LEGAL_PROFILE_INCOMPLETE: "Émission bloquée : l’identité juridique HelioSolar n’est pas encore complète et vérifiée.",
+  CLIENT_BILLING_ADDRESS_MISSING: "Émission bloquée : l’adresse de facturation du client manque.",
+  CLIENT_SIREN_MISSING_OR_INVALID: "Émission bloquée : le SIREN du client professionnel manque ou est invalide.",
+  CLIENT_LEGAL_NAME_MISSING: "Émission bloquée : la raison sociale du client manque.",
   INVOICE_NOT_FOUND: "Facture introuvable.",
   INVOICE_CANCELLED: "Cette facture est annulée.",
   ALREADY_PAID: "Cette facture est déjà payée.",
@@ -32,12 +37,14 @@ export async function createPvInvoiceAction(
   const kind = String(formData.get("kind") ?? "FACTURE");
   const percentage = Number(formData.get("percentage") ?? 100);
   const dueOn = String(formData.get("due_on") ?? "").trim() || null;
+  const operationCategory = String(formData.get("operation_category") ?? "BOTH");
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("create_pv_invoice_from_quote", {
     p_quote_id: quoteId,
     p_kind: kind,
     p_percentage: percentage,
     p_due_on: dueOn,
+    p_operation_category: operationCategory,
   });
   const payload = (data ?? {}) as Record<string, unknown>;
   if (error || !payload.ok) {
@@ -45,7 +52,7 @@ export async function createPvInvoiceAction(
     return { phase: "error", message: errorMessage(code) };
   }
   revalidatePath("/facturation");
-  return { phase: "success", message: `Facture ${String(payload.invoice_number ?? "")} créée.` };
+  return { phase: "success", message: `Facture ${String(payload.invoice_number ?? "")} créée avec snapshot légal figé.` };
 }
 
 export async function recordPvInvoicePaymentAction(
