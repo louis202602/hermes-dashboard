@@ -47,7 +47,11 @@ export default async function IntegrationsPage() {
             </li>
             <li className="dashboard-card integration-card">
               <div className="dashboard-card-header"><div><span className="panel-eyebrow">AUTOMATISATION</span><h3>n8n</h3></div><span className="integration-status">{health.n8n.status}</span></div>
-              <p className="integration-note">{health.n8n.note}</p>
+              <p className="integration-note">
+                {health.n8n.lastSeenAt
+                  ? `Heartbeat PostgreSQL direct : ${health.n8n.lastSeenAt}${health.n8n.dbRole ? ` · rôle ${health.n8n.dbRole}` : ""}.`
+                  : "Aucun heartbeat n8n vérifié : l’écran ne suppose pas que le moteur tourne."}
+              </p>
             </li>
           </ul>
         )}
@@ -68,7 +72,7 @@ export default async function IntegrationsPage() {
             <p className="integration-note">
               {health.googleCalendar.provisioned
                 ? "Le connecteur OAuth Google est provisionné. Son état ci-dessus vient de la connexion réelle du tenant."
-                : "Le dashboard utilise déjà son agenda PV interne réel. La synchronisation Google restera désactivée tant qu’un client OAuth Google n’est pas provisionné côté serveur."}
+                : "Le dashboard utilise son agenda PV interne réel. La synchronisation Google reste volontairement désactivée tant qu’un client OAuth Google n’est pas provisionné côté serveur."}
             </p>
             {health.googleCalendar.lastErrorCode ? <p className="integration-note">Dernière erreur : {health.googleCalendar.lastErrorCode}</p> : null}
           </div>
