@@ -158,7 +158,9 @@ export default function PvLeadInboxPanel({
                     )}
                   </div>
                   <div className="photo-session-side">
-                    <span className="photo-badge">{TEMPERATURE_LABELS[lead.leadTemperature]}</span>
+                    <span className="photo-badge">
+                      {lead.leadTemperature ? TEMPERATURE_LABELS[lead.leadTemperature] : "Non évalué"}
+                    </span>
                     {lead.needsCallback && <span className="photo-session-meta">À rappeler</span>}
                     {lead.qualificationScore !== null && (
                       <span className="photo-session-meta">Score {lead.qualificationScore}</span>
