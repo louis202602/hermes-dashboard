@@ -16,8 +16,9 @@ export async function GET(
     return new Response("Facture introuvable ou snapshot légal incomplet.", { status: 404 });
   }
   const pdf = buildPvInvoicePdf(model);
+  const body = pdf.buffer.slice(pdf.byteOffset, pdf.byteOffset + pdf.byteLength) as ArrayBuffer;
   const safe = model.invoiceNumber.replace(/[^A-Za-z0-9._-]+/g, "-");
-  return new Response(pdf, {
+  return new Response(body, {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
