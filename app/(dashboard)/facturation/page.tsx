@@ -1,22 +1,11 @@
-import CostGovernance from "@/components/dashboard/CostGovernance";
-import PageHeading from "@/components/dashboard/PageHeading";
-import { requireAuthedUser } from "@/lib/dashboard/requestScope";
-import { getCostGovernanceSnapshot } from "@/services/hermes/panels";
+import PvBillingPanel from "@/components/dashboard/PvBillingPanel";
+import { requireRoute } from "@/lib/dashboard/routeGuard";
+import { getPvBillingSnapshot } from "@/services/hermes/pvBilling";
 
-export const metadata = { title: "Facturation & Coûts IA — Hermès OS" };
+export const metadata = { title: "Facturation photovoltaïque — Hermès" };
 
-/**
- * /facturation — coûts & gouvernance : exposition du jour / du mois, budget restant,
- * quotas et consommation (source SW23 réelle). Réutilise CostGovernance tel quel — aucune
- * donnée artificielle ; UNAVAILABLE honnête si la source n'est pas configurée.
- */
 export default async function BillingPage() {
-  await requireAuthedUser();
-  const cost = await getCostGovernanceSnapshot();
-  return (
-    <div className="page-stack">
-      <PageHeading titleKey="nav.billing" />
-      <CostGovernance cost={cost} />
-    </div>
-  );
+  await requireRoute("/facturation");
+  const snapshot = await getPvBillingSnapshot();
+  return <PvBillingPanel snapshot={snapshot} />;
 }

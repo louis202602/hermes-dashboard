@@ -10,13 +10,8 @@ import { logEvent } from "@/lib/observability/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ServiceResult } from "@/types/hermes";
 
-/**
- * Today's agenda (BTP phases, project start/end, approval expiries) bucketed in
- * the tenant timezone. Tenant scoping + fail-soft aggregation live in the RPC.
- */
-export async function getDashboardAgenda(): Promise<
-  ServiceResult<DashboardAgenda>
-> {
+/** Generic multi-vertical agenda retained for non-PV surfaces. */
+export async function getDashboardAgenda(): Promise<ServiceResult<DashboardAgenda>> {
   try {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.rpc("get_dashboard_agenda");
@@ -34,13 +29,28 @@ export async function getDashboardAgenda(): Promise<
 }
 
 /**
- * Unified actionable alerts (pending approvals, open incidents, resolver circuit,
- * budget threshold, quota blocks, late chantiers, dead-letters) normalised to
- * INFO/WARNING/HIGH/CRITICAL. Deterministic — no LLM.
+ * Agenda photovoltaïque réel: rendez-vous Hermès, dates chantier, échéances de
+ * devis et d'acomptes. Aucune donnée BTP générique ni donnée de démonstration.
  */
-export async function getUnifiedAlerts(): Promise<
-  ServiceResult<UnifiedAlerts>
-> {
+export async function getPvAgenda(): Promise<ServiceResult<DashboardAgenda>> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase.rpc("get_pv_agenda", { p_limit: 100 });
+    if (error) {
+      logEvent("error", "pv_agenda.rpc_error", { code: error.code });
+      return { ok: false, provenance: "UNAVAILABLE", error: error.message };
+    }
+    return { ok: true, provenance: "REAL", data: parseAgenda(data) };
+  } catch (e) {
+    logEvent("error", "pv_agenda.exception", {
+      message: e instanceof Error ? e.message : "unknown",
+    });
+    return { ok: false, provenance: "UNAVAILABLE", error: "pv_agenda" };
+  }
+}
+
+/** Unified actionable alerts. */
+export async function getUnifiedAlerts(): Promise<ServiceResult<UnifiedAlerts>> {
   try {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.rpc("get_unified_alerts");
