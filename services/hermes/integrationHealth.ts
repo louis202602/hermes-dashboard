@@ -17,7 +17,7 @@ export type OperationalIntegrationHealth = {
     expiresAt: string | null;
     lastErrorCode: string | null;
   };
-  n8n: { status: string; note: string };
+  n8n: { status: string; lastSeenAt: string | null; proof: string; dbRole: string | null };
 };
 
 const empty: OperationalIntegrationHealth = {
@@ -26,7 +26,7 @@ const empty: OperationalIntegrationHealth = {
   supabase: { status: "UNAVAILABLE", proof: "" },
   hermesBusiness: { status: "UNAVAILABLE", lastSeenAt: null, eventsLast24h: 0, proof: "" },
   googleCalendar: { enabled: false, provisioned: false, status: "NOT_CONNECTED", accountLabel: null, connectedAt: null, expiresAt: null, lastErrorCode: null },
-  n8n: { status: "NOT_DIRECTLY_PROBED", note: "" },
+  n8n: { status: "UNAVAILABLE", lastSeenAt: null, proof: "", dbRole: null },
 };
 
 const rec = (v: unknown): Record<string, unknown> => v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {};
@@ -46,6 +46,7 @@ export async function getOperationalIntegrationHealth(): Promise<OperationalInte
     const hb = rec(p.hermes_business);
     const google = rec(p.google_calendar);
     const n8n = rec(p.n8n);
+    const n8nMeta = rec(n8n.metadata);
     return {
       ok: true,
       checkedAt: str(p.checked_at),
@@ -65,7 +66,12 @@ export async function getOperationalIntegrationHealth(): Promise<OperationalInte
         expiresAt: str(google.expires_at),
         lastErrorCode: str(google.last_error_code),
       },
-      n8n: { status: String(n8n.status ?? "NOT_DIRECTLY_PROBED"), note: String(n8n.note ?? "") },
+      n8n: {
+        status: String(n8n.status ?? "UNAVAILABLE"),
+        lastSeenAt: str(n8n.last_seen_at),
+        proof: String(n8n.proof ?? ""),
+        dbRole: str(n8nMeta.db_role),
+      },
     };
   } catch (e) {
     logEvent("error", "integration_health.exception", { message: e instanceof Error ? e.message : "unknown" });
