@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 import ChantierMapWidget from "@/components/dashboard/ChantierMapWidget";
 import { requireRoute } from "@/lib/dashboard/routeGuard";
@@ -9,12 +10,12 @@ export const metadata = {
 };
 
 export default async function ChantierMapPage() {
-  // Auth + MODULE. Avant, seule l'authentification était vérifiée : n'importe
-  // quel tenant connecté — y compris un studio photo — atteignait cette page
-  // BTP par URL directe. La carte était vide (les données sont bornées au
-  // tenant), mais la page n'était pas la sienne. `requireRoute` interroge la
-  // MÊME liste de modules que le menu : le module `worksites` ou rien.
-  await requireRoute("/chantiers/carte");
+  const ctx = await requireRoute("/chantiers/carte");
+
+  // Heliosolar a explicitement retiré cette carte de son cockpit. La route reste
+  // disponible pour les verticales BTP qui possèdent le module, sans laisser une
+  // ancienne page solaire accessible par URL directe.
+  if (ctx.composition.vertical === "solar") notFound();
 
   const res = await getChantiersMap();
   const data = res.ok
