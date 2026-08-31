@@ -5,14 +5,6 @@ import { isOAuthServerProvider, callbackUrl } from "@/lib/integrations/oauthServ
 import { logEvent } from "@/lib/observability/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-/**
- * DÉMARRAGE du flux OAuth — `GET /api/integrations/<provider>/start`.
- *
- * Cette route ne détient aucun secret. Elle demande à la base une URL
- * d'autorisation et un `state` à usage unique, puis renvoie l'utilisatrice chez
- * le fournisseur. Le `tenant_id` n'apparaît nulle part : la façade le résout
- * elle-même via `resolve_active_tenant`.
- */
 export const dynamic = "force-dynamic";
 
 export async function GET(
@@ -22,11 +14,8 @@ export async function GET(
   const { provider } = await ctx.params;
   const home = new URL("/integrations", request.nextUrl.origin);
 
-  // Auth d'abord : un visiteur anonyme ne déclenche aucun appel métier.
   const user = await getAuthedUser();
-  if (!user) {
-    return NextResponse.redirect(new URL("/login", request.nextUrl.origin));
-  }
+  if (!user) return NextResponse.redirect(new URL("/login", request.nextUrl.origin));
   if (!isOAuthServerProvider(provider)) {
     home.searchParams.set("integration_error", "PROVIDER_NOT_IMPLEMENTED");
     return NextResponse.redirect(home);
@@ -54,11 +43,12 @@ export async function GET(
     "scope",
     (Array.isArray(p.scopes) ? (p.scopes as string[]) : []).join(" "),
   );
-  // `offline` + `consent` : sans eux Google ne renvoie pas de refresh_token au
-  // second consentement, et la connexion mourrait silencieusement à l'expiration.
-  authorize.searchParams.set("access_type", "offline");
-  authorize.searchParams.set("prompt", "consent");
-  authorize.searchParams.set("include_granted_scopes", "true");
+
+  if (provider === "google_calendar") {
+    authorize.searchParams.set("access_type", "offline");
+    authorize.searchParams.set("prompt", "consent");
+    authorize.searchParams.set("include_granted_scopes", "true");
+  }
 
   return NextResponse.redirect(authorize);
 }
