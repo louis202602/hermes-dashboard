@@ -8,7 +8,8 @@ export type PvLeadInboxItem = {
   email: string | null;
   phone: string | null;
   qualificationScore: number | null;
-  leadTemperature: PvLeadTemperature;
+  /** null = pas encore évalué. Ne jamais transformer l'absence de score en « froid ». */
+  leadTemperature: PvLeadTemperature | null;
   priorityReason: string | null;
   replyStatus: string | null;
   replySummary: string | null;

@@ -40,7 +40,7 @@ export default async function PvProspectsPage({
       search,
       temperature,
       needsCallback,
-      limit: 100,
+      limit: 200,
     }),
     getPvDailyKpi(),
   ]);

@@ -2,19 +2,93 @@ import PhotoConsentForm from "@/components/dashboard/PhotoConsentForm";
 import ProvenanceBadge from "@/components/common/ProvenanceBadge";
 import { requireRoute } from "@/lib/dashboard/routeGuard";
 import { getPhotoClients, getPhotoValueSnapshot } from "@/services/hermes/photo";
+import { getPvClients } from "@/services/hermes/pvClients";
 
-export const metadata = { title: "Clients — Hermès Studio" };
+export const metadata = { title: "Clients — Hermès" };
 
-/**
- * /clients — mémoire client du studio + saisie du consentement média.
- *
- * Le consentement se collecte AU MOMENT de la séance, pas rétroactivement : c'est
- * pourquoi il est en P0 et non avec le marketing. Sans lui, aucune publication ne
- * sera possible plus tard (gate fail-closed en base).
- */
-export default async function PhotoClientsPage() {
-  // Même garde que le menu et que /chantiers/carte : une seule liste de modules.
+function humanStatus(value: string | null): string {
+  if (!value) return "Statut non renseigné";
+  return value.toLowerCase().replaceAll("_", " ");
+}
+
+export default async function ClientsPage() {
   const ctx = await requireRoute("/clients");
+
+  if (ctx.composition.vertical === "solar") {
+    const clients = await getPvClients(200);
+
+    return (
+      <div className="page-stack">
+        <section className="dashboard-card pv-card">
+          <div className="dashboard-card-header">
+            <div>
+              <span className="panel-eyebrow">HELIOSOLAR</span>
+              <h3>Clients photovoltaïques</h3>
+            </div>
+            <ProvenanceBadge provenance="REAL" />
+          </div>
+          <div className="pv-pilot-grid">
+            <div className="pv-pilot-stat">
+              <span className="photo-session-meta">Clients / dossiers enregistrés</span>
+              <strong>{clients.total}</strong>
+            </div>
+            <div className="pv-pilot-stat">
+              <span className="photo-session-meta">Avec projet</span>
+              <strong>{clients.items.filter((client) => client.projectId).length}</strong>
+            </div>
+            <div className="pv-pilot-stat">
+              <span className="photo-session-meta">Puissance renseignée</span>
+              <strong>{clients.items.filter((client) => client.puissanceKwc !== null).length}</strong>
+            </div>
+          </div>
+        </section>
+
+        <section className="dashboard-card pv-card">
+          <div className="dashboard-card-header">
+            <div>
+              <span className="panel-eyebrow">CRM SOLAIRE</span>
+              <h3>Dossiers</h3>
+            </div>
+          </div>
+          {clients.items.length === 0 ? (
+            <p className="photo-empty">Aucun client photovoltaïque enregistré.</p>
+          ) : (
+            <ul className="photo-session-list">
+              {clients.items.map((client) => {
+                const person = [client.firstName, client.lastName].filter(Boolean).join(" ");
+                const title = client.companyName || person || "Client";
+                const contact = [person && client.companyName ? person : null, client.email, client.phone]
+                  .filter(Boolean)
+                  .join(" · ");
+                return (
+                  <li key={client.prospectId} className="photo-session-item">
+                    <span className="photo-session-main">
+                      <strong>{title}</strong>
+                      <span className="photo-session-meta">
+                        {contact || "Coordonnées non renseignées"}
+                      </span>
+                      <span className="photo-session-meta">
+                        Prospect : {humanStatus(client.prospectStatus)}
+                        {client.projectStatus ? ` · projet : ${humanStatus(client.projectStatus)}` : ""}
+                      </span>
+                    </span>
+                    <span className="photo-session-side">
+                      {client.puissanceKwc !== null && (
+                        <span className="photo-badge">{client.puissanceKwc} kWc</span>
+                      )}
+                      {client.qualificationScore !== null && (
+                        <span className="photo-session-meta">Score {client.qualificationScore}</span>
+                      )}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      </div>
+    );
+  }
 
   const [clients, value] = await Promise.all([getPhotoClients(200), getPhotoValueSnapshot()]);
 
@@ -27,9 +101,7 @@ export default async function PhotoClientsPage() {
             <h3>Valeur créée</h3>
           </div>
           <ProvenanceBadge
-            provenance={
-              value.ok && value.data.provenance === "DERIVED" ? "DERIVED" : "UNAVAILABLE"
-            }
+            provenance={value.ok && value.data.provenance === "DERIVED" ? "DERIVED" : "UNAVAILABLE"}
           />
         </div>
         {value.ok && value.data.provenance === "DERIVED" ? (
@@ -71,20 +143,20 @@ export default async function PhotoClientsPage() {
           <p className="photo-empty">Aucun client enregistré.</p>
         ) : (
           <ul className="photo-session-list">
-            {clients.data.clients.map((c) => (
-              <li key={c.clientId} className="photo-session-item">
+            {clients.data.clients.map((client) => (
+              <li key={client.clientId} className="photo-session-item">
                 <span className="photo-session-main">
-                  <strong>{c.displayName}</strong>
+                  <strong>{client.displayName}</strong>
                   <span className="photo-session-meta">
-                    {c.sessionCount} séance(s)
-                    {c.lastSessionAt
-                      ? ` · dernière le ${new Date(c.lastSessionAt).toLocaleDateString(ctx.locale)}`
+                    {client.sessionCount} séance(s)
+                    {client.lastSessionAt
+                      ? ` · dernière le ${new Date(client.lastSessionAt).toLocaleDateString(ctx.locale)}`
                       : ""}
                   </span>
                 </span>
                 <span className="photo-session-side">
                   <span className="photo-session-meta">
-                    {c.hasActiveConsent ? "consentement en cours" : "aucun consentement"}
+                    {client.hasActiveConsent ? "consentement en cours" : "aucun consentement"}
                   </span>
                 </span>
               </li>
@@ -95,9 +167,9 @@ export default async function PhotoClientsPage() {
 
       {clients.ok && clients.data.clients.length > 0 ? (
         <PhotoConsentForm
-          clients={clients.data.clients.map((c) => ({
-            clientId: c.clientId,
-            displayName: c.displayName,
+          clients={clients.data.clients.map((client) => ({
+            clientId: client.clientId,
+            displayName: client.displayName,
           }))}
         />
       ) : null}

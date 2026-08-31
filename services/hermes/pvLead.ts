@@ -38,10 +38,11 @@ function strings(value: unknown): string[] {
   return [];
 }
 
-function temperature(value: unknown): PvLeadTemperature {
-  const v = String(value ?? "FROID").toUpperCase();
-  if (v === "TIEDE" || v === "CHAUD" || v === "TRES_PRIORITAIRE") return v;
-  return "FROID";
+function temperature(value: unknown): PvLeadTemperature | null {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const v = String(value).toUpperCase();
+  if (v === "FROID" || v === "TIEDE" || v === "CHAUD" || v === "TRES_PRIORITAIRE") return v;
+  return null;
 }
 
 function mapLead(raw: Record<string, unknown>): PvLeadInboxItem {
@@ -70,6 +71,17 @@ function mapLead(raw: Record<string, unknown>): PvLeadInboxItem {
   };
 }
 
+function normalized(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr-FR");
+}
+
+function matchesSearch(lead: PvLeadInboxItem, query: string): boolean {
+  const needle = normalized(query);
+  return [lead.companyName, lead.city, lead.contactName, lead.email, lead.phone]
+    .filter((value): value is string => Boolean(value))
+    .some((value) => normalized(value).includes(needle));
+}
+
 export async function getPvLeadInbox(params: {
   temperature?: PvLeadTemperature | null;
   needsCallback?: boolean | null;
@@ -77,11 +89,17 @@ export async function getPvLeadInbox(params: {
   limit?: number;
 } = {}): Promise<PvLeadInbox> {
   const supabase = await createSupabaseServerClient();
+  const requestedLimit = Math.min(Math.max(params.limit ?? 200, 1), 200);
+  const hasSearch = Boolean(params.search?.trim());
+
+  // La RPC historique ne recherche que société/e-mail. Pour garantir ce que l'UI promet
+  // (ville, contact et téléphone inclus), on récupère le lot complet actuel (max RPC 200)
+  // puis on applique ici le filtre canonique côté serveur. Aucun faux « aucun résultat ».
   const { data, error } = await supabase.rpc("get_pv_lead_inbox", {
     p_temperature: params.temperature ?? null,
     p_needs_callback: params.needsCallback ?? null,
-    p_search: params.search ?? null,
-    p_limit: params.limit ?? 100,
+    p_search: hasSearch ? null : params.search ?? null,
+    p_limit: hasSearch ? 200 : requestedLimit,
   });
 
   if (error) {
@@ -98,13 +116,23 @@ export async function getPvLeadInbox(params: {
         ? envelope.leads
         : [];
 
-  const items = (rawItems as Record<string, unknown>[]).map(mapLead).filter((lead) => lead.prospectId);
+  const mapped = (rawItems as Record<string, unknown>[])
+    .map(mapLead)
+    .filter((lead) => lead.prospectId);
+  const filtered = hasSearch
+    ? mapped.filter((lead) => matchesSearch(lead, params.search!.trim()))
+    : mapped;
+
   const rawTotal = envelope.total;
   const parsedTotal = typeof rawTotal === "string" ? Number(rawTotal) : (rawTotal as number);
 
   return {
-    items,
-    total: Number.isFinite(parsedTotal) ? parsedTotal : items.length,
+    items: filtered.slice(0, requestedLimit),
+    total: hasSearch
+      ? filtered.length
+      : Number.isFinite(parsedTotal)
+        ? parsedTotal
+        : filtered.length,
   };
 }
 
