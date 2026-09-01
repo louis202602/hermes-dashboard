@@ -7,7 +7,7 @@
  */
 
 /** Fournisseurs prévus. Ajouter une valeur ici ET une ligne au catalogue. */
-export type IntegrationProvider = "google_calendar" | "gmail" | "meta" | "instagram";
+export type IntegrationProvider = "google_calendar" | "gmail" | "meta" | "instagram" | "qonto";
 
 /**
  * États d'une connexion.
@@ -28,7 +28,9 @@ export type TenantIntegration = {
   provider: IntegrationProvider;
   label: string;
   status: IntegrationStatus;
-  /** Libellé masqué du compte connecté (ex. « v•••@gmail.com »). */
+  /** Le client OAuth du tenant a-t-il été configuré côté Vault ? */
+  provisioned: boolean;
+  /** Libellé masqué/lisible du compte connecté. */
   accountLabel: string | null;
   connectedAt: string | null;
   expiresAt: string | null;
@@ -44,7 +46,7 @@ export type TenantIntegrations = {
 /**
  * Retour du démarrage de connexion. Contient le `client_id` (public, il
  * transite de toute façon dans l'URL d'autorisation) et un `state` à usage
- * unique — jamais un `client_secret`, qui n'existe que côté n8n.
+ * unique — jamais un `client_secret`.
  */
 export type IntegrationConnectStart = {
   ok: boolean;

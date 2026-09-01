@@ -12,14 +12,6 @@ import type {
   TenantIntegrations,
 } from "@/types/integrations";
 
-/**
- * HERMÈS — Lecture des connexions d'outils du tenant.
- *
- * Ce service ne manipule JAMAIS de jeton : la façade SQL n'en renvoie pas, et
- * les types n'en portent pas. Il n'y a donc rien à filtrer ici — l'absence est
- * structurelle, pas défensive.
- */
-
 const asRecord = (v: unknown): Record<string, unknown> =>
   v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
@@ -29,7 +21,6 @@ const str = (v: unknown): string | null =>
 const num = (v: unknown): number | null =>
   typeof v === "number" && Number.isFinite(v) ? v : null;
 
-/** Repli fermé, utilisé partout : sans donnée, rien n'est connecté. */
 const EMPTY: TenantIntegrations = {
   resolutionStatus: "UNAVAILABLE",
   tenantId: null,
@@ -56,6 +47,7 @@ export async function getTenantIntegrations(): Promise<TenantIntegrations> {
           provider: String(r.provider) as IntegrationProvider,
           label: String(r.label ?? r.provider),
           status: String(r.status ?? "NOT_CONNECTED") as IntegrationStatus,
+          provisioned: Boolean(r.provisioned),
           accountLabel: str(r.account_label),
           connectedAt: str(r.connected_at),
           expiresAt: str(r.expires_at),
@@ -71,11 +63,6 @@ export async function getTenantIntegrations(): Promise<TenantIntegrations> {
   }
 }
 
-/**
- * Démarre une connexion. Renvoie l'URL d'autorisation, le `client_id` (public)
- * et un `state` à usage unique — jamais un `client_secret`, qui n'existe pas
- * dans cette application.
- */
 export async function beginIntegrationConnection(
   provider: IntegrationProvider,
 ): Promise<IntegrationConnectStart> {
@@ -135,11 +122,6 @@ export async function revokeIntegrationConnection(
   }
 }
 
-/**
- * Statut du standard téléphonique. Ne renvoie ni l'agent fournisseur, ni la
- * clé, ni le pointeur Vault : ce sont des détails d'infrastructure Hermès que
- * le tenant n'a pas à connaître.
- */
 export async function getPhoneStatus(): Promise<PhoneStatus> {
   const closed: PhoneStatus = {
     resolutionStatus: "UNAVAILABLE",
@@ -165,7 +147,6 @@ export async function getPhoneStatus(): Promise<PhoneStatus> {
           callCount: num(c.call_count) ?? 0,
           callMinutes: num(c.call_minutes) ?? 0,
           callsWithoutReportedCost: num(c.calls_without_reported_cost) ?? 0,
-          // `null` est conservé tel quel : un coût non rapporté n'est pas 0.
           retellCostUsd: num(c.retell_cost_usd),
           telephonyCostUsd: num(c.telephony_cost_usd),
           llmCostUsd: num(c.llm_cost_usd),

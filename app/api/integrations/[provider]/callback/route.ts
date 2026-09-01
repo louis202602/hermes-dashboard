@@ -10,18 +10,6 @@ import {
 import { logEvent } from "@/lib/observability/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-/**
- * RETOUR du fournisseur — `GET /api/integrations/<provider>/callback`.
- *
- * C'est la seule place de l'application qui touche un secret, et elle le fait
- * dans `exchangeAuthorizationCode` (module `server-only`). Ce qui SORT d'ici
- * n'est jamais qu'une redirection : aucun jeton, aucun `vault_secret_id`,
- * aucun `client_secret` n'atteint le navigateur.
- *
- * La boucle est fermée par `complete_integration_connection_self`, façade
- * `authenticated`. AUCUNE clé `service_role` n'est utilisée — c'était la
- * condition stricte de la décision, et c'est ce qui rend cette route acceptable.
- */
 export const dynamic = "force-dynamic";
 
 export async function GET(
@@ -45,8 +33,6 @@ export async function GET(
   const providerError = request.nextUrl.searchParams.get("error");
   const supabase = await createSupabaseServerClient();
 
-  // Refus chez le fournisseur (l'utilisatrice a cliqué « Annuler ») : le state
-  // est tout de même consommé, sinon il resterait ouvert jusqu'à expiration.
   if (providerError) {
     const { data } = await supabase.rpc("fail_integration_connection", {
       p_state: state,
@@ -59,19 +45,33 @@ export async function GET(
   }
   if (!state || !code) return fail("MISSING_CALLBACK_PARAMS");
 
-  // Le `client_id` est PUBLIC : on le relit en base plutôt que de le porter dans
-  // l'URL de retour, où il serait modifiable.
   const { data: listing } = await supabase.rpc("get_tenant_integrations");
   const rows = Array.isArray((listing as Record<string, unknown>)?.integrations)
     ? ((listing as Record<string, unknown>).integrations as Record<string, unknown>[])
     : [];
   if (!rows.some((r) => r.provider === provider)) {
-    // Le fournisseur n'est plus autorisé pour cette verticale : on referme.
     await supabase.rpc("fail_integration_connection", {
       p_state: state,
       p_error_code: "PROVIDER_NOT_ALLOWED",
     });
     return fail("PROVIDER_NOT_ALLOWED");
+  }
+
+  if (provider === "qonto") {
+    const { data, error } = await supabase.rpc("complete_qonto_integration_connection_self", {
+      p_state: state,
+      p_code: code,
+      p_redirect_uri: callbackUrl(origin, provider),
+    });
+    const payload = (data ?? {}) as Record<string, unknown>;
+    if (error || !payload.ok) {
+      const failureCode = String(payload.code ?? error?.code ?? "UNAVAILABLE");
+      logEvent("error", "oauth.qonto_complete_failed", { provider, code: failureCode });
+      return fail(failureCode, safeRedirectPath(payload.redirect_after));
+    }
+    const done = new URL(safeRedirectPath(payload.redirect_after), origin);
+    done.searchParams.set("integration_connected", provider);
+    return NextResponse.redirect(done);
   }
 
   const clientId = process.env.GOOGLE_CLIENT_ID ?? "";
@@ -89,7 +89,6 @@ export async function GET(
     return fail(exchanged.code);
   }
 
-  // Le tenant N'EST PAS passé : la façade le lit dans la ligne de `state`.
   const { data, error } = await supabase.rpc("complete_integration_connection_self", {
     p_state: state,
     p_access_token: exchanged.accessToken,

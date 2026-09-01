@@ -1,3 +1,4 @@
+import { configureQontoCredentialsAction } from "@/app/actions/integrations";
 import PageHeading from "@/components/dashboard/PageHeading";
 import { requireRoute } from "@/lib/dashboard/routeGuard";
 import { isProviderImplemented } from "@/lib/integrations/connectionState";
@@ -59,9 +60,9 @@ export default async function IntegrationsPage() {
 
       <section className="dashboard-card pv-card">
         <div className="dashboard-card-header">
-          <div><span className="panel-eyebrow">COMPTES EXTERNES</span><h3>Connexions OAuth</h3></div>
+          <div><span className="panel-eyebrow">COMPTES EXTERNES</span><h3>Connexions sécurisées</h3></div>
         </div>
-        <p className="integration-note">Un fournisseur n’est affiché « connecté » que si la base confirme la connexion. Les secrets OAuth ne sont jamais envoyés au navigateur.</p>
+        <p className="integration-note">Un fournisseur n’est affiché « connecté » que si la base confirme la connexion. Les secrets OAuth sont chiffrés dans Vault et ne sont jamais renvoyés au navigateur.</p>
 
         {health.ok ? (
           <div className="dashboard-card integration-card">
@@ -72,7 +73,7 @@ export default async function IntegrationsPage() {
             <p className="integration-note">
               {health.googleCalendar.provisioned
                 ? "Le connecteur OAuth Google est provisionné. Son état ci-dessus vient de la connexion réelle du tenant."
-                : "Le dashboard utilise son agenda PV interne réel. La synchronisation Google reste volontairement désactivée tant qu’un client OAuth Google n’est pas provisionné côté serveur."}
+                : "Le dashboard utilise son agenda PV interne réel. La synchronisation Google reste désactivée tant qu’un client OAuth Google n’est pas provisionné."}
             </p>
             {health.googleCalendar.lastErrorCode ? <p className="integration-note">Dernière erreur : {health.googleCalendar.lastErrorCode}</p> : null}
           </div>
@@ -81,25 +82,43 @@ export default async function IntegrationsPage() {
         {resolutionStatus !== "OK" ? (
           <p className="integration-note">La liste des comptes connectables est momentanément indisponible.</p>
         ) : integrations.length === 0 ? (
-          <p className="integration-note">Aucun fournisseur OAuth n’est actuellement provisionné pour cette verticale.</p>
+          <p className="integration-note">Aucun fournisseur n’est actuellement disponible pour cette verticale.</p>
         ) : (
           <ul className="integrations-grid">
             {integrations.map((item) => (
               <li className="dashboard-card integration-card" key={item.provider}>
                 <div className="dashboard-card-header">
                   <div><span className="panel-eyebrow">MON COMPTE</span><h3>{item.label}</h3></div>
-                  <span className="integration-status">{LABEL[item.status] ?? item.status}</span>
+                  <span className="integration-status">{item.provisioned ? (LABEL[item.status] ?? item.status) : "NON PROVISIONNÉ"}</span>
                 </div>
                 {item.accountLabel ? <p className="integration-role">{item.accountLabel}</p> : null}
-                {isProviderImplemented(item.provider) ? (
+
+                {item.provider === "qonto" && !item.provisioned ? (
+                  <form action={configureQontoCredentialsAction} className="agent-action-form">
+                    <p className="integration-note">Configure une fois l’application OAuth Qonto. Le secret est envoyé au serveur puis stocké chiffré dans Supabase Vault.</p>
+                    <label className="agent-field">
+                      <span>Qonto Client ID</span>
+                      <input name="client_id" autoComplete="off" minLength={3} maxLength={300} required />
+                    </label>
+                    <label className="agent-field">
+                      <span>Qonto Client Secret</span>
+                      <input name="client_secret" type="password" autoComplete="new-password" minLength={8} maxLength={1000} required />
+                    </label>
+                    <button className="card-secondary-button" type="submit">Enregistrer dans Vault</button>
+                  </form>
+                ) : isProviderImplemented(item.provider) ? (
                   item.status === "CONNECTED" ? (
                     <form action={`/api/integrations/${item.provider}/disconnect`} method="post">
                       <button className="card-secondary-button" type="submit">Déconnecter</button>
                     </form>
-                  ) : (
+                  ) : item.provisioned ? (
                     <a className="card-secondary-button" href={`/api/integrations/${item.provider}/start`}>Connecter</a>
+                  ) : (
+                    <p className="integration-note">Le fournisseur doit d’abord être provisionné.</p>
                   )
                 ) : <p className="integration-note">Connecteur non implémenté : aucune action n’est proposée.</p>}
+
+                {item.lastErrorCode ? <p className="integration-note">Dernière erreur : {item.lastErrorCode}</p> : null}
               </li>
             ))}
           </ul>
