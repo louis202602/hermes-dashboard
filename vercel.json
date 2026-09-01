@@ -1,0 +1,4 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ignoreCommand": "if [ \"$VERCEL_PROJECT_ID\" = \"prj_Xjzw8PcazWTd8DG4XXwABn5OZZDx\" ]; then echo 'Skipping retired duplicate hermes-dashboard-w5ov'; exit 0; fi; exit 1"
+}
