@@ -1,9 +1,10 @@
 import { requireAuthedUser } from "@/lib/dashboard/requestScope";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-import { E2E_SURVEY_ID, validateE2ESurveyAction } from "./actions";
+import { validateE2ESurveyAction } from "./actions";
 
 const E2E_TAG = "PV-E2E-20260901-213021";
+const E2E_SURVEY_ID = "00000000-0000-0000-0000-0000000e2e04";
 
 export default async function E2ESurveyValidationPage() {
   await requireAuthedUser();
