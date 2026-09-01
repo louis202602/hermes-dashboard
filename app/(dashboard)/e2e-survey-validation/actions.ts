@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireAuthedUser } from "@/lib/dashboard/requestScope";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export const E2E_SURVEY_ID = "00000000-0000-0000-0000-0000000e2e04";
+const E2E_SURVEY_ID = "00000000-0000-0000-0000-0000000e2e04";
 
 export async function validateE2ESurveyAction(): Promise<void> {
   await requireAuthedUser();
