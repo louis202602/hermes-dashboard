@@ -12,6 +12,19 @@ const TEMPERATURES = new Set<PvLeadTemperature>([
   "TRES_PRIORITAIRE",
 ]);
 
+const VIEWS = new Set([
+  "QUALIFIED",
+  "HIGH",
+  "PROBABLE",
+  "REPLIED",
+  "INTERESTED",
+  "MEETING_REQUEST",
+  "NO_REPLY",
+  "CALL_PENDING",
+  "EMAIL_SEQUENCE_EXHAUSTED",
+  "DO_NOT_CONTACT",
+]);
+
 export default async function PvProspectsPage({
   searchParams,
 }: {
@@ -34,6 +47,8 @@ export default async function PvProspectsPage({
       : null;
   const rawCallback = one(params.rappel);
   const needsCallback = rawCallback === "1" ? true : rawCallback === "0" ? false : null;
+  const rawView = one(params.vue)?.toUpperCase() ?? null;
+  const view = rawView && VIEWS.has(rawView) ? rawView : null;
 
   const [inbox, dailyKpi] = await Promise.all([
     getPvLeadInbox({
@@ -49,7 +64,7 @@ export default async function PvProspectsPage({
     <PvLeadInboxPanel
       inbox={inbox}
       dailyKpi={dailyKpi}
-      filters={{ search, temperature, needsCallback }}
+      filters={{ search, temperature, needsCallback, view }}
     />
   );
 }
