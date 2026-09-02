@@ -1,5 +1,6 @@
 import CommandCenter from "@/components/dashboard/CommandCenter";
 import DashboardWidgetBoard from "@/components/dashboard/DashboardWidgetBoard";
+import PvProspectingStats from "@/components/dashboard/PvProspectingStats";
 import {
   PvBillsToVerifyWidget,
   PvProspectsWithoutSiteWidget,
@@ -31,14 +32,10 @@ import { getCostGovernanceSnapshot, getPlatformHealth } from "@/services/hermes/
 import { getDashboardUserPreferences } from "@/services/hermes/preferences";
 import { resolvePageContext } from "@/lib/dashboard/pageContext";
 import { getPvPilotSnapshot } from "@/services/hermes/pv";
+import { getPvOutreachSnapshot } from "@/services/hermes/prospecting";
 import { classifyPlatformHealth } from "@/lib/dashboard/systemActivity";
 import { getActiveTenantIdentity } from "@/services/hermes/tenantIdentity";
 
-/**
- * Accueil PV : les chiffres métier affichés viennent uniquement de la façade
- * `get_pv_pilot_snapshot`. Les agrégats génériques Hermès (incidents, retards BTP,
- * KPI multi-métier) ne sont plus chargés ni présentés comme des faits PV.
- */
 export default async function CommandCenterPage() {
   await requireAuthedUser();
 
@@ -50,6 +47,7 @@ export default async function CommandCenterPage() {
     contextSettingsResult,
     preferencesResult,
     photoModule,
+    outreachSnapshot,
   ] = await Promise.all([
     getActiveTenantIdentity(),
     getCostGovernanceSnapshot(),
@@ -58,6 +56,7 @@ export default async function CommandCenterPage() {
     getDashboardContextSettingsCached(),
     getDashboardUserPreferences(),
     getPhotoModuleStateCached(),
+    getPvOutreachSnapshot(),
   ]);
 
   const prefs = preferencesResult.ok
@@ -85,8 +84,6 @@ export default async function CommandCenterPage() {
   );
   const layout = effectiveProfileLayout(profiles, activeProfile, globalLayout);
   const contextConfig = resolveContextConfig(layout.context);
-  // Tant que l'agenda/les alertes génériques n'ont pas une façade PV dédiée et auditée,
-  // ils ne doivent pas réintroduire des chiffres BTP de démonstration sur l'accueil.
   const contextSegments = contextVisibleSegments(contextConfig).filter(
     (segment) => segment !== "alerts" && segment !== "nextEvent",
   );
@@ -155,6 +152,7 @@ export default async function CommandCenterPage() {
         capabilities={capabilities}
         quickActions={prefs.behavior.quickActions}
       />
+      <PvProspectingStats snapshot={outreachSnapshot} />
       <DashboardWidgetBoard
         available={composedWidgets}
         initialLayout={prefs.layout}
