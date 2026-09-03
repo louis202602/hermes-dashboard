@@ -1,6 +1,8 @@
 import PvLeadInboxPanel from "@/components/dashboard/PvLeadInboxPanel";
+import PvOutreachKpiPanel from "@/components/dashboard/PvOutreachKpiPanel";
 import { requireRoute } from "@/lib/dashboard/routeGuard";
 import { getPvDailyKpi, getPvLeadInbox } from "@/services/hermes/pvLead";
+import { getPvOutreachKpi } from "@/services/hermes/pvOutreach";
 import type { PvLeadTemperature } from "@/types/pvLead";
 
 export const metadata = { title: "Prospects photovoltaïques — Hermès" };
@@ -50,7 +52,7 @@ export default async function PvProspectsPage({
   const rawView = one(params.vue)?.toUpperCase() ?? null;
   const view = rawView && VIEWS.has(rawView) ? rawView : null;
 
-  const [inbox, dailyKpi] = await Promise.all([
+  const [inbox, dailyKpi, outreachKpi] = await Promise.all([
     getPvLeadInbox({
       search,
       temperature,
@@ -58,13 +60,17 @@ export default async function PvProspectsPage({
       limit: 200,
     }),
     getPvDailyKpi(),
+    getPvOutreachKpi(),
   ]);
 
   return (
-    <PvLeadInboxPanel
-      inbox={inbox}
-      dailyKpi={dailyKpi}
-      filters={{ search, temperature, needsCallback, view }}
-    />
+    <>
+      <PvOutreachKpiPanel kpi={outreachKpi} />
+      <PvLeadInboxPanel
+        inbox={inbox}
+        dailyKpi={dailyKpi}
+        filters={{ search, temperature, needsCallback, view }}
+      />
+    </>
   );
 }
