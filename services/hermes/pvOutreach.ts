@@ -2,7 +2,7 @@ import "server-only";
 
 import { logEvent } from "@/lib/observability/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { PvOutreachKpi } from "@/types/pvOutreachKpi";
+import type { PvOutreachKpi, PvOutreachWorkerStatus } from "@/types/pvOutreachKpi";
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -22,6 +22,12 @@ function num(value: unknown): number {
 
 function bool(value: unknown): boolean {
   return value === true || value === "true" || value === 1 || value === "1";
+}
+
+function workerStatus(value: unknown): PvOutreachWorkerStatus {
+  const v = str(value)?.toUpperCase();
+  if (v === "ENVOI_ACTIF" || v === "EN_ATTENTE" || v === "BLOQUE" || v === "REPOS") return v;
+  return "INCONNU";
 }
 
 export async function getPvOutreachKpi(): Promise<PvOutreachKpi | null> {
@@ -45,6 +51,7 @@ export async function getPvOutreachKpi(): Promise<PvOutreachKpi | null> {
     failedToday: num(raw.failed_today),
     engagedToday: num(raw.engaged_today),
     target: num(raw.target) || 20,
+    dailyCap: num(raw.daily_cap) || 300,
     remainingToTarget: num(raw.remaining_to_target),
     repliesToday: num(raw.replies_today),
     actionableRepliesToday: num(raw.actionable_replies_today),
@@ -53,5 +60,9 @@ export async function getPvOutreachKpi(): Promise<PvOutreachKpi | null> {
     globalStopActive: bool(raw.global_stop_active),
     qualifiedTotal: num(raw.qualified_total),
     qualifiedWithEmail: num(raw.qualified_with_email),
+    workerStatus: workerStatus(raw.worker_status),
+    lastSentAt: str(raw.last_sent_at),
+    lastSendingActivityAt: str(raw.last_sending_activity_at),
+    oldestDueQueuedAt: str(raw.oldest_due_queued_at),
   };
 }
