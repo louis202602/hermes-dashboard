@@ -3,8 +3,10 @@ import test from "node:test";
 
 import {
   classifyEinvoicingReply,
+  nextCommercialAction,
   scoreEinvoicingProspect,
   shouldStopOutbound,
+  validateEinvoicingDiagnostic,
 } from "@/lib/hermes-business-einvoicing";
 
 const fullEvidence = {
@@ -112,4 +114,45 @@ test("outbound stops on READY and REFUSAL only", () => {
   assert.equal(shouldStopOutbound("REFUSAL"), true);
   assert.equal(shouldStopOutbound("INTERESTED"), false);
   assert.equal(shouldStopOutbound("UNSURE"), false);
+});
+
+test("complete diagnostic is accepted", () => {
+  const result = validateEinvoicingDiagnostic({
+    sirenSiret: "123 456 789",
+    employeeBand: "10-19",
+    vatSituation: "assujetti",
+    customerMix: ["B2B_FR"],
+    currentInvoicingSoftware: "Sage",
+    approvedPlatformSelected: "NO",
+    invoiceVolumeMonthly: 80,
+    numberOfUsersEntities: 2,
+    receptionOperational: "NO",
+    emissionPreparationNeeded: "YES",
+  });
+  assert.deepEqual(result, { complete: true, missing: [], invalid: [] });
+});
+
+test("diagnostic fails closed on missing/invalid fields", () => {
+  const result = validateEinvoicingDiagnostic({
+    sirenSiret: "123",
+    employeeBand: "2-9",
+    vatSituation: "assujetti",
+    customerMix: ["B2B_FR"],
+    currentInvoicingSoftware: "aucun",
+    approvedPlatformSelected: "UNKNOWN",
+    invoiceVolumeMonthly: -1,
+    numberOfUsersEntities: 0,
+    receptionOperational: "UNKNOWN",
+    emissionPreparationNeeded: "UNKNOWN",
+  });
+  assert.equal(result.complete, false);
+  assert.deepEqual(result.invalid.sort(), ["invoice_volume_monthly", "number_of_users_entities", "siren_siret"].sort());
+});
+
+test("commercial routing never auto-answers unsure replies", () => {
+  assert.equal(nextCommercialAction("REFUSAL"), "STOP_DNC");
+  assert.equal(nextCommercialAction("READY"), "CLOSE_READY");
+  assert.equal(nextCommercialAction("NOT_READY"), "OPEN_DIAGNOSTIC");
+  assert.equal(nextCommercialAction("QUESTION"), "ANSWER_FROM_OFFICIAL_SOURCE");
+  assert.equal(nextCommercialAction("UNSURE"), "HUMAN_REVIEW");
 });
