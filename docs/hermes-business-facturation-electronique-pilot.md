@@ -14,7 +14,7 @@ Create a low-touch B2B service that helps French TPE/PME prepare and configure e
 - approved-platform shortlist
 - configuration assistance
 - reception test
-- preparation for mandatory emission in 2027
+- preparation for mandatory emission in 2027 when applicable
 - short operating procedure
 
 ### Pack Pro — 990 EUR HT
@@ -124,9 +124,9 @@ Body:
 
 Bonjour {{first_name}},
 
-Depuis le 1er septembre, les entreprises doivent être en mesure de recevoir leurs factures électroniques via une plateforme agréée.
+Depuis le 1er septembre 2026, les entreprises concernées doivent être en mesure de recevoir leurs factures électroniques via une plateforme agréée.
 
-Pour {{company_name}}, nous pouvons vérifier votre logiciel actuel, la plateforme adaptée et tester que la réception fonctionne correctement, puis préparer l'émission obligatoire de 2027.
+Pour {{company_name}}, nous pouvons vérifier votre logiciel actuel, la plateforme adaptée et tester que la réception fonctionne correctement, puis préparer l'émission obligatoire de 2027 si elle s'applique à votre situation.
 
 L'objectif est simplement que tout soit configuré et fonctionnel, sans que vous ayez à étudier toute la réforme.
 
@@ -245,6 +245,10 @@ At 490 EUR HT only:
 - 10 sales = 4,900 EUR HT revenue
 
 These are test thresholds, not forecasts.
+
+## Regulatory source of truth
+
+See `docs/hermes-business-einvoicing-official-sources.md`. Commercial and support answers must be refreshed from official DGFiP/Ministry sources when the answer is date- or situation-sensitive.
 
 ## Next engineering steps
 
