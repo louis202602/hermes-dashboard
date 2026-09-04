@@ -118,16 +118,16 @@ export function classifyEinvoicingReply(text: string): ReplyState {
   const t = NORMALIZE(text.trim());
   if (!t) return "UNSURE";
 
-  if (/ne (me|nous) (contactez|relancez) plus|stop|desabonn|retirez|supprimez|pas interesse|aucun interet|non merci/.test(t)) {
+  if (/ne plus (me|nous) (contacter|relancer)|ne (me|nous) (contactez|relancez) plus|stop|desabonn|retirez|supprimez|pas interesse|aucun interet|non merci/.test(t)) {
     return "REFUSAL";
   }
   if (/expert[- ]comptable|comptable s.en occupe|cabinet comptable|mon comptable|notre comptable/.test(t)) {
     return "ACCOUNTANT_HANDLES_IT";
   }
-  if (/plateforme (ag(?:r|re)ee|pdp)|nous avons choisi .*plateforme|plateforme deja choisie|deja une plateforme/.test(t)) {
+  if (/plateforme (agreee|pdp)|nous avons choisi .*plateforme|plateforme (?:est )?deja choisie|deja une plateforme/.test(t)) {
     return "HAS_PLATFORM";
   }
-  if (/logiciel de facturation|nous utilisons .*pour factur|on utilise .*pour factur|erp|sage|ebp|pennylane|sellsy|ciel/.test(t)) {
+  if (/logiciel de facturation|nous utilisons .*pour factur|on utilise .*pour factur|\berp\b|\bsage\b|\bebp\b|\bpennylane\b|\bsellsy\b|\bciel\b/.test(t)) {
     return "HAS_SOFTWARE";
   }
   if (/deja (pret|prets|configure|configures|operationnel|operationnels)|tout est (pret|configure|operationnel)|nous sommes (prets|configures|operationnels)/.test(t)) {
