@@ -115,10 +115,11 @@ test("la page d'intégrations filtre par verticale et le dit honnêtement", () =
   const src = read("app/(dashboard)/integrations/page.tsx");
   assert.ok(src.includes("composition.integrationProviders"));
   assert.ok(src.includes("requireRoute("));
-  // L'honnêteté compte autant que le filtre : ce n'est PAS la barrière.
+  // Le filtre d'affichage est dérivé de la composition ; requireRoute reste la
+  // barrière serveur indépendante.
   assert.ok(
-    src.includes("COMMODITÉ D'AFFICHAGE") || src.includes("commodité d'affichage"),
-    "le filtre d'interface doit être documenté comme non-barrière",
+    src.includes("allIntegrations.filter((item) => allowed.has(item.provider))"),
+    "le catalogue affiché doit être filtré par la composition du tenant",
   );
 });
 
