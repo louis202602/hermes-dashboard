@@ -321,12 +321,13 @@ test("la ventilation des coûts existe et reste NULL quand non rapportée", () =
 });
 
 // --- Généricité sans surarchitecture ----------------------------------------------
-test("l'architecture est générique mais seul Google Calendar est implémenté", () => {
+test("l'architecture est générique et seuls Google Calendar et Qonto sont implémentés", () => {
   for (const p of ["google_calendar", "gmail", "meta", "instagram"]) {
     assert.ok(CONNECTIONS.includes(`'${p}'`), `${p} doit être déclaré au catalogue`);
   }
-  assert.deepEqual([...IMPLEMENTED_PROVIDERS], ["google_calendar"]);
+  assert.deepEqual([...IMPLEMENTED_PROVIDERS], ["google_calendar", "qonto"]);
   assert.equal(isProviderImplemented("google_calendar"), true);
+  assert.equal(isProviderImplemented("qonto"), true);
   assert.equal(isProviderImplemented("gmail"), false, "déclaré n'est pas implémenté");
 });
 

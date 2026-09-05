@@ -88,9 +88,11 @@ test("un tenant photo ne voit AUCUNE entrée solaire ou BTP", () => {
   assert.ok(!nav.includes("immo.properties"), "biens immobiliers visibles pour un studio photo");
 });
 
-test("un tenant solaire ne voit AUCUNE entrée photo", () => {
-  const nav = compose(SOLAR_KEYS).navigation.map((n) => n.moduleId);
-  assert.ok(nav.includes("worksites"));
+test("un tenant solaire ne voit AUCUNE entrée photo et masque la carte BTP historique", () => {
+  const solar = compose(SOLAR_KEYS);
+  const nav = solar.navigation.map((n) => n.moduleId);
+  assert.ok(!nav.includes("worksites"));
+  assert.equal(isRouteAllowed("/chantiers/carte", solar.modules), true);
   assert.ok(!nav.includes("photo.sessions"), "séances photo visibles pour un tenant solaire");
   assert.ok(!nav.includes("photo.gallery"), "galeries photo visibles pour un tenant solaire");
 });
