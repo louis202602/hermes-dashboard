@@ -1,0 +1,91 @@
+{
+  "id": "facturation_electronique_fr_v1",
+  "status": "DORMANT",
+  "outbound_enabled": false,
+  "market": "FR",
+  "offer": {
+    "essential_eur_ht": 490,
+    "pro_eur_ht": 990,
+    "complex_target_ceiling_eur_ht": 1990,
+    "support_monthly_eur_ht": 49
+  },
+  "icp": {
+    "employee_min": 2,
+    "employee_max": 50,
+    "priority_sectors": [
+      "building",
+      "maintenance_b2b",
+      "cleaning_b2b",
+      "transport_small_logistics",
+      "automotive_b2b",
+      "security",
+      "agencies_practices",
+      "small_it",
+      "engineering_offices",
+      "b2b_retail_services"
+    ]
+  },
+  "scoring": {
+    "employee_band": 20,
+    "clear_b2b": 15,
+    "recurring_invoicing_probable": 15,
+    "priority_sector": 15,
+    "verified_company_website": 10,
+    "verified_professional_email": 10,
+    "decision_maker_identified": 5,
+    "software_absent_legacy_or_unclear": 5,
+    "admin_or_digital_help_signal": 5,
+    "tiers": {
+      "P1": [80, 100],
+      "P2": [65, 79],
+      "P3": [50, 64],
+      "REJECT": [0, 49]
+    },
+    "hard_fail_if_critical_evidence_missing": true
+  },
+  "critical_evidence": [
+    "company_identity_status",
+    "activity",
+    "official_or_corroborated_domain",
+    "professional_contact"
+  ],
+  "response_states": [
+    "READY",
+    "INTERESTED",
+    "NOT_READY",
+    "HAS_SOFTWARE",
+    "HAS_PLATFORM",
+    "ACCOUNTANT_HANDLES_IT",
+    "QUESTION",
+    "REFUSAL",
+    "UNSURE"
+  ],
+  "diagnostic_fields": [
+    "siren_siret",
+    "employee_band",
+    "vat_situation",
+    "customer_mix",
+    "current_invoicing_software",
+    "approved_platform_selected",
+    "invoice_volume_monthly",
+    "number_of_users_entities",
+    "reception_operational",
+    "emission_preparation_needed"
+  ],
+  "activation_gates": [
+    "data_model_dedupe_tested",
+    "critical_evidence_fail_closed_tested",
+    "dnc_optout_tested",
+    "deliverability_checks_pass",
+    "classifier_30_labelled_examples_pass",
+    "synthetic_diagnostic_e2e_pass",
+    "sw23_limits_enabled",
+    "no_platform_approval_misrepresentation",
+    "no_unsourced_legal_tax_advice",
+    "operator_approval_before_first_real_outbound"
+  ],
+  "pilot": {
+    "qualified_prospects": 100,
+    "minimum_paid_sales": 3
+  }
+}
