@@ -77,7 +77,8 @@ test("aucun secret n'est préfixé NEXT_PUBLIC_", () => {
 test("le module qui touche le secret est `server-only`, vérifié à la compilation", () => {
   const src = read("lib/integrations/oauthServer.ts");
   assert.ok(src.trimStart().startsWith('import "server-only";'));
-  assert.ok(src.includes("process.env[SECRET_ENV[provider]]"));
+  assert.ok(src.includes("const envName = SECRET_ENV[provider]"));
+  assert.ok(src.includes("process.env[envName]"));
   // Le secret n'est jamais capturé au chargement : relu à chaque appel.
   assert.ok(!/const\s+\w*SECRET\w*\s*=\s*process\.env/.test(src));
 });
@@ -296,8 +297,9 @@ test("l'URI de retour est construite par UNE seule fonction (démarrage et retou
 });
 
 test("déclaré n'est pas implémenté", () => {
-  assert.deepEqual([...OAUTH_SERVER_PROVIDERS], ["google_calendar"]);
+  assert.deepEqual([...OAUTH_SERVER_PROVIDERS], ["google_calendar", "qonto"]);
   assert.equal(isOAuthServerProvider("google_calendar"), true);
+  assert.equal(isOAuthServerProvider("qonto"), true);
   assert.equal(isOAuthServerProvider("instagram"), false);
   assert.ok(START.includes("isOAuthServerProvider(provider)"));
 });

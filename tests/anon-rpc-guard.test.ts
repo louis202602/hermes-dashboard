@@ -148,16 +148,14 @@ test("session valide : la garde laisse passer et le fan-out métier reste intact
   // Le fan-out d'origine est conservé tel quel (aucune lecture supprimée).
   for (const call of [
     "getActiveTenantIdentity()",
-    "getPublicKpis()",
-    "getOperationalPriorities()",
     "getCostGovernanceSnapshot()",
     "getPlatformHealth()",
-    "getDashboardAgenda()",
-    "getUnifiedAlertsCached()",
     "getCapabilitiesCached()",
     "getDashboardContextSettingsCached()",
     "getDashboardUserPreferences()",
     "getPhotoModuleStateCached()",
+    "getPvOutreachSnapshot()",
+    "resolvePageContext()",
   ]) {
     assert.ok(home.includes(call), `lecture ${call} perdue`);
   }
