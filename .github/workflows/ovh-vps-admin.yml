@@ -85,9 +85,18 @@ jobs:
         run: |
           set +x
           ssh -i "$HOME/.ssh/hermes_vps_key" -o StrictHostKeyChecking=yes "${VPS_USER}@${VPS_HOST}" \
-            'mkdir -p /opt/hermes-infra/scripts'
-          scp -i "$HOME/.ssh/hermes_vps_key" -o StrictHostKeyChecking=yes -r scripts/vps \
-            "${VPS_USER}@${VPS_HOST}:/opt/hermes-infra/scripts/vps"
+            'rm -rf "$HOME/hermes-vps-scripts" && mkdir -p "$HOME/hermes-vps-scripts"'
+          scp -i "$HOME/.ssh/hermes_vps_key" -o StrictHostKeyChecking=yes -r scripts/vps/. \
+            "${VPS_USER}@${VPS_HOST}:~/hermes-vps-scripts/"
+          ssh -i "$HOME/.ssh/hermes_vps_key" -o StrictHostKeyChecking=yes "${VPS_USER}@${VPS_HOST}" '
+            set -e
+            sudo mkdir -p /opt/hermes-infra/scripts/vps
+            sudo cp -a "$HOME/hermes-vps-scripts/." /opt/hermes-infra/scripts/vps/
+            sudo chown -R root:root /opt/hermes-infra/scripts/vps
+            sudo find /opt/hermes-infra/scripts/vps -type d -exec chmod 750 {} \;
+            sudo find /opt/hermes-infra/scripts/vps -type f -exec chmod 750 {} \;
+            rm -rf "$HOME/hermes-vps-scripts"
+          '
 
       - name: Écrire le fichier d'environnement distant (secrets, jamais en argument ni en log)
         env:
@@ -119,10 +128,17 @@ jobs:
             printf 'STAGING_DB=%q\n' "$STAGING_DB_INPUT"
           } > "$ENV_FILE"
           chmod 600 "$ENV_FILE"
-          scp -i "$HOME/.ssh/hermes_vps_key" -o StrictHostKeyChecking=yes "$ENV_FILE" \
-            "${VPS_USER}@${VPS_HOST}:/opt/hermes-infra/.hermes-run-env"
           ssh -i "$HOME/.ssh/hermes_vps_key" -o StrictHostKeyChecking=yes "${VPS_USER}@${VPS_HOST}" \
-            'chmod 600 /opt/hermes-infra/.hermes-run-env'
+            'rm -f "$HOME/.hermes-run-env.tmp"'
+          scp -i "$HOME/.ssh/hermes_vps_key" -o StrictHostKeyChecking=yes "$ENV_FILE" \
+            "${VPS_USER}@${VPS_HOST}:~/.hermes-run-env.tmp"
+          ssh -i "$HOME/.ssh/hermes_vps_key" -o StrictHostKeyChecking=yes "${VPS_USER}@${VPS_HOST}" '
+            set -e
+            sudo mkdir -p /opt/hermes-infra
+            sudo mv "$HOME/.hermes-run-env.tmp" /opt/hermes-infra/.hermes-run-env
+            sudo chown root:root /opt/hermes-infra/.hermes-run-env
+            sudo chmod 600 /opt/hermes-infra/.hermes-run-env
+          '
           rm -f "$ENV_FILE"
 
       - name: Exécuter le script choisi sur le VPS
