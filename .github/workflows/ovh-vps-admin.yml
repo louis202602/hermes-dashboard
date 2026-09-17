@@ -1,0 +1,158 @@
+name: OVH VPS Admin (guarded, manual only)
+
+# Déclenchement STRICTEMENT manuel — jamais sur push/PR/schedule.
+# Ce workflow se connecte en SSH au VPS et exécute UN script scripts/vps/*.sh choisi
+# explicitement. Il ne touche jamais à Supabase ni à la production applicative.
+# harden_ssh.sh exige en plus, à chaque exécution, une confirmation textuelle saisie
+# manuellement (CONFIRM=HARDEN_SSH) — cf. le garde-fou du script lui-même.
+#
+# Toutes les valeurs sensibles proviennent EXCLUSIVEMENT de GitHub Secrets/Variables et
+# ne sont jamais interpolées directement dans une commande shell : elles transitent par
+# des blocs `env:` puis par un fichier d'environnement distant (mode 600, supprimé
+# immédiatement après lecture), jamais en argument de commande ni via echo/log.
+
+on:
+  workflow_dispatch:
+    inputs:
+      script:
+        description: "Script à exécuter (scripts/vps/*.sh)"
+        required: true
+        type: choice
+        options:
+          - healthcheck.sh
+          - bootstrap.sh
+          - harden_ssh.sh
+          - install_postgres17.sh
+          - install_extensions.sh
+          - install_postgrest.sh
+          - setup_backups.sh
+          - setup_monitoring.sh
+          - prepare_migration.sh
+          - verify_target.sh
+      confirm_harden_ssh:
+        description: "Requis UNIQUEMENT pour harden_ssh.sh : taper exactement HARDEN_SSH"
+        required: false
+        default: ""
+      staging_db:
+        description: "Requis UNIQUEMENT pour verify_target.sh : nom de la base staging (voir staging_db_name.txt)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ovh-vps-admin
+  cancel-in-progress: false
+
+jobs:
+  run-remote-script:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ovh-vps-admin
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Préparer la clé SSH (fichier local temporaire, jamais loggée)
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set +x
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$HOME/.ssh/hermes_vps_key"
+          chmod 600 "$HOME/.ssh/hermes_vps_key"
+
+      - name: Enregistrer la clé d'hôte SSH (pinning si fourni, sinon keyscan)
+        env:
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          VPS_HOST_PUBLIC_KEY: ${{ vars.VPS_HOST_PUBLIC_KEY }}
+        run: |
+          set +x
+          mkdir -p "$HOME/.ssh"
+          if [ -n "$VPS_HOST_PUBLIC_KEY" ]; then
+            printf '%s\n' "$VPS_HOST_PUBLIC_KEY" >> "$HOME/.ssh/known_hosts"
+          else
+            echo "::warning::VPS_HOST_PUBLIC_KEY non défini (repo Variable) — fallback ssh-keyscan, vérification d'hôte plus faible."
+            ssh-keyscan -H "$VPS_HOST" >> "$HOME/.ssh/known_hosts" 2>/dev/null
+          fi
+
+      - name: Copier scripts/vps/ sur le VPS
+        env:
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          VPS_USER: ${{ vars.VPS_USER }}
+        run: |
+          set +x
+          ssh -i "$HOME/.ssh/hermes_vps_key" -o StrictHostKeyChecking=yes "${VPS_USER}@${VPS_HOST}" \
+            'rm -rf "$HOME/hermes-vps-scripts" && mkdir -p "$HOME/hermes-vps-scripts"'
+          scp -i "$HOME/.ssh/hermes_vps_key" -o StrictHostKeyChecking=yes -r scripts/vps/. \
+            "${VPS_USER}@${VPS_HOST}:~/hermes-vps-scripts/"
+          ssh -i "$HOME/.ssh/hermes_vps_key" -o StrictHostKeyChecking=yes "${VPS_USER}@${VPS_HOST}" '
+            set -e
+            sudo mkdir -p /opt/hermes-infra/scripts/vps
+            sudo cp -a "$HOME/hermes-vps-scripts/." /opt/hermes-infra/scripts/vps/
+            sudo chown -R root:root /opt/hermes-infra/scripts/vps
+            sudo find /opt/hermes-infra/scripts/vps -type d -exec chmod 750 {} \;
+            sudo find /opt/hermes-infra/scripts/vps -type f -exec chmod 750 {} \;
+            rm -rf "$HOME/hermes-vps-scripts"
+          '
+
+      - name: Écrire le fichier d'environnement distant (secrets, jamais en argument ni en log)
+        env:
+          PG_SUPERUSER_PASSWORD: ${{ secrets.PG_SUPERUSER_PASSWORD }}
+          PG_HERMES_APP_PASSWORD: ${{ secrets.PG_HERMES_APP_PASSWORD }}
+          PGRST_AUTHENTICATOR_PASSWORD: ${{ secrets.PGRST_AUTHENTICATOR_PASSWORD }}
+          BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+          BACKUP_S3_ACCESS_KEY: ${{ secrets.BACKUP_S3_ACCESS_KEY }}
+          BACKUP_S3_SECRET_KEY: ${{ secrets.BACKUP_S3_SECRET_KEY }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          CONFIRM_INPUT: ${{ inputs.confirm_harden_ssh }}
+          STAGING_DB_INPUT: ${{ inputs.staging_db }}
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          VPS_USER: ${{ vars.VPS_USER }}
+        run: |
+          set +x
+          ENV_FILE="$(mktemp)"
+          {
+            printf 'PG_SUPERUSER_PASSWORD=%q\n' "$PG_SUPERUSER_PASSWORD"
+            printf 'PG_HERMES_APP_PASSWORD=%q\n' "$PG_HERMES_APP_PASSWORD"
+            printf 'PGRST_AUTHENTICATOR_PASSWORD=%q\n' "$PGRST_AUTHENTICATOR_PASSWORD"
+            printf 'BACKUP_S3_ENDPOINT=%q\n' "$BACKUP_S3_ENDPOINT"
+            printf 'BACKUP_S3_BUCKET=%q\n' "$BACKUP_S3_BUCKET"
+            printf 'BACKUP_S3_ACCESS_KEY=%q\n' "$BACKUP_S3_ACCESS_KEY"
+            printf 'BACKUP_S3_SECRET_KEY=%q\n' "$BACKUP_S3_SECRET_KEY"
+            printf 'SUPABASE_DB_URL=%q\n' "$SUPABASE_DB_URL"
+            printf 'CONFIRM=%q\n' "$CONFIRM_INPUT"
+            printf 'STAGING_DB=%q\n' "$STAGING_DB_INPUT"
+          } > "$ENV_FILE"
+          chmod 600 "$ENV_FILE"
+          ssh -i "$HOME/.ssh/hermes_vps_key" -o StrictHostKeyChecking=yes "${VPS_USER}@${VPS_HOST}" \
+            'rm -f "$HOME/.hermes-run-env.tmp"'
+          scp -i "$HOME/.ssh/hermes_vps_key" -o StrictHostKeyChecking=yes "$ENV_FILE" \
+            "${VPS_USER}@${VPS_HOST}:~/.hermes-run-env.tmp"
+          ssh -i "$HOME/.ssh/hermes_vps_key" -o StrictHostKeyChecking=yes "${VPS_USER}@${VPS_HOST}" '
+            set -e
+            sudo mkdir -p /opt/hermes-infra
+            sudo mv "$HOME/.hermes-run-env.tmp" /opt/hermes-infra/.hermes-run-env
+            sudo chown root:root /opt/hermes-infra/.hermes-run-env
+            sudo chmod 600 /opt/hermes-infra/.hermes-run-env
+          '
+          rm -f "$ENV_FILE"
+
+      - name: Exécuter le script choisi sur le VPS
+        env:
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          VPS_USER: ${{ vars.VPS_USER }}
+          SCRIPT_NAME: ${{ inputs.script }}
+        run: |
+          set +x
+          ssh -i "$HOME/.ssh/hermes_vps_key" -o StrictHostKeyChecking=yes "${VPS_USER}@${VPS_HOST}" \
+            "sudo bash -c 'set -a; source /opt/hermes-infra/.hermes-run-env; set +a; rm -f /opt/hermes-infra/.hermes-run-env; bash /opt/hermes-infra/scripts/vps/${SCRIPT_NAME}'"
+
+      - name: Nettoyage de la clé SSH locale
+        if: always()
+        run: |
+          set +x
+          rm -f "$HOME/.ssh/hermes_vps_key"
