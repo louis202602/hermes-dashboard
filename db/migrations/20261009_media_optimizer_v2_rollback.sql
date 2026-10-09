@@ -1,3 +1,5 @@
+-- NOTE 2026-10-09 : CETTE MIGRATION EST REMPLACEE pour la production par 20261009_media_optimizer_v3_ovh.sql.
+-- Preuve : la production Hermes Visibility OS est PostgreSQL OVH (hermes_os) ; Supabase est un filet de retour arriere gele. Ne PAS l'appliquer.
 -- Retour arriere de media_optimizer_v2 SANS PERTE : les donnees des colonnes/tables ajoutees sont d'abord copiees
 -- dans des tables de sauvegarde (hermes_os.mo_v2_backup_*), puis les objets v2 sont retires, puis la fonction v1 est restauree.
 begin;

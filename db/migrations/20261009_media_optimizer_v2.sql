@@ -1,3 +1,5 @@
+-- NOTE 2026-10-09 : CETTE MIGRATION EST REMPLACEE pour la production par 20261009_media_optimizer_v3_ovh.sql.
+-- Preuve : la production Hermes Visibility OS est PostgreSQL OVH (hermes_os) ; Supabase est un filet de retour arriere gele. Ne PAS l'appliquer.
 -- Hermes Media Optimizer v2 : etape brouillon Buffer + apercus avant/apres.
 -- ADDITIF ET IDEMPOTENT. Aucun DROP/RENAME/TRUNCATE/DELETE sur un objet existant.
 -- Reutilise hermes_os.media_optimizer_jobs / social_content_plan / social_publications (aucune nouvelle base).

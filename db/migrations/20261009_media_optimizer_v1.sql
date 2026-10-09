@@ -1,3 +1,5 @@
+-- NOTE 2026-10-09 : CETTE MIGRATION EST REMPLACEE pour la production par 20261009_media_optimizer_v3_ovh.sql.
+-- Preuve : la production Hermes Visibility OS est PostgreSQL OVH (hermes_os) ; Supabase est un filet de retour arriere gele. Ne PAS l'appliquer.
 -- Hermes Media Optimizer v1 (Hermes Visibility OS) -- consolidation des migrations appliquees le 2026-10-09 :
 --   20261009_media_optimizer_v1, ..._worker_role, ..._options, ..._facades_and_stop_guard
 -- Additif, sauf public.social_publish (garde STOP ajoutee ; corps d'origine conserve, voir ROLLBACK en fin de fichier).
