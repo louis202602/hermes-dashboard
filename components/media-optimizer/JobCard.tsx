@@ -118,7 +118,7 @@ export function JobCard({ job, actions, v3 }: { job: MediaOptimizerJob; actions:
           <span style={{ width: `${ratio}%` }} />
         </div>
       ) : null}
-      {hasAfter ? (
+      {hasAfter && (job.encodeSec !== null || job.peakRamMb !== null || job.ssimMin !== null) ? (
         <p className="mo-note">
           Encodage {formatSeconds(job.encodeSec)} · mémoire max {job.peakRamMb ?? "—"} Mo · SSIM {job.ssimMin ?? "—"} (indicatif)
         </p>
@@ -215,7 +215,7 @@ export function JobCard({ job, actions, v3 }: { job: MediaOptimizerJob; actions:
           <input type="hidden" name="job_id" value={job.id} />
           <label className="mo-field mo-field-wide">
             <span>Origine / accord (obligatoire pour valider)</span>
-            <input name="note" placeholder="Ex. photo prise par l’équipe, accord client du 12/09" maxLength={500} />
+            <input name="note" placeholder="Ex. prise par l’équipe" maxLength={500} />
           </label>
           <div className="mo-form-row">
             <button type="submit" name="status" value="authorized" className="mo-btn">

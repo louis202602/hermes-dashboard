@@ -1006,6 +1006,7 @@ html[data-theme="light"] .dashboard-sidebar {
  * MEDIA-OPT — /integrations/mediatheque (préfixe .mo-). Lecture seule : rien ici ne publie.
  * ========================================================================== */
 .mo-page { min-width: 0; }
+.mo-page .panel-eyebrow { font-size: 11px; }
 .mo-page * { min-width: 0; }
 .mo-note { color: var(--text-muted); font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere; }
 .mo-sub { color: var(--text-secondary); }
@@ -1015,7 +1016,7 @@ html[data-theme="light"] .dashboard-sidebar {
 
 /* Bandeau STOP : toujours visible en haut de page. */
 .mo-stop {
-  position: sticky; top: 0; z-index: 20;
+  position: sticky; top: calc(var(--header-height) + 8px); z-index: 20;
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px;
   padding: 12px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border);
   background: var(--surface-strong); backdrop-filter: blur(8px);
@@ -1058,8 +1059,8 @@ html[data-theme="light"] .dashboard-sidebar {
 .mo-bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--hermes-blue), var(--hermes-cyan)); }
 
 .mo-reasons, .mo-draft { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; background: var(--surface-soft); }
-.mo-reasons h4, .mo-draft h4 { font-size: 13.5px; margin-bottom: 8px; }
-.mo-reasons ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.mo-reasons h4, .mo-draft h4 { font-weight: 700; font-size: 13.5px; margin-bottom: 8px; }
+.mo-reasons ul { list-style: disc; margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; line-height: 1.45; overflow-wrap: anywhere; }
 .mo-reasons li::marker { color: var(--danger); }
 .mo-reasons li.is-warning::marker { color: var(--warning); }
 .mo-draft-list { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px 14px; }

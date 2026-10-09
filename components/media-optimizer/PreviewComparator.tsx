@@ -30,13 +30,20 @@ export function PreviewComparator({
   sizeBefore,
   sizeAfter,
   loadPreviews,
+  initialPreviews,
 }: {
+  /** Pré-ouverture : réservé au harnais de tests/captures (rendu serveur sans clic). Jamais passé en production. */
+  initialPreviews?: MediaPreview[];
   jobId: string;
   sizeBefore: number | null;
   sizeAfter: number | null;
   loadPreviews: (jobId: string) => Promise<MediaPreviewsResult>;
 }) {
-  const [phase, setPhase] = useState<Phase>({ name: "closed" });
+  const [phase, setPhase] = useState<Phase>(() => {
+    if (!initialPreviews || initialPreviews.length === 0) return { name: "closed" };
+    const sections = availableSections(initialPreviews);
+    return { name: "ready", previews: initialPreviews, sections, section: sections[0] ?? "full" };
+  });
   const panelRef = useRef<HTMLDivElement>(null);
   const token = useRef(0);
   const panelId = useId();
