@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache";
 
 import {
   activatePublishStop,
+  getMediaOptimizerPreviews,
   requestMediaOptimization,
   setMediaRights,
 } from "@/services/hermes/mediaOptimizer";
-import type { MediaRightsStatus } from "@/types/mediaOptimizer";
+import type { MediaPreviewsResult, MediaRightsStatus } from "@/types/mediaOptimizer";
 
 /**
  * MEDIA-OPT — Server Actions. Elles ne décident rien : elles valident la forme
@@ -41,6 +42,15 @@ export async function setRightsAction(formData: FormData): Promise<void> {
   const note = String(formData.get("note") ?? "").trim().slice(0, 500) || null;
   await setMediaRights(id, status, note);
   revalidatePath(PAGE);
+}
+
+/**
+ * Chargement à la demande des aperçus avant/après d'un média (lecture seule).
+ * Appelée par la visionneuse ; ne modifie rien et ne publie rien.
+ */
+export async function loadMediaPreviewsAction(id: string): Promise<MediaPreviewsResult> {
+  if (!UUID.test(String(id))) return { ok: false, code: "INVALID_ID" };
+  return getMediaOptimizerPreviews(id);
 }
 
 export async function activateStopAction(): Promise<void> {
