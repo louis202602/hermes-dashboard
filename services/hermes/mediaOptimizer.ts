@@ -1,12 +1,12 @@
 import "server-only";
 
 import { logEvent } from "@/lib/observability/log";
+import { mapPreviews, mapState } from "@/lib/media-optimizer/map";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ServiceResult } from "@/types/hermes";
 import type {
-  MediaJobStatus,
-  MediaOptimizerJob,
   MediaOptimizerState,
+  MediaPreviewsResult,
   MediaRightsStatus,
   MediaWriteOutcome,
 } from "@/types/mediaOptimizer";
@@ -16,50 +16,12 @@ import type {
  *
  * Chaque fonction n'est qu'un appel à une façade `SECURITY DEFINER` : le tenant
  * et les droits sont décidés EN BASE à partir de la session. Aucun `tenant_id`
- * ne vient du client, et rien ici ne publie.
+ * ne vient du client, et rien ici ne publie. La normalisation des charges
+ * utiles vit dans `lib/media-optimizer/map.ts` (pure, testée).
  */
 
 function rec(value: unknown): Record<string, unknown> {
   return (value ?? {}) as Record<string, unknown>;
-}
-function numOrNull(value: unknown): number | null {
-  if (value === null || value === undefined) return null;
-  const n = typeof value === "string" ? Number(value) : (value as number);
-  return Number.isFinite(n) ? n : null;
-}
-function strOrNull(value: unknown): string | null {
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
-function boolOrNull(value: unknown): boolean | null {
-  return typeof value === "boolean" ? value : null;
-}
-
-function mapJob(raw: unknown): MediaOptimizerJob {
-  const j = rec(raw);
-  return {
-    id: String(j.id),
-    mediaId: strOrNull(j.media_id),
-    sourceName: String(j.source_name ?? "—"),
-    folderLabel: strOrNull(j.folder_label),
-    kind: (strOrNull(j.kind) as MediaOptimizerJob["kind"]) ?? null,
-    network: (strOrNull(j.network) ?? "instagram") as MediaOptimizerJob["network"],
-    status: (strOrNull(j.status) ?? "discovered") as MediaJobStatus,
-    rightsStatus: (strOrNull(j.rights_status) ?? "pending_review") as MediaRightsStatus,
-    rightsNote: strOrNull(j.rights_note),
-    trigger: (strOrNull(j.trigger) ?? "auto") as MediaOptimizerJob["trigger"],
-    optimizerStatus: strOrNull(j.optimizer_status),
-    sizeBefore: numOrNull(j.size_before),
-    sizeAfter: numOrNull(j.size_after),
-    reductionPct: numOrNull(j.reduction_pct),
-    encodeSec: numOrNull(j.encode_sec),
-    peakRamMb: numOrNull(j.peak_ram_mb),
-    ssimMin: numOrNull(j.ssim_min),
-    igOk: boolOrNull(j.ig_ok),
-    fbOk: boolOrNull(j.fb_ok),
-    error: strOrNull(j.error),
-    attempts: numOrNull(j.attempts) ?? 0,
-    updatedAt: String(j.updated_at ?? ""),
-  };
 }
 
 async function callRpc(fn: string, args: Record<string, unknown>): Promise<Record<string, unknown> | null> {
@@ -75,16 +37,20 @@ async function callRpc(fn: string, args: Record<string, unknown>): Promise<Recor
 export async function getMediaOptimizerState(): Promise<ServiceResult<MediaOptimizerState>> {
   const payload = await callRpc("get_media_optimizer_state", { p_limit: 100 });
   if (!payload) return { ok: false, provenance: "UNAVAILABLE", error: "RPC_ERROR" };
-  const jobs = Array.isArray(payload.jobs) ? payload.jobs.map(mapJob) : [];
-  return {
-    ok: true,
-    provenance: "REAL",
-    data: {
-      resolutionStatus: String(payload.resolution_status ?? "UNAUTHENTICATED"),
-      publishStop: payload.publish_stop !== false,
-      jobs,
-    },
-  };
+  return { ok: true, provenance: "REAL", data: mapState(payload) };
+}
+
+/**
+ * Aperçus d'un média, chargés À LA DEMANDE (images base64 lourdes : jamais dans la liste).
+ * Lecture seule ; le tenant est résolu en base à partir de la session.
+ */
+export async function getMediaOptimizerPreviews(jobId: string): Promise<MediaPreviewsResult> {
+  const payload = await callRpc("get_media_optimizer_previews", { p_job: jobId });
+  if (!payload) return { ok: false, code: "RPC_ERROR" };
+  const status = String(payload.resolution_status ?? "UNKNOWN");
+  if (status === "UNAUTHENTICATED") return { ok: false, code: "UNAUTHENTICATED" };
+  if (status !== "OK") return { ok: false, code: "NO_TENANT" };
+  return { ok: true, previews: mapPreviews(payload.previews) };
 }
 
 async function write(fn: string, args: Record<string, unknown>): Promise<MediaWriteOutcome> {
