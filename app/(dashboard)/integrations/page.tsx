@@ -32,6 +32,15 @@ export default async function IntegrationsPage() {
 
       <section className="dashboard-card pv-card">
         <div className="dashboard-card-header">
+          <div><span className="panel-eyebrow">MÉDIAS</span><h3>Médiathèque et optimiseur</h3></div>
+        </div>
+        <p className="integration-note">
+          Photos et vidéos de Google Drive, optimisées pour Instagram et Facebook. <a href="/integrations/mediatheque">Ouvrir la médiathèque</a>
+        </p>
+      </section>
+
+      <section className="dashboard-card pv-card">
+        <div className="dashboard-card-header">
           <div><span className="panel-eyebrow">ÉTAT RÉEL</span><h3>Noyau & automatisations</h3></div>
         </div>
         {!health.ok ? (
